@@ -1,6 +1,7 @@
 import math
 import pyglet
 import numpy as np
+import os
 import math
 import random
 import json
@@ -20,8 +21,8 @@ assert len(played) == len(set(played))
 assert len(played) < 13
 
 sound = pyglet.media.load('sound/volchok.mp3', streaming=False)
-player = pyglet.media.Player()
-player.queue(sound)
+#player = pyglet.media.Player()
+#player.queue(sound)
 
 batch = pyglet.graphics.Batch()
 table_group = pyglet.graphics.OrderedGroup(0)
@@ -36,14 +37,41 @@ else:
 table = pyglet.sprite.Sprite(table_image, x=0, y=0, batch=batch, group=table_group)
 table.update(scale=SCALE)
 
-letter_image = pyglet.image.load('letter.png')
-letter_image.anchor_x = letter_image.width // 2
-letter_image.anchor_y = letter_image.height // 2
+def _load_letter_image(path):
+    the_image = pyglet.image.load(path)
+    the_image.anchor_x = the_image.width // 2
+    the_image.anchor_y = the_image.height // 2
+    return the_image
+
+letter_image = _load_letter_image('letter.png')
+blitz_letter_image = _load_letter_image('blitz.png')
+superblitz_letter_image = _load_letter_image('superblitz.png')
+
+if os.path.exists('config.json'):
+    with open('config.json') as fin:
+        the_config = json.load(fin)
+    superblitz_no = the_config['superblitz']
+    blitz_no = the_config['blitz']
+else:
+    superblitz_no = None
+    blitz_no = None
+
 letters = []
 for i in range(12):
     if i + 1 in played:
         continue
-    letter = pyglet.sprite.Sprite(letter_image, x=0, y=0, batch=batch, group=letter_group)
+
+    if i == superblitz_no:
+        the_image = superblitz_letter_image
+        print(i, 'sb')
+    elif i == blitz_no:
+        the_image = blitz_letter_image
+        print(i, 'b')
+    else:
+        the_image = letter_image
+        print(i, 'u')
+
+    letter = pyglet.sprite.Sprite(the_image, x=0, y=0, batch=batch, group=letter_group)
     letter_angle = 1.5 * math.pi - (2 * math.pi) / 13 * (i + 1)
     if letter_angle < 0.:
         letter_angle += 2 * math.pi
@@ -105,7 +133,7 @@ def update_frame(dt):
     if not can_start or finished:
         return
     if not started:
-        player.play()
+        # player.play()
         started = True
 
     MAX_VELOCITY = 5.
@@ -115,7 +143,7 @@ def update_frame(dt):
 
     velocity = max(0., velocity - VELOCITY_DELTA)
     if velocity == 0.:
-        player.pause()
+        # player.pause()
         sector = _get_sector(angle)
         while sector in played:
             print('Sector {} already played, trying next'.format(sector))
