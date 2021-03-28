@@ -4,6 +4,7 @@ import pyglet
 from pyglet.window import key
 import logging
 import random
+import subprocess as sp
 
 logger = logging.getLogger('game')
 logger.setLevel(logging.DEBUG)
@@ -44,10 +45,12 @@ class GameRound(object):
 
         self._winner_sector = None
 
+        self._audio_process = None
+
     def can_start_arrow(self):
         if self._state != RoundState.INIT:
-            logger.critical('In a wrong state')
-            raise RuntimeError('Wrong state: false transition to CAN_START_ARROW')
+            logger.warning('Unexpected call to start an arrow. Ignoring')
+            return
         self._state = RoundState.CAN_START_ARROW
 
     def tick(self, _):
@@ -56,6 +59,7 @@ class GameRound(object):
         if self._state == RoundState.CAN_START_ARROW:
             logger.info('Staring arrow for %.2f seconds', self._seconds)
             self._state = RoundState.ARROW_IS_RUNNING
+            self._audio_process = sp.Popen(['vlc', '-I', 'dummy', 'sound/volchok.mp3'])
 
         self._arrow_angle = (self._arrow_angle + min(self.MAX_VELOCITY, self._velocity)) % 360
         self._volchok.update_arrow(self._arrow_angle)
@@ -64,6 +68,8 @@ class GameRound(object):
         if self._velocity == 0.:
             self._winner_sector = get_winner_sector(self._arrow_angle, self._config.used_questions)
             self._state = RoundState.ARROW_IS_FINISHED
+            if self._audio_process:
+                self._audio_process.terminate()
 
 
 
