@@ -1,173 +1,92 @@
-import math
+import volchok as vlk
+import common
 import pyglet
-import numpy as np
-import os
-import math
-import random
-import json
 from pyglet.window import key
+import logging
+import random
 
-MIN_SECONDS, MAX_SECONDS = 34, 42
-WIDTH, HEIGHT = 800, 800
-SCALE = WIDTH / 2000.
-LETTER_SCALE = 0.3
-TABLE_RADIUS = 330
+logger = logging.getLogger('game')
+logger.setLevel(logging.DEBUG)
+
 FRAME_UPDATE = 0.02
 VELOCITY_DELTA = 0.01
-win = pyglet.window.Window(width=WIDTH, height=HEIGHT)
 
-played = json.load(open('played.json'))
-assert len(played) == len(set(played))
-assert len(played) < 13
+class RoundState:
+    INIT = -1
+    CAN_START_ARROW = 0
+    ARROW_IS_RUNNING = 1
+    ARROW_IS_FINISHED = 2
 
-sound = pyglet.media.load('sound/volchok.mp3', streaming=False)
-#player = pyglet.media.Player()
-#player.queue(sound)
 
-batch = pyglet.graphics.Batch()
-table_group = pyglet.graphics.OrderedGroup(0)
-arrow_group = pyglet.graphics.OrderedGroup(1)
-volchok_group = pyglet.graphics.OrderedGroup(2)
-letter_group = pyglet.graphics.OrderedGroup(3)
+def get_winner_sector(angle, used_questions):
+    sector = vlk.get_sector(angle)
+    while sector in used_questions:
+        logger.debug('Sector %d is already used, trying next', sector)
+        sector += 1
+        if sector == 14:
+            sector = 1
+    logger.info('Sector %d is a winner', sector)
+    return sector
 
-if 13 not in played:
-    table_image = pyglet.image.load('table.png')
-else:
-    table_image = pyglet.image.load('table_all_arrows.png')
-table = pyglet.sprite.Sprite(table_image, x=0, y=0, batch=batch, group=table_group)
-table.update(scale=SCALE)
 
-def _load_letter_image(path):
-    the_image = pyglet.image.load(path)
-    the_image.anchor_x = the_image.width // 2
-    the_image.anchor_y = the_image.height // 2
-    return the_image
-
-letter_image = _load_letter_image('letter.png')
-blitz_letter_image = _load_letter_image('blitz.png')
-superblitz_letter_image = _load_letter_image('superblitz.png')
-
-if os.path.exists('config.json'):
-    with open('config.json') as fin:
-        the_config = json.load(fin)
-    superblitz_no = the_config['superblitz']
-    blitz_no = the_config['blitz']
-else:
-    superblitz_no = None
-    blitz_no = None
-
-letters = []
-for i in range(12):
-    if i + 1 in played:
-        continue
-
-    if i == superblitz_no:
-        the_image = superblitz_letter_image
-        print(i, 'sb')
-    elif i == blitz_no:
-        the_image = blitz_letter_image
-        print(i, 'b')
-    else:
-        the_image = letter_image
-        print(i, 'u')
-
-    letter = pyglet.sprite.Sprite(the_image, x=0, y=0, batch=batch, group=letter_group)
-    letter_angle = 1.5 * math.pi - (2 * math.pi) / 13 * (i + 1)
-    if letter_angle < 0.:
-        letter_angle += 2 * math.pi
-    letter.update(
-        scale=LETTER_SCALE,
-        x=WIDTH / 2 + math.cos(letter_angle) * TABLE_RADIUS,
-        y=HEIGHT / 2 + math.sin(letter_angle) * TABLE_RADIUS,
-        rotation=-letter_angle * 180. / math.pi + 90.
-    )
-    letters.append(letter)
-
-arrow_image = pyglet.image.load('red_arrow.png')
-arrow = pyglet.sprite.Sprite(
-    arrow_image,
-    x=0., y=0.,
-    subpixel=True,
-    batch=batch,
-    group=arrow_group
-)
-arrow.image.anchor_x = arrow.image.width / 2
-arrow.image.anchor_y = arrow.image.height
-arrow.update(
-    scale=SCALE,
-    x=WIDTH/2,
-    y=HEIGHT/2
-)
-
-volchok_image = pyglet.image.load('volchok.png')
-volchok = pyglet.sprite.Sprite(
-    volchok_image,
-    x=WIDTH/2 - volchok_image.width * SCALE / 2,
-    y=WIDTH/2 - volchok_image.height * SCALE / 2,
-    subpixel=True,
-    batch=batch,
-    group=volchok_group
-)
-volchok.update(scale=SCALE)
-
-def _get_sector(angle):
-    angle_step = 360 / 13.
-    if angle < angle_step / 2. or angle_step > 360. - angle_step:
-        return 13
-    cur = angle_step / 2
-    for i in range(12):
-        if angle >= cur and angle <= cur + angle_step:
-            return i + 1
-        cur += angle_step
-    return 12
-
-angle = 0.
-seconds = random.uniform(MIN_SECONDS, MAX_SECONDS)
-print('Will play for {} seconds'.format(seconds))
-velocity = (seconds / FRAME_UPDATE) * VELOCITY_DELTA
-started = False
-can_start = False
-finished = False
-def update_frame(dt):
-    global angle, velocity, started, can_start, finished
-    if not can_start or finished:
-        return
-    if not started:
-        # player.play()
-        started = True
-
+class GameRound(object):
     MAX_VELOCITY = 5.
+    MIN_SECONDS = 34
+    MAX_SECONDS = 42
 
-    angle = (angle + min(MAX_VELOCITY, velocity)) % 360
-    arrow.update(rotation=angle)
+    def __init__(self, config, volchok):
+        self._config = config
+        self._volchok = volchok
+        self._state = RoundState.INIT
+        self._arrow_angle = 0.
+        self._seconds = random.uniform(self.MIN_SECONDS, self.MAX_SECONDS)
+        self._velocity = (self._seconds / FRAME_UPDATE) * VELOCITY_DELTA
 
-    velocity = max(0., velocity - VELOCITY_DELTA)
-    if velocity == 0.:
-        # player.pause()
-        sector = _get_sector(angle)
-        while sector in played:
-            print('Sector {} already played, trying next'.format(sector))
-            sector += 1
-            if sector == 14:
-                sector = 1
-        print('Done', sector)
-        played.append(sector)
-        with open('played.json', 'w') as fout:
-            json.dump(played, fout)
-        finished = True
+        self._winner_sector = None
+
+    def can_start_arrow(self):
+        if self._state != RoundState.INIT:
+            logger.critical('In a wrong state')
+            raise RuntimeError('Wrong state: false transition to CAN_START_ARROW')
+        self._state = RoundState.CAN_START_ARROW
+
+    def tick(self, _):
+        if self._state in [RoundState.INIT, RoundState.ARROW_IS_FINISHED]:
+            return
+        if self._state == RoundState.CAN_START_ARROW:
+            logger.info('Staring arrow for %.2f seconds', self._seconds)
+            self._state = RoundState.ARROW_IS_RUNNING
+
+        self._arrow_angle = (self._arrow_angle + min(self.MAX_VELOCITY, self._velocity)) % 360
+        self._volchok.update_arrow(self._arrow_angle)
+
+        self._velocity = max(0., self._velocity - VELOCITY_DELTA)
+        if self._velocity == 0.:
+            self._winner_sector = get_winner_sector(self._arrow_angle, self._config.used_questions)
+            self._state = RoundState.ARROW_IS_FINISHED
 
 
-@win.event
-def on_draw():
-    batch.draw()
+
+def main():
+    win = pyglet.window.Window(width=common.WIDTH, height=common.HEIGHT)
+    config = common.load_config('cfg.json')
+    volchok = vlk.Volchok(config)
+    game_round = GameRound(config, volchok)
 
 
-@win.event
-def on_key_press(symbol, modifiers):
-    global can_start
-    if symbol == key.SPACE:
-        can_start = True
+    @win.event
+    def on_draw():
+        volchok.draw()
+
+    @win.event
+    def on_key_press(symbol, modifiers):
+        if symbol == key.SPACE:
+            game_round.can_start_arrow()
+
+    pyglet.clock.schedule_interval(game_round.tick, FRAME_UPDATE)
+    pyglet.app.run()
 
 
-pyglet.clock.schedule_interval(update_frame, FRAME_UPDATE)
-pyglet.app.run()
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)
+    main()
