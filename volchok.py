@@ -50,7 +50,8 @@ class Images:
 
 class Volchok(object):
 
-    def __init__(self, game_config: GameConfig):
+    def __init__(self, game_config: GameConfig, win):
+        self._win = win
         self._game_config = game_config
 
         self._batch = pyglet.graphics.Batch()
@@ -66,11 +67,19 @@ class Volchok(object):
         self._arrow = self._prepare_and_return_arrow()
         self._prepare_volchok_group()
 
+        self._table_sprite = None
+
+    def set_table_sprite(self, sprite):
+        self._table_sprite = sprite
 
     def update_arrow(self, angle):
         self._arrow.update(rotation=angle)
 
     def draw(self):
+        if self._table_sprite:
+            self._win.clear()
+            self._table_sprite.draw()
+            return
         self._batch.draw()
 
     def _prepare_table_group(self):
