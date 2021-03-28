@@ -1,5 +1,6 @@
 import volchok as vlk
 import common
+import os
 import pyglet
 from pyglet.window import key
 import logging
@@ -11,6 +12,13 @@ logger.setLevel(logging.DEBUG)
 
 FRAME_UPDATE = 0.02
 VELOCITY_DELTA = 0.01
+
+class AppState:
+    INTRO = 0
+    VOLCHOK = 1
+
+
+state = AppState.INTRO
 
 class RoundState:
     INIT = -1
@@ -73,21 +81,93 @@ class GameRound(object):
 
 
 
+class Intro(object):
+
+    def __init__(self, win):
+        self._win = win
+        self._audio_process = None
+
+        self._frames = []
+        for fname in self._load_frames():
+            the_image = pyglet.image.load(fname)
+            the_scale = min(
+                common.WIDTH / the_image.width,
+                common.HEIGHT / the_image.height,
+                1.
+            )
+            self._frames.append(
+                pyglet.sprite.Sprite(
+                    the_image,
+                    x=0,
+                    y=0,
+                )
+            )
+            self._frames[-1].update(
+                x=(common.WIDTH - the_image.width * the_scale) / 2.,
+                y=(common.HEIGHT - the_image.height * the_scale) / 2.,
+                scale=the_scale
+            )
+        self._frame_idx = -1
+
+    def _load_frames(self):
+        result = []
+        for fname in os.listdir('intro'):
+            if any(fname.endswith(prefix) for prefix in ['.jpg', '.JPG', '.png']):
+                logger.debug('Found frame %s', fname)
+                result.append(os.path.join('intro', fname))
+        logger.info('Found %d frames for intro', len(result))
+        result.sort()
+        return result
+
+    def next_frame(self):
+        self._frame_idx += 1
+        if self._frame_idx == 0:
+            self._audio_process = sp.Popen(['vlc', '-I', 'dummy', 'sound/meeting.mp3'])
+        if self._frame_idx >= len(self._frames):
+            if self._audio_process:
+                self._audio_process.terminate()
+
+    def draw(self):
+        if self._frame_idx < 0 or self._frame_idx >= len(self._frames):
+            return
+
+        self._win.clear()
+        self._frames[self._frame_idx].draw()
+
+    def tick(self, _):
+        pass
+
+
 def main():
     win = pyglet.window.Window(width=common.WIDTH, height=common.HEIGHT)
     config = common.load_config('cfg.json')
     volchok = vlk.Volchok(config)
     game_round = GameRound(config, volchok)
+    intro = Intro(win)
 
 
     @win.event
     def on_draw():
-        volchok.draw()
+        if state == AppState.INTRO:
+            intro.draw()
+        elif state == AppState.VOLCHOK:
+            volchok.draw()
+        else:
+            raise ValueError('Unknown state {}'.format(state))
 
     @win.event
     def on_key_press(symbol, modifiers):
-        if symbol == key.SPACE:
-            game_round.can_start_arrow()
+        global state
+        if state == AppState.INTRO:
+            if symbol == key.SPACE:
+                intro.next_frame()
+            elif symbol == key.RETURN:
+                state = AppState.VOLCHOK
+        elif state == AppState.VOLCHOK:
+            if symbol == key.SPACE:
+                game_round.can_start_arrow()
+        else:
+            raise ValueError('Unknown state {}'.format(state))
 
     pyglet.clock.schedule_interval(game_round.tick, FRAME_UPDATE)
     pyglet.app.run()
