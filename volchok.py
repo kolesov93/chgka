@@ -102,10 +102,10 @@ class Volchok(object):
                 logger.debug('%d: used', i + 1)
                 continue
 
-            if i == self._game_config.superblitz_idx:
+            if i + 1 == self._game_config.superblitz_idx:
                 the_image = Images.SUPERBLITZ_LETTER
                 logger.debug('%d: superblitz', i + 1)
-            elif i == self._game_config.blitz_idx:
+            elif i + 1 == self._game_config.blitz_idx:
                 the_image = Images.BLITZ_LETTER
                 logger.debug('%d: blitz', i + 1)
             else:
