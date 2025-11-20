@@ -71,6 +71,7 @@ async def admin_spin(sid):
 
     game_state["is_spinning"] = False
     game_state["current_sector"] = target
+    game_state["spin_duration"] = 0
     game_state["used_questions"].append(target)
     
     await sio.emit('state_update', game_state)
@@ -85,4 +86,9 @@ async def admin_sound(sid, data):
 async def admin_reset(sid):
     game_state["used_questions"] = []
     game_state["score"] = {"znatoki": 0, "tv": 0}
+    game_state["spin_duration"] = 0
+    game_state["is_spinning"] = False
+    game_state["current_sector"] = 1
+    game_state["target_sector"] = None
+    game_state["phase"] = "INTRO"
     await sio.emit('state_update', game_state)

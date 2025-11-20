@@ -24,18 +24,45 @@ export function GameTable({ gameState }) {
     if (target_sector) {
       const angleStep = 360 / SECTORS_COUNT;
       const targetAngleRaw = 90 + (target_sector * angleStep);
-      // Поправка на начальное положение стрелки: она смотрит ВНИЗ (90 градусов в геометрии), 
-      // но в CSS rotate(0) это её дефолтное положение.
-      // Если мы хотим, чтобы она указывала на targetAngleRaw (который отсчитывается от 3 часов),
-      // нам нужно учесть, что 0 градусов CSS = 90 градусов геометрии (6 часов).
-      // Значит rotation = targetAngleRaw - 90.
       
-      // Добавим 5 оборотов (1800 градусов) + случайный разброс (пока убрал)
-      const finalAngle = (targetAngleRaw - 90) + 1800; 
+      // --- НОВАЯ ЛОГИКА ВРАЩЕНИЯ (ТОЛЬКО ВПЕРЕД) ---
+
+      // 1. Угол, куда мы хотим попасть (в пределах одного оборота 0..360)
+      // -90 компенсация исходного положения стрелки (она смотрит вниз)
+      let targetBaseAngle = (targetAngleRaw - 90) % 360;
+      if (targetBaseAngle < 0) targetBaseAngle += 360;
+
+      // 2. Текущий накопленный угол (может быть 1000, 5000 и т.д.)
+      const currentTotalRotation = rotationAngle;
+      
+      // 3. Где мы находимся сейчас на циферблате (0..360)
+      const currentMod = currentTotalRotation % 360;
+      
+      // 4. Сколько градусов нужно пройти ВПЕРЕД, чтобы дойти до цели
+      let delta = targetBaseAngle - currentMod;
+      
+      // Если цель "сзади" (delta < 0) или совпадает (delta = 0), 
+      // нам все равно нужно сделать полный круг, чтобы вращение было видно.
+      if (delta <= 0) {
+          delta += 360;
+      }
+
+      // 5. Добавляем 5 гарантированных полных оборотов (1800) для красоты анимации
+      const spins = 5 * 360;
+      
+      // Итоговый угол (всегда больше предыдущего)
+      const finalAngle = currentTotalRotation + delta + spins;
       
       setRotationAngle(finalAngle);
     }
   }, [target_sector]);
+
+  // Сброс угла в пределы 360 градусов после окончания вращения
+  React.useEffect(() => {
+    if (!is_spinning && gameState?.spin_duration === 0) {
+      setRotationAngle(prev => prev % 360);
+    }
+  }, [is_spinning, gameState?.spin_duration]);
 
   // Определяем, какую картинку стола показывать (с 13 сектором или без)
   // Пока заглушка, берем обычный стол
