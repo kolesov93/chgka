@@ -56,7 +56,7 @@ async def admin_spin(sid):
         return
 
     target = random.choice(available_sectors)
-    duration = random.uniform(5.0, 10.0) 
+    duration = random.uniform(20.0, 25.0) 
 
     print(f"Spinning to sector {target} in {duration:.2f}s")
 

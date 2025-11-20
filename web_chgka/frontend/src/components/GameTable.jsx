@@ -57,6 +57,18 @@ export function GameTable({ gameState }) {
     }
   }, [target_sector]);
 
+  // Синхронизация стрелки с текущим сектором (при сбросе или загрузке)
+  React.useEffect(() => {
+    // Если цели нет (target_sector === null), значит мы не крутимся.
+    // Жестко ставим стрелку на текущий сектор.
+    if (target_sector === null && current_sector) {
+      const angleStep = 360 / SECTORS_COUNT;
+      // Упрощенная формула: (90 + i*step) - 90 = i*step
+      const baseAngle = current_sector * angleStep;
+      setRotationAngle(baseAngle);
+    }
+  }, [current_sector, target_sector]);
+
   // Сброс угла в пределы 360 градусов после окончания вращения
   React.useEffect(() => {
     if (!is_spinning && gameState?.spin_duration === 0) {

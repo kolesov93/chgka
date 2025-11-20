@@ -12,27 +12,14 @@ function App() {
   const [gameState, setGameState] = useState(null)
   const [isConnected, setIsConnected] = useState(socket.connected)
   
-  // Подключаем звук (он сам следит за gameState.is_spinning)
+  // Подключаем звук
   const { playSound } = useGameSound(gameState);
 
   useEffect(() => {
-    function onConnect() {
-      setIsConnected(true)
-    }
-
-    function onDisconnect() {
-      setIsConnected(false)
-    }
-
-    function onStateUpdate(newState) {
-      console.log("State updated:", newState)
-      setGameState(newState)
-    }
-
-    function onPlaySound(data) {
-        console.log("Playing sound:", data);
-        playSound(data.sound);
-    }
+    function onConnect() { setIsConnected(true) }
+    function onDisconnect() { setIsConnected(false) }
+    function onStateUpdate(newState) { setGameState(newState) }
+    function onPlaySound(data) { playSound(data.sound); }
 
     socket.on('connect', onConnect)
     socket.on('disconnect', onDisconnect)
@@ -46,41 +33,28 @@ function App() {
       socket.off('play_sound', onPlaySound)
     }
   }, []) 
-  // playSound в deps не добавляем, чтобы не провоцировать переподписки, 
-  // в реальном проекте обернули бы в useCallback
 
-  const handleSpinClick = () => {
-    socket.emit('admin_spin')
-  }
-
-  const handleGongClick = () => {
-    socket.emit('admin_sound', { sound: 'gong' })
-  }
-
+  const handleSpinClick = () => socket.emit('admin_spin')
+  const handleGongClick = () => socket.emit('admin_sound', { sound: 'gong' })
   const handleResetClick = () => {
-    if (confirm('Точно сбросить игру?')) {
-      socket.emit('admin_reset')
-    }
+    if (confirm('Точно сбросить игру?')) socket.emit('admin_reset')
   }
 
   return (
     <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-4">
-      <h1 className="text-3xl font-bold mb-4">
-        Что? Где? Когда? - Web
+      <h1 className="text-2xl md:text-3xl font-bold mb-4 text-center">
+        Что? Где? Когда?
+        <span className={`ml-3 inline-block w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} title={isConnected ? "Online" : "Offline"}/>
       </h1>
       
-      <div className={`mb-4 px-4 py-2 rounded ${isConnected ? 'bg-green-600' : 'bg-red-600'}`}>
-        Status: {isConnected ? 'Connected' : 'Disconnected'}
-      </div>
-
-      {/* Панель управления (видна всем, по-хорошему надо скрыть для обычных игроков) */}
-      <div className="flex gap-4 mb-8 flex-wrap justify-center">
+      {/* Панель управления */}
+      <div className="flex gap-4 mb-6 flex-wrap justify-center">
         <button 
           onClick={handleSpinClick}
           disabled={gameState?.is_spinning}
           className="bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-black font-bold py-2 px-6 rounded text-lg transition-all shadow-lg active:translate-y-1"
         >
-          {gameState?.is_spinning ? 'Вращаем...' : 'КРУТИТЬ ВОЛЧОК'}
+          {gameState?.is_spinning ? '...' : 'ВРАЩАТЬ'}
         </button>
 
         <button 
@@ -99,7 +73,9 @@ function App() {
       </div>
 
       {/* Игровой стол */}
-      <GameTable gameState={gameState} />
+      <div className="w-full max-w-[80vh] flex justify-center">
+            <GameTable gameState={gameState} />
+      </div>
     </div>
   )
 }
