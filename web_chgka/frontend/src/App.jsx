@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import io from 'socket.io-client'
 import { GameTable } from './components/GameTable'
+import { ScoreBoard } from './components/ScoreBoard'
 import { useGameSound } from './hooks/useGameSound'
 
 // Подключаемся к бэкенду. 
@@ -13,13 +14,20 @@ function App() {
   const [isConnected, setIsConnected] = useState(socket.connected)
   
   // Подключаем звук
-  const { playSound } = useGameSound(gameState);
+  const { playSound, stopAllSounds, masterVolume, setMasterVolume } = useGameSound(gameState);
 
   useEffect(() => {
     function onConnect() { setIsConnected(true) }
     function onDisconnect() { setIsConnected(false) }
     function onStateUpdate(newState) { setGameState(newState) }
-    function onPlaySound(data) { playSound(data.sound); }
+    
+    function onPlaySound(data) { 
+        if (data.category) {
+            playSound(data.category);
+        } else {
+            playSound(data.sound); 
+        }
+    }
 
     socket.on('connect', onConnect)
     socket.on('disconnect', onDisconnect)
@@ -39,43 +47,105 @@ function App() {
   const handleResetClick = () => {
     if (confirm('Точно сбросить игру?')) socket.emit('admin_reset')
   }
+  
+  const handleScoreZnatoki = () => socket.emit('admin_score', { winner: 'znatoki' })
+  const handleScoreTV = () => socket.emit('admin_score', { winner: 'tv' })
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-4">
-      <h1 className="text-2xl md:text-3xl font-bold mb-4 text-center">
-        Что? Где? Когда?
-        <span className={`ml-3 inline-block w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} title={isConnected ? "Online" : "Offline"}/>
-      </h1>
+    <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-start p-4">
       
-      {/* Панель управления */}
-      <div className="flex gap-4 mb-6 flex-wrap justify-center">
-        <button 
-          onClick={handleSpinClick}
-          disabled={gameState?.is_spinning}
-          className="bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-black font-bold py-2 px-6 rounded text-lg transition-all shadow-lg active:translate-y-1"
-        >
-          {gameState?.is_spinning ? '...' : 'ВРАЩАТЬ'}
-        </button>
-
-        <button 
-          onClick={handleGongClick}
-          className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded text-lg transition-all shadow-lg active:translate-y-1"
-        >
-          ГОНГ
-        </button>
-        
-        <button 
-          onClick={handleResetClick}
-          className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded text-sm transition-all shadow-lg active:translate-y-1"
-        >
-          Сброс
-        </button>
+      {/* Заголовок и статус */}
+      <div className="w-full max-w-4xl flex justify-between items-center mb-4">
+        <h1 className="text-xl font-bold text-slate-400 flex items-center gap-2">
+          CHGKA <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}/>
+        </h1>
+        <div className="flex gap-2">
+            <button 
+                onClick={stopAllSounds}
+                className="text-xs bg-red-900 hover:bg-red-800 text-white py-1 px-3 rounded transition-all font-bold"
+            >
+                SILENCE
+            </button>
+            <button 
+                onClick={handleResetClick}
+                className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-400 py-1 px-3 rounded transition-all"
+            >
+                RESET
+            </button>
+        </div>
       </div>
+
+      {/* ТАБЛО СЧЕТА (Всегда видно) */}
+      <ScoreBoard score={gameState?.score} />
 
       {/* Игровой стол */}
-      <div className="w-full max-w-[80vh] flex justify-center">
+      <div className="w-full max-w-[60vh] flex justify-center mb-8 relative">
             <GameTable gameState={gameState} />
       </div>
+
+      {/* Панель управления (АДМИНКА) */}
+      <div className="w-full max-w-4xl bg-slate-800 p-4 rounded-xl shadow-2xl border border-slate-700">
+        <div className="flex flex-col gap-6">
+            
+            {/* Основные кнопки */}
+            <div className="flex flex-wrap gap-4 justify-center items-center">
+                {/* Блок управления раундом */}
+                <button 
+                onClick={handleSpinClick}
+                disabled={gameState?.is_spinning}
+                className="bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-black py-3 px-8 rounded-lg text-xl shadow-lg active:scale-95 transition-all uppercase tracking-wider"
+                >
+                {gameState?.is_spinning ? 'Вращаем...' : 'ВОЛЧОК'}
+                </button>
+
+                <div className="w-px h-12 bg-slate-600 mx-2 hidden md:block"></div>
+
+                {/* Блок результата */}
+                <div className={`flex gap-2 transition-opacity ${gameState?.is_spinning ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+                    <button 
+                        onClick={handleScoreZnatoki}
+                        className="bg-green-700 hover:bg-green-600 text-white font-bold py-2 px-4 rounded shadow active:scale-95 transition-all flex flex-col items-center"
+                    >
+                        <span className="text-xs uppercase opacity-70">Знатоки</span>
+                        <span className="text-xl">+1</span>
+                    </button>
+                    
+                    <button 
+                        onClick={handleScoreTV}
+                        className="bg-red-700 hover:bg-red-600 text-white font-bold py-2 px-4 rounded shadow active:scale-95 transition-all flex flex-col items-center"
+                    >
+                        <span className="text-xs uppercase opacity-70">Телезрители</span>
+                        <span className="text-xl">+1</span>
+                    </button>
+                </div>
+
+                <div className="w-px h-12 bg-slate-600 mx-2 hidden md:block"></div>
+
+                {/* Звуки */}
+                <button 
+                onClick={handleGongClick}
+                className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-4 rounded shadow active:scale-95 transition-all"
+                >
+                🔔 ГОНГ
+                </button>
+            </div>
+
+            {/* Настройки звука (Слайдер) */}
+            <div className="flex items-center justify-center gap-3 bg-slate-900/50 p-2 rounded-lg">
+                <span className="text-xs text-slate-400 uppercase font-bold">Volume</span>
+                <input 
+                    type="range" 
+                    min="0" max="1" step="0.05"
+                    value={masterVolume}
+                    onChange={(e) => setMasterVolume(parseFloat(e.target.value))}
+                    className="w-32 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                />
+                <span className="text-xs text-slate-400 w-8 text-right">{Math.round(masterVolume * 100)}%</span>
+            </div>
+
+        </div>
+      </div>
+
     </div>
   )
 }

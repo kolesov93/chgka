@@ -1,17 +1,47 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const SOUNDS = {
   volchok: '/sounds/volchok.mp3',
   gong: '/sounds/sig1.mp3',
   intro: '/sounds/meeting.mp3',
+  win: ['/sounds/yes1.mp3', '/sounds/yes2.mp3'],
+  lose: ['/sounds/no1.mp3', '/sounds/no2.mp3']
 };
 
 export function useGameSound(gameState) {
   const volchokRef = useRef(new Audio(SOUNDS.volchok));
   const fadeIntervalRef = useRef(null);
   const startFadeTimeoutRef = useRef(null);
+  const fadeLevelRef = useRef(1.0); 
   
-  // Настройка волчка
+  const activeEffectsRef = useRef(new Set());
+  
+  const [masterVolume, setMasterVolumeState] = useState(1.0);
+  const masterVolumeRef = useRef(1.0);
+
+  // Применяем громкость к конкретному аудио с учетом его типа
+  const applyVolume = (audio, isFadeActive = false) => {
+      if (isFadeActive) {
+          audio.volume = fadeLevelRef.current * masterVolumeRef.current;
+      } else {
+          audio.volume = masterVolumeRef.current;
+      }
+  };
+
+  // 1. Реакция на изменение Master Volume
+  useEffect(() => {
+    masterVolumeRef.current = masterVolume;
+    
+    activeEffectsRef.current.forEach(audio => {
+        if (!audio.paused) applyVolume(audio, false);
+    });
+
+    if (!volchokRef.current.paused) {
+        const isFading = !!fadeIntervalRef.current;
+        applyVolume(volchokRef.current, isFading);
+    }
+  }, [masterVolume]);
+
   useEffect(() => {
     volchokRef.current.loop = true;
   }, []);
@@ -23,76 +53,99 @@ export function useGameSound(gameState) {
     startFadeTimeoutRef.current = null;
   };
 
-  // Функция запуска затухания
   const startFadeOut = (durationMs) => {
     const audio = volchokRef.current;
-    const stepTime = 50; // каждые 50мс
+    const stepTime = 50; 
     const steps = durationMs / stepTime;
-    const volStep = 1.0 / steps;
+    
+    fadeLevelRef.current = 1.0; 
+    const fadeStep = 1.0 / steps;
 
     fadeIntervalRef.current = setInterval(() => {
-      const newVolume = audio.volume - volStep;
-      if (newVolume > 0.01) {
-        audio.volume = newVolume;
+      fadeLevelRef.current -= fadeStep;
+      
+      if (fadeLevelRef.current > 0.01) {
+        // Пересчитываем громкость с учетом Master Volume
+        applyVolume(audio, true);
       } else {
-        // Финиш
+        // Конец
+        fadeLevelRef.current = 0;
         audio.volume = 0;
         audio.pause();
         clearInterval(fadeIntervalRef.current);
+        fadeIntervalRef.current = null;
       }
     }, stepTime);
   };
 
-  // Реакция на вращение
   useEffect(() => {
     const audio = volchokRef.current;
 
     if (gameState?.is_spinning) {
-      // --- СТАРТ ---
       clearTimers();
-      
-      // Сброс параметров аудио
-      audio.volume = 1.0;
+      fadeLevelRef.current = 1.0;
+      applyVolume(audio, true);
       audio.currentTime = 0;
-      
-      // Запускаем воспроизведение
       audio.play().catch(e => console.log("Audio play failed:", e));
 
-      // Планируем затухание
-      const totalDuration = gameState.spin_duration || 0; // в секундах
-      const fadeDuration = totalDuration / 2; // затухание в половину времени вращения
+      const totalDuration = gameState.spin_duration || 0;
+      const fadeDuration = totalDuration / 2;
 
       if (totalDuration > fadeDuration) {
-        // Ждем (Все время - 2 сек), потом начинаем гасить
         const waitTimeMs = (totalDuration - fadeDuration) * 1000;
-        
         startFadeTimeoutRef.current = setTimeout(() => {
             startFadeOut(fadeDuration * 1000);
         }, waitTimeMs);
       } else {
-        // Если вращение слишком короткое (меньше 2с), гасим сразу
         startFadeOut(totalDuration * 1000);
       }
 
     } else {
-      // --- СТОП (Экстренный или штатный) ---
-      // Если по какой-то причине таймеры еще работают или звук играет
       clearTimers();
       audio.pause();
-      audio.volume = 1.0; // Сбрасываем громкость для следующего раза
     }
     
     return () => clearTimers();
-  }, [gameState?.is_spinning, gameState?.spin_duration]); // Перезапускаем только при старте/стопе
+  }, [gameState?.is_spinning, gameState?.spin_duration]);
 
-  // Функция для проигрывания разовых звуков
-  const playSound = (soundName) => {
-    const path = SOUNDS[soundName];
+  const playSound = (soundNameOrCategory) => {
+    let path = SOUNDS[soundNameOrCategory];
+    
+    if (Array.isArray(path)) {
+        const randIndex = Math.floor(Math.random() * path.length);
+        path = path[randIndex];
+    }
+
     if (path) {
       const audio = new Audio(path);
+      applyVolume(audio, false); // Сразу Master volume
+      
+      activeEffectsRef.current.add(audio);
+      audio.onended = () => {
+          activeEffectsRef.current.delete(audio);
+      };
+
       audio.play().catch(e => console.error("Error playing sound:", e));
     }
   };
 
-  return { playSound };
+  const stopAllSounds = () => {
+      clearTimers();
+      volchokRef.current.pause();
+      volchokRef.current.currentTime = 0;
+      fadeLevelRef.current = 1.0;
+      
+      activeEffectsRef.current.forEach(audio => {
+          audio.pause();
+          audio.currentTime = 0;
+      });
+      activeEffectsRef.current.clear();
+  };
+
+  return { 
+      playSound, 
+      stopAllSounds, 
+      masterVolume, 
+      setMasterVolume: setMasterVolumeState 
+  };
 }

@@ -1,8 +1,12 @@
 import socketio
 import random
 import asyncio
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 
@@ -17,17 +21,21 @@ fastapi_app.add_middleware(
     allow_headers=["*"],
 )
 
-# Оборачиваем FastAPI в Socket.IO приложение
+DEBUG = True
+
+MIN_SPIN_DURATION = 5.0 if DEBUG else 10.0
+MAX_SPIN_DURATION = 10.0 if DEBUG else 20.0
+
 app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
 
-# Хранилище состояния игры (в памяти)
+# Хранилище состояния игры
 game_state = {
-    "phase": "INTRO", # INTRO, SPINNING, RESULT
+    "phase": "INTRO",
     "score": {"znatoki": 0, "tv": 0},
-    "current_sector": 1, # Начальный сектор
+    "current_sector": 1, 
     "target_sector": None,
     "spin_duration": 0,
-    "used_questions": [], # Список сыгранных секторов
+    "used_questions": [], 
     "is_spinning": False
 }
 
@@ -48,6 +56,10 @@ async def disconnect(sid):
 async def admin_spin(sid):
     if game_state["is_spinning"]:
         return
+    
+    # Если игра закончилась (кто-то набрал 6)
+    if game_state["score"]["znatoki"] >= 6 or game_state["score"]["tv"] >= 6:
+        return
 
     available_sectors = [i for i in range(1, 14) if i not in game_state["used_questions"]]
     
@@ -56,9 +68,7 @@ async def admin_spin(sid):
         return
 
     target = random.choice(available_sectors)
-    duration = random.uniform(20.0, 25.0) 
-
-    print(f"Spinning to sector {target} in {duration:.2f}s")
+    duration = random.uniform(MIN_SPIN_DURATION, MAX_SPIN_DURATION)
 
     game_state["target_sector"] = target
     game_state["spin_duration"] = duration
@@ -66,7 +76,6 @@ async def admin_spin(sid):
     
     await sio.emit('state_update', game_state)
 
-    # Ждем окончания вращения
     await asyncio.sleep(duration)
 
     game_state["is_spinning"] = False
@@ -77,10 +86,26 @@ async def admin_spin(sid):
     await sio.emit('state_update', game_state)
 
 @sio.event
+async def admin_score(sid, data):
+    # data = {'winner': 'znatoki' | 'tv'}
+    winner = data.get('winner')
+    
+    if winner == 'znatoki':
+        game_state["score"]["znatoki"] += 1
+        await sio.emit('play_sound', {'category': 'win'})
+        
+    elif winner == 'tv':
+        game_state["score"]["tv"] += 1
+        await sio.emit('play_sound', {'category': 'lose'})
+    
+    else:
+        logger.error(f"Invalid winner: {winner}")
+
+    await sio.emit('state_update', game_state)
+
+@sio.event
 async def admin_sound(sid, data):
-    # data = {'sound': 'gong'}
-    print(f"Playing sound: {data}")
-    await sio.emit('play_sound', data) # Рассылаем всем команду "Играть звук"
+    await sio.emit('play_sound', data)
 
 @sio.event
 async def admin_reset(sid):
