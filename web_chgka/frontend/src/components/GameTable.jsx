@@ -1,9 +1,8 @@
 import React from 'react';
 
 const SECTORS_COUNT = 13;
-const RADIUS = 42; // Радиус расположения конвертов (в % от ширины стола)
+const RADIUS = 42; 
 
-// Картинки (пути относительно папки public)
 const IMAGES = {
   table: '/images/table.png',
   tableNo13: '/images/table_all_arrows.png',
@@ -15,98 +14,67 @@ const IMAGES = {
 };
 
 export function GameTable({ gameState }) {
-  const { current_sector, target_sector, is_spinning, used_questions = [] } = gameState || {};
+  const { current_sector, target_angle, is_spinning, used_questions = [] } = gameState || {};
   
-  // Угол поворота стрелки
   const [rotationAngle, setRotationAngle] = React.useState(0);
 
   React.useEffect(() => {
-    if (target_sector) {
-      const angleStep = 360 / SECTORS_COUNT;
-      const targetAngleRaw = 90 + (target_sector * angleStep);
+    if (target_angle !== null && target_angle !== undefined) {
       
-      // --- НОВАЯ ЛОГИКА ВРАЩЕНИЯ (ТОЛЬКО ВПЕРЕД) ---
-
-      // 1. Угол, куда мы хотим попасть (в пределах одного оборота 0..360)
-      // -90 компенсация исходного положения стрелки (она смотрит вниз)
-      let targetBaseAngle = (targetAngleRaw - 90) % 360;
+      let targetBaseAngle = (target_angle - 90) % 360;
       if (targetBaseAngle < 0) targetBaseAngle += 360;
 
-      // 2. Текущий накопленный угол (может быть 1000, 5000 и т.д.)
       const currentTotalRotation = rotationAngle;
-      
-      // 3. Где мы находимся сейчас на циферблате (0..360)
       const currentMod = currentTotalRotation % 360;
-      
-      // 4. Сколько градусов нужно пройти ВПЕРЕД, чтобы дойти до цели
       let delta = targetBaseAngle - currentMod;
       
-      // Если цель "сзади" (delta < 0) или совпадает (delta = 0), 
-      // нам все равно нужно сделать полный круг, чтобы вращение было видно.
-      if (delta <= 0) {
-          delta += 360;
-      }
+      if (delta <= 0) delta += 360;
 
-      // 5. Добавляем 5 гарантированных полных оборотов (1800) для красоты анимации
       const spins = 5 * 360;
-      
-      // Итоговый угол (всегда больше предыдущего)
       const finalAngle = currentTotalRotation + delta + spins;
       
       setRotationAngle(finalAngle);
     }
-  }, [target_sector]);
+  }, [target_angle]);
 
-  // Синхронизация стрелки с текущим сектором (при сбросе или загрузке)
+  // Синхронизация при сбросе/загрузке
   React.useEffect(() => {
-    // Если цели нет (target_sector === null), значит мы не крутимся.
-    // Жестко ставим стрелку на текущий сектор.
-    if (target_sector === null && current_sector) {
-      const angleStep = 360 / SECTORS_COUNT;
-      // Упрощенная формула: (90 + i*step) - 90 = i*step
-      const baseAngle = current_sector * angleStep;
-      setRotationAngle(baseAngle);
+    // Если мы не крутимся (нет активной цели), ставим стрелку туда, где она должна быть
+    // Но теперь у нас нет "угла сектора" в явном виде от сервера, есть только current_sector.
+    // Придется считать угол сектора самим, чтобы "восстановить" положение.
+    // current_sector 1 -> 90 + 1*step
+    
+    if (target_angle === null && current_sector) {
+        const angleStep = 360 / SECTORS_COUNT;
+        const sectorAngle = 90 + (current_sector * angleStep);
+        
+        // Приводим к CSS координатам
+        const cssAngle = sectorAngle - 90; 
+        setRotationAngle(cssAngle);
     }
-  }, [current_sector, target_sector]);
+  }, [current_sector, target_angle]);
 
-  // Сброс угла в пределы 360 градусов после окончания вращения
+  // Сброс угла в 0..360
   React.useEffect(() => {
     if (!is_spinning && gameState?.spin_duration === 0) {
       setRotationAngle(prev => prev % 360);
     }
   }, [is_spinning, gameState?.spin_duration]);
 
-  // Определяем, какую картинку стола показывать (с 13 сектором или без)
-  // Пока заглушка, берем обычный стол
-  const tableImage = IMAGES.table;
+  // Картинка стола: меняем, если 13 сектор уже сыгран
+  const is13Played = used_questions.includes(13);
+  const tableImage = is13Played ? IMAGES.tableNo13 : IMAGES.table;
 
-  // Генерация позиций конвертов
   const renderEnvelopes = () => {
     const envelopes = [];
     for (let i = 1; i < SECTORS_COUNT; i++) {
-      // Если вопрос уже сыгран - не рисуем конверт
       if (used_questions.includes(i)) continue;
 
-      // Угол для i-го сектора
-      // В оригинале: 1.5 * PI - (2 * PI) / 13 * i
-      // Ноль в CSS (transform: rotate) обычно справа (3 часа), 
-      // а нам нужно расположить их так, чтобы сектор 1 был "сразу после 12 часов".
-      // Подгоним угол экспериментально или математически.
-      
-      // Шаг угла в градусах
       const angleStep = 360 / SECTORS_COUNT;
-      // Сдвиг, чтобы 1-й сектор был на своем месте
       const angleDeg = 90 + (i * angleStep); 
-
-      // Позиция через тригонометрию (для absolute positioning внутри квадратного стола)
-      // Центр стола = 50%, 50%
-      // X = 50 + cos(a) * R
-      // Y = 50 + sin(a) * R
       const angleRad = (angleDeg * Math.PI) / 180;
       const top = 50 + Math.sin(angleRad) * RADIUS;
       const left = 50 + Math.cos(angleRad) * RADIUS;
-
-      // Поворот самого конверта, чтобы он "смотрел" в центр или от центра
       const rotation = angleDeg + 90; 
 
       envelopes.push(
@@ -116,8 +84,8 @@ export function GameTable({ gameState }) {
           style={{
             top: `${top}%`,
             left: `${left}%`,
-            width: '12%',   // Размер в % от стола (было фиксировано)
-            height: '18%',  // Пропорция конверта
+            width: '12%',   
+            height: '18%',
             transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
           }}
         >
@@ -126,7 +94,6 @@ export function GameTable({ gameState }) {
              alt={`Sector ${i}`}
              className="w-full h-full object-contain drop-shadow-lg"
            />
-           {/* Номер сектора (виден только в режиме разработки) */}
            {import.meta.env.DEV && (
              <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-black font-bold text-xs md:text-sm">
                {i}
@@ -140,18 +107,15 @@ export function GameTable({ gameState }) {
 
   return (
     <div className="relative w-full max-w-[800px] aspect-square mx-auto">
-      {/* Фоновый стол */}
       <img 
         src={tableImage} 
         alt="Game Table" 
         className="w-full h-full object-contain"
       />
 
-      {/* Слой с конвертами */}
       <div className="absolute inset-0">
         {renderEnvelopes()}
       </div>
-
       
       {/* Стрелка */}
       <div 
@@ -169,7 +133,7 @@ export function GameTable({ gameState }) {
         />
       </div>
 
-      {/* Волчок (по центру)  */}
+      {/* Волчок */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[20%] h-[20%]">
         <img 
           src={IMAGES.volchok} 
@@ -181,4 +145,3 @@ export function GameTable({ gameState }) {
     </div>
   );
 }
-
