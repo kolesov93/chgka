@@ -41,7 +41,14 @@ function App() {
     }
   }, []) 
 
-  const handleSpinClick = () => socket.emit('admin_spin')
+  const handleSpinRandom = () => socket.emit('admin_spin')
+  
+  const handleSpinForced = (sectorId) => {
+      if (confirm(`Крутим на сектор ${sectorId}?`)) {
+          socket.emit('admin_spin', { force_sector: sectorId })
+      }
+  }
+
   const handleGongClick = () => socket.emit('admin_sound', { sound: 'gong' })
   const handleResetClick = () => {
     if (confirm('Точно сбросить игру?')) socket.emit('admin_reset')
@@ -49,6 +56,8 @@ function App() {
   
   const handleScoreZnatoki = () => socket.emit('admin_score', { winner: 'znatoki' })
   const handleScoreTV = () => socket.emit('admin_score', { winner: 'tv' })
+
+  const usedQuestions = gameState?.used_questions || [];
 
   return (
     <div className="min-h-screen bg-slate-900 text-white p-4 flex flex-col lg:flex-row lg:items-start lg:justify-center gap-8">
@@ -78,6 +87,7 @@ function App() {
           {/* Панель управления */}
           <div className="bg-slate-800 p-4 rounded-xl shadow-2xl border border-slate-700 flex flex-col gap-6 sticky top-4">
               
+              {/* Header */}
               <div className="flex justify-between items-center border-b border-slate-700 pb-2">
                   <span className="text-sm font-bold text-slate-400 uppercase">Admin Panel</span>
                   <div className="flex gap-2">
@@ -96,61 +106,90 @@ function App() {
                   </div>
               </div>
 
-              {/* Кнопки действия */}
-              <div className="flex flex-col gap-3">
+              {/* --- СЕКЦИЯ ВОЛЧКА --- */}
+              <div className="flex flex-col gap-3 border border-slate-700 p-3 rounded bg-slate-900/30">
+                 <div className="text-xs text-yellow-600 uppercase font-bold tracking-widest text-center">Управление Волчком</div>
+                 
+                 {/* Большая кнопка Случайно */}
                  <button 
-                    onClick={handleSpinClick}
+                    onClick={handleSpinRandom}
                     disabled={gameState?.is_spinning}
-                    className="w-full bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-black py-4 rounded-lg text-xl shadow-lg active:scale-95 transition-all uppercase tracking-wider"
+                    className="w-full bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-black py-3 rounded-lg text-lg shadow active:scale-[0.98] transition-all uppercase tracking-wider"
                  >
-                    {gameState?.is_spinning ? 'Вращаем...' : 'ВРАЩАТЬ ВОЛЧОК'}
+                    {gameState?.is_spinning ? 'Вращаем...' : '🎲 Случайный выбор'}
                  </button>
 
-                 <button 
-                    onClick={handleGongClick}
-                    className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded shadow active:scale-95 transition-all"
-                 >
-                    🔔 ГОНГ
-                 </button>
+                 <div className="text-[10px] text-slate-500 text-center uppercase font-bold mt-1">Или выбрать сектор</div>
+                 
+                 {/* Сетка секторов */}
+                 <div className="grid grid-cols-7 gap-1">
+                    {Array.from({ length: 13 }, (_, i) => i + 1).map(sectorId => {
+                        const isUsed = usedQuestions.includes(sectorId);
+                        return (
+                            <button
+                                key={sectorId}
+                                onClick={() => handleSpinForced(sectorId)}
+                                disabled={gameState?.is_spinning || isUsed}
+                                className={`
+                                    text-xs font-bold py-2 rounded transition-all
+                                    ${isUsed 
+                                        ? 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700' 
+                                        : 'bg-slate-700 hover:bg-slate-600 text-white shadow active:scale-95 hover:ring-1 ring-yellow-500/50'}
+                                `}
+                            >
+                                {sectorId}
+                            </button>
+                        )
+                    })}
+                 </div>
               </div>
 
-              {/* Очки */}
-              <div className={`grid grid-cols-2 gap-2 transition-opacity ${gameState?.is_spinning ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+              {/* --- СЕКЦИЯ ИГРЫ --- */}
+              <div className="grid grid-cols-3 gap-4 items-center border border-slate-700 p-3 rounded bg-slate-900/30">
+                 {/* Очки */}
+                 <div className="col-span-2 flex gap-2">
                     <button 
                         onClick={handleScoreZnatoki}
-                        className="bg-green-800 hover:bg-green-700 text-white py-2 rounded shadow active:scale-95 transition-all flex flex-col items-center"
+                        className="flex-1 bg-green-800 hover:bg-green-700 text-white py-2 rounded shadow active:scale-95 transition-all flex flex-col items-center"
                     >
                         <span className="text-[10px] uppercase opacity-70 font-bold">Знатоки</span>
-                        <span className="text-2xl font-bold leading-none">+1</span>
+                        <span className="text-xl font-bold leading-none">+1</span>
                     </button>
                     
                     <button 
                         onClick={handleScoreTV}
-                        className="bg-red-800 hover:bg-red-700 text-white py-2 rounded shadow active:scale-95 transition-all flex flex-col items-center"
+                        className="flex-1 bg-red-800 hover:bg-red-700 text-white py-2 rounded shadow active:scale-95 transition-all flex flex-col items-center"
                     >
                         <span className="text-[10px] uppercase opacity-70 font-bold">Телезрители</span>
-                        <span className="text-2xl font-bold leading-none">+1</span>
+                        <span className="text-xl font-bold leading-none">+1</span>
                     </button>
+                 </div>
+
+                 {/* Гонг */}
+                 <button 
+                    onClick={handleGongClick}
+                    className="h-full bg-slate-700 hover:bg-slate-600 text-white font-bold rounded shadow active:scale-95 transition-all flex flex-col items-center justify-center"
+                 >
+                    <span className="text-2xl">🔔</span>
+                    <span className="text-[10px] uppercase">Гонг</span>
+                 </button>
               </div>
 
               {/* Звук */}
-              <div className="mt-2 bg-slate-900/50 p-3 rounded-lg">
-                 <div className="flex justify-between text-xs text-slate-500 mb-1 uppercase font-bold">
-                     <span>Master Volume</span>
-                     <span>{Math.round(masterVolume * 100)}%</span>
-                 </div>
+              <div className="bg-slate-900/50 p-3 rounded-lg flex items-center gap-3">
+                 <span className="text-xs text-slate-500 uppercase font-bold">Vol</span>
                  <input 
                     type="range" 
                     min="0" max="1" step="0.05"
                     value={masterVolume}
                     onChange={(e) => setMasterVolume(parseFloat(e.target.value))}
-                    className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                    className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
                 />
+                <span className="text-xs text-slate-400 w-8 text-right">{Math.round(masterVolume * 100)}%</span>
               </div>
 
               {/* Логи */}
-              <div className="mt-2 pt-4 border-t border-slate-700">
-                  <div className="text-xs text-slate-500 mb-2 uppercase font-bold">Game Log</div>
+              <div className="pt-2 border-t border-slate-700">
                   <GameLog logs={gameState?.logs} />
               </div>
           </div>

@@ -52,22 +52,38 @@ def add_log(message):
 
 def get_sector_from_angle(angle):
     # В GameTable: angleDeg = 90 + (i * angleStep)
-    # Нам нужно найти i, для которого angleDeg наиболее близок к angle
-    # Приводим angle к той же системе координат
-    
     best_sector = 1
     min_diff = 360
     
     for i in range(1, 14):
         sector_angle = (90 + i * ANGLE_STEP) % 360
         diff = abs(angle - sector_angle)
-        if diff > 180: diff = 360 - diff # Кратчайшее расстояние по кругу
+        if diff > 180: diff = 360 - diff 
         
         if diff < min_diff:
             min_diff = diff
             best_sector = i
             
     return best_sector
+
+# --- ЛОГИКА ВЫБОРА УГЛА ---
+def calculate_spin_result(force_sector=None, used_questions = []):
+    if force_sector:
+        good_sectors = [force_sector] 
+        current_sector = (force_sector + SECTORS_COUNT - 1) % SECTORS_COUNT
+        while current_sector in used_questions and current_sector != force_sector:
+            good_sectors.append(current_sector)
+            current_sector = (current_sector - 1 + SECTORS_COUNT) % SECTORS_COUNT
+        
+        logging.info(f"Good sectors: {good_sectors}")
+        chosen_sector = random.choice(good_sectors)
+        center_angle = (90 + chosen_sector * ANGLE_STEP) % 360
+        raw_angle = random.uniform(center_angle - ANGLE_STEP / 2, center_angle + ANGLE_STEP / 2)
+    else:
+        raw_angle = random.uniform(0, 360)
+
+    return raw_angle, get_sector_from_angle(raw_angle)
+
 
 @fastapi_app.get("/")
 async def root():
@@ -83,39 +99,43 @@ async def disconnect(sid):
     print(f"Client disconnected: {sid}")
 
 @sio.event
-async def admin_spin(sid):
+async def admin_spin(sid, data=None):
+    force_sector = data.get('force_sector') if data else None
+
     if game_state["is_spinning"]:
         return
     
-    # Если игра закончилась (кто-то набрал 6)
     if game_state["score"]["znatoki"] >= 6 or game_state["score"]["tv"] >= 6:
         return
 
-    # 1. Выбираем случайный угол
-    raw_angle = random.uniform(0, 360)
+    # 1. Генерируем результат
+    raw_angle, raw_sector = calculate_spin_result(force_sector, game_state["used_questions"])
     
-    # 2. Определяем, в какой сектор он попал
-    raw_sector = get_sector_from_angle(raw_angle)
-    
-    # 3. Определяем играющий сектор (Правило скачки)
+    # 2. Определяем играющий сектор (Скачка)
     playing_sector = raw_sector
-    while playing_sector in game_state["used_questions"]:
-        # Переход по часовой стрелке
+    
+    # Защита от бесконечного цикла (если все сыграны)
+    loop_check = 0
+    while playing_sector in game_state["used_questions"] and loop_check < SECTORS_COUNT + 1:
         playing_sector += 1
         if playing_sector > 13:
             playing_sector = 1
+        loop_check += 1
             
     duration = random.uniform(MIN_SPIN_DURATION, MAX_SPIN_DURATION)
 
-    add_log(f"Вращение! Угол: {raw_angle:.1f}° (Сектор {raw_sector}) -> Играет: {playing_sector}")
+    log_msg = f"Вращение! Угол: {raw_angle:.1f}° (Сектор {raw_sector})"
+    if force_sector:
+        log_msg += " [FORCED]"
+    log_msg += f" -> Играет: {playing_sector}"
+    add_log(log_msg)
 
     game_state["target_angle"] = raw_angle
     game_state["playing_sector"] = playing_sector
     game_state["spin_duration"] = duration
     game_state["is_spinning"] = True
     
-    # Если выпадает 13 сектор (реально играет)
-    if playing_sector == 13:
+    if playing_sector == SECTORS_COUNT:
         add_log("Внимание! 13-й сектор!")
     
     await sio.emit('state_update', game_state)
@@ -127,7 +147,6 @@ async def admin_spin(sid):
     game_state["spin_duration"] = 0
     game_state["used_questions"].append(playing_sector)
     
-    # Если сыграл 13 сектор - играем звук
     if playing_sector == 13:
         await sio.emit('play_sound', {'sound': 'sector13'})
 
@@ -154,7 +173,6 @@ async def admin_sound(sid, data):
 
 @sio.event
 async def admin_log(sid, data):
-    # Фронтенд может прислать сообщение для лога
     msg = data.get('message')
     if msg:
         add_log(msg)
