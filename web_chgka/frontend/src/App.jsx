@@ -12,11 +12,12 @@ const socket = io(import.meta.env.DEV ? 'http://localhost:8000' : '/', {
 })
 
 const ADMIN_TOKEN_KEY = 'chgka_admin_token';
-const PLAYER_NAME_KEY = 'chgka_player_name';
+const PLAYER_TOKEN_KEY = 'chgka_player_token';
 
 function App() {
   const [gameState, setGameState] = useState(null)
   const [gameSettings, setGameSettings] = useState({ volume: 1.0 })
+  const [players, setPlayers] = useState([]) // Список игроков (только для админа)
   const [myRole, setMyRole] = useState('player')
   const [myName, setMyName] = useState('');
   const [isConnected, setIsConnected] = useState(socket.connected)
@@ -49,12 +50,10 @@ function App() {
         socket.emit('restore_session', { token: savedToken });
       }
       
-      // Восстанавливаем игрока (если есть имя)
-      const savedName = localStorage.getItem(PLAYER_NAME_KEY);
-      if (savedName) {
-        setMyName(savedName);
-        socket.emit('restore_session', { player_name: savedName });
-        // hasJoined установится после получения state_update с обновленным списком
+      // Восстанавливаем игрока (если есть токен)
+      const savedPlayerToken = localStorage.getItem(PLAYER_TOKEN_KEY);
+      if (savedPlayerToken) {
+        socket.emit('restore_session', { player_token: savedPlayerToken });
       }
     }
     
@@ -66,16 +65,13 @@ function App() {
     
     function onStateUpdate(newState) { 
       setGameState(newState);
-      
-      // Если мы в списке игроков - значит мы присоединились
-      const savedName = localStorage.getItem(PLAYER_NAME_KEY);
-      if (savedName && newState.players) {
-        const isInList = newState.players.some(p => p.name === savedName);
-        if (isInList) {
-          setHasJoined(true);
-          setMyName(savedName);
+      // hasJoined теперь управляется через join_success / auth_restored
+    }
+
+    function onPlayersUpdate(data) {
+        if (data && data.players) {
+            setPlayers(data.players);
         }
-      }
     }
 
     function onRoleUpdate(data) {
@@ -116,10 +112,13 @@ function App() {
       console.log('[Auth] Session restored successfully');
     }
 
-    function onJoinSuccess() {
-      // Имя уже сохранено в LoginScreen, просто отмечаем, что присоединились
-      const savedName = localStorage.getItem(PLAYER_NAME_KEY);
-      setMyName(savedName || '');
+    function onJoinSuccess(data) {
+      if (data.token) {
+          localStorage.setItem(PLAYER_TOKEN_KEY, data.token);
+      }
+      if (data.name) {
+          setMyName(data.name);
+      }
       setHasJoined(true);
     }
 
@@ -128,6 +127,7 @@ function App() {
     socket.on('state_update', onStateUpdate)
     socket.on('role_update', onRoleUpdate)
     socket.on('settings_update', onSettingsUpdate)
+    socket.on('players_update', onPlayersUpdate)
     socket.on('play_sound', onPlaySound)
     socket.on('stop_sound', onStopSound)
     socket.on('auth_success', onAuthSuccess)
@@ -141,6 +141,7 @@ function App() {
       socket.off('state_update', onStateUpdate)
       socket.off('role_update', onRoleUpdate)
       socket.off('settings_update', onSettingsUpdate)
+      socket.off('players_update', onPlayersUpdate)
       socket.off('play_sound', onPlaySound)
       socket.off('stop_sound', onStopSound)
       socket.off('auth_success', onAuthSuccess)
@@ -151,17 +152,15 @@ function App() {
   }, []) 
 
   const handleJoinSuccess = () => {
-    // Сохраняем имя (оно уже отправлено на сервер, но для переподключения)
-    // Имя будет сохранено в onJoinSuccess выше
-    const savedName = localStorage.getItem(PLAYER_NAME_KEY);
-    setMyName(savedName || '');
-    setHasJoined(true);
+     // Эта функция вызывалась из LoginScreen, но теперь основная логика в socket.on('join_success')
+     // Оставим пустым или удалим пропс
   };
   
   const handleLogout = () => {
       if (confirm('Вы действительно хотите выйти?')) {
           localStorage.removeItem(ADMIN_TOKEN_KEY);
-          localStorage.removeItem(PLAYER_NAME_KEY);
+          localStorage.removeItem(PLAYER_TOKEN_KEY);
+          // PLAYER_NAME_KEY можно оставить для автозаполнения формы, но не для входа
           socket.disconnect();
           
           // Сбрасываем стейт
@@ -169,6 +168,7 @@ function App() {
           setMyRole('player');
           setMyName('');
           setHasJoined(false);
+          setPlayers([]);
           setIsConnected(false);
           
           // Подключаемся заново
@@ -226,14 +226,14 @@ function App() {
       return (
         <>
             <UserHeader />
-            <WaitingRoom socket={socket} gameState={gameState} />
+            <WaitingRoom socket={socket} gameState={gameState} players={players} />
         </>
       );
     }
     
     // Игрок видит LoginScreen (если еще не присоединился) или экран ожидания
     if (!hasJoined) {
-      return <LoginScreen socket={socket} gameState={gameState} onJoinSuccess={handleJoinSuccess} />;
+      return <LoginScreen socket={socket} gameState={gameState} />;
     }
     
     // Игрок присоединился, но игра еще не началась - показываем экран ожидания

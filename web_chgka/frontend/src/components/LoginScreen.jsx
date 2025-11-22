@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export function LoginScreen({ socket, gameState, onJoinSuccess }) {
+export function LoginScreen({ socket, gameState }) {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -38,26 +38,17 @@ export function LoginScreen({ socket, gameState, onJoinSuccess }) {
 
   // Слушаем ответ от сервера
   useEffect(() => {
-    function onJoinSuccessHandler() {
-      setIsSubmitting(false);
-      // Сохраняем имя для переподключения
-      localStorage.setItem('chgka_player_name', name.trim());
-      if (onJoinSuccess) onJoinSuccess();
-    }
-
     function onJoinFailedHandler(data) {
       setIsSubmitting(false);
       setError(data.message || 'Ошибка подключения');
     }
 
-    socket.on('join_success', onJoinSuccessHandler);
     socket.on('join_failed', onJoinFailedHandler);
 
     return () => {
-      socket.off('join_success', onJoinSuccessHandler);
       socket.off('join_failed', onJoinFailedHandler);
     };
-  }, [socket, onJoinSuccess]);
+  }, [socket]);
 
   // Следим за результатом админской аутентификации
   useEffect(() => {
