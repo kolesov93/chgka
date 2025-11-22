@@ -54,6 +54,14 @@ async def get_client_role(sid):
     except:
         return 'player'
 
+async def require_admin(sid):
+    """Проверяет, является ли клиент админом. Возвращает True/False"""
+    role = await get_client_role(sid)
+    if role != 'admin':
+        logger.warning(f"Unauthorized admin action attempt from {sid} (role: {role})")
+        return False
+    return True
+
 # Хранилище состояния игры
 game_state = {
     "phase": "INTRO",
@@ -175,6 +183,9 @@ async def disconnect(sid):
 
 @sio.event
 async def admin_spin(sid, data=None):
+    if not await require_admin(sid):
+        return
+    
     force_sector = data.get('force_sector') if data else None
 
     if game_state["is_spinning"]:
@@ -229,6 +240,9 @@ async def admin_spin(sid, data=None):
 
 @sio.event
 async def admin_score(sid, data):
+    if not await require_admin(sid):
+        return
+    
     winner = data.get('winner')
     if winner == 'znatoki':
         game_state["score"]["znatoki"] += 1
@@ -243,11 +257,17 @@ async def admin_score(sid, data):
 
 @sio.event
 async def admin_sound(sid, data):
+    if not await require_admin(sid):
+        return
+    
     add_log(f"Звук: {data.get('sound')}")
     await sio.emit('play_sound', data)
 
 @sio.event
 async def admin_log(sid, data):
+    if not await require_admin(sid):
+        return
+    
     msg = data.get('message')
     if msg:
         add_log(msg)
@@ -255,6 +275,9 @@ async def admin_log(sid, data):
 
 @sio.event
 async def admin_reset(sid):
+    if not await require_admin(sid):
+        return
+    
     game_state["used_questions"] = []
     game_state["score"] = {"znatoki": 0, "tv": 0}
     game_state["spin_duration"] = 0
