@@ -18,6 +18,7 @@ function App() {
   const [gameState, setGameState] = useState(null)
   const [gameSettings, setGameSettings] = useState({ volume: 1.0 })
   const [myRole, setMyRole] = useState('player')
+  const [myName, setMyName] = useState('');
   const [isConnected, setIsConnected] = useState(socket.connected)
   const [hasJoined, setHasJoined] = useState(false) // Флаг, что игрок ввел имя
   
@@ -51,6 +52,7 @@ function App() {
       // Восстанавливаем игрока (если есть имя)
       const savedName = localStorage.getItem(PLAYER_NAME_KEY);
       if (savedName) {
+        setMyName(savedName);
         socket.emit('restore_session', { player_name: savedName });
         // hasJoined установится после получения state_update с обновленным списком
       }
@@ -59,6 +61,7 @@ function App() {
     function onDisconnect() { 
       setIsConnected(false)
       setMyRole('player')
+      setMyName('')
     }
     
     function onStateUpdate(newState) { 
@@ -70,6 +73,7 @@ function App() {
         const isInList = newState.players.some(p => p.name === savedName);
         if (isInList) {
           setHasJoined(true);
+          setMyName(savedName);
         }
       }
     }
@@ -114,6 +118,8 @@ function App() {
 
     function onJoinSuccess() {
       // Имя уже сохранено в LoginScreen, просто отмечаем, что присоединились
+      const savedName = localStorage.getItem(PLAYER_NAME_KEY);
+      setMyName(savedName || '');
       setHasJoined(true);
     }
 
@@ -147,7 +153,27 @@ function App() {
   const handleJoinSuccess = () => {
     // Сохраняем имя (оно уже отправлено на сервер, но для переподключения)
     // Имя будет сохранено в onJoinSuccess выше
+    const savedName = localStorage.getItem(PLAYER_NAME_KEY);
+    setMyName(savedName || '');
     setHasJoined(true);
+  };
+  
+  const handleLogout = () => {
+      if (confirm('Вы действительно хотите выйти?')) {
+          localStorage.removeItem(ADMIN_TOKEN_KEY);
+          localStorage.removeItem(PLAYER_NAME_KEY);
+          socket.disconnect();
+          
+          // Сбрасываем стейт
+          setGameState(null);
+          setMyRole('player');
+          setMyName('');
+          setHasJoined(false);
+          setIsConnected(false);
+          
+          // Подключаемся заново
+          socket.connect();
+      }
   };
 
   const handleSpinRandom = () => socket.emit('admin_spin')
@@ -174,13 +200,35 @@ function App() {
   const usedQuestions = gameState?.used_questions || [];
   const phase = gameState?.phase || 'LOGIN';
 
+  // --- КОМПОНЕНТ ШАПКИ ПОЛЬЗОВАТЕЛЯ ---
+  const UserHeader = () => (
+      <div className="absolute top-4 right-4 flex items-center gap-4">
+        {myName && (
+            <div className="text-slate-400 text-sm font-bold">
+                {myRole === 'admin' ? <span className="text-yellow-500">Ведущий</span> : myName}
+            </div>
+        )}
+        <button 
+            onClick={handleLogout}
+            className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 py-2 px-3 rounded font-bold uppercase tracking-wider transition-colors"
+        >
+            Выход
+        </button>
+      </div>
+  );
+
   // --- УСЛОВНЫЙ РЕНДЕРИНГ ПО ФАЗЕ ---
   
   // Фаза LOGIN: показываем экран входа
   if (phase === 'LOGIN') {
     // Админ видит WaitingRoom
     if (myRole === 'admin') {
-      return <WaitingRoom socket={socket} gameState={gameState} />;
+      return (
+        <>
+            <UserHeader />
+            <WaitingRoom socket={socket} gameState={gameState} />
+        </>
+      );
     }
     
     // Игрок видит LoginScreen (если еще не присоединился) или экран ожидания
@@ -190,7 +238,8 @@ function App() {
     
     // Игрок присоединился, но игра еще не началась - показываем экран ожидания
     return (
-      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center relative">
+        <UserHeader />
         <div className="text-center">
           <h1 className="text-4xl font-bold mb-4 text-yellow-500">Ожидание начала игры</h1>
           <p className="text-slate-400">Администратор запустит игру, когда все будут готовы</p>
@@ -201,7 +250,8 @@ function App() {
 
   // Фаза PRE_ROUND и далее: показываем игру
   return (
-    <div className="min-h-screen bg-slate-900 text-white p-4 flex flex-col lg:flex-row lg:items-start lg:justify-center gap-8">
+    <div className="min-h-screen bg-slate-900 text-white p-4 flex flex-col lg:flex-row lg:items-start lg:justify-center gap-8 relative">
+      <UserHeader />
       
       {/* --- ЛЕВАЯ КОЛОНКА: ИГРА --- */}
       <div className="flex-1 flex flex-col items-center w-full max-w-3xl">
