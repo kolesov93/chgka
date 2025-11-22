@@ -8,7 +8,7 @@ const SOUNDS = {
   lose: ['/sounds/no1.mp3', '/sounds/no2.mp3']
 };
 
-export function useGameSound(gameState) {
+export function useGameSound(gameState, globalVolume = 1.0) {
   const volchokRef = useRef(new Audio(SOUNDS.volchok));
   const fadeIntervalRef = useRef(null);
   const startFadeTimeoutRef = useRef(null);
@@ -16,8 +16,21 @@ export function useGameSound(gameState) {
   
   const activeEffectsRef = useRef(new Set());
   
-  const [masterVolume, setMasterVolumeState] = useState(1.0);
-  const masterVolumeRef = useRef(1.0);
+  // Вместо локального стейта используем ref для актуального значения
+  const masterVolumeRef = useRef(globalVolume);
+
+  useEffect(() => {
+      masterVolumeRef.current = globalVolume;
+      
+      activeEffectsRef.current.forEach(audio => {
+          if (!audio.paused) applyVolume(audio, false);
+      });
+
+      if (!volchokRef.current.paused) {
+          const isFading = !!fadeIntervalRef.current;
+          applyVolume(volchokRef.current, isFading);
+      }
+  }, [globalVolume]);
 
   // Применяем громкость к конкретному аудио с учетом его типа
   const applyVolume = (audio, isFadeActive = false) => {
@@ -28,19 +41,8 @@ export function useGameSound(gameState) {
       }
   };
 
-  // 1. Реакция на изменение Master Volume
-  useEffect(() => {
-    masterVolumeRef.current = masterVolume;
-    
-    activeEffectsRef.current.forEach(audio => {
-        if (!audio.paused) applyVolume(audio, false);
-    });
-
-    if (!volchokRef.current.paused) {
-        const isFading = !!fadeIntervalRef.current;
-        applyVolume(volchokRef.current, isFading);
-    }
-  }, [masterVolume]);
+  // 1. Реакция на изменение Master Volume (удаляем старый эффект)
+  // useEffect(() => { ... }, [masterVolume]) - УДАЛЕНО
 
   useEffect(() => {
     volchokRef.current.loop = true;
@@ -144,8 +146,6 @@ export function useGameSound(gameState) {
 
   return { 
       playSound, 
-      stopAllSounds, 
-      masterVolume, 
-      setMasterVolume: setMasterVolumeState 
+      stopAllSounds
   };
 }

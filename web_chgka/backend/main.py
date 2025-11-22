@@ -63,6 +63,10 @@ async def require_admin(sid):
         return False
     return True
 
+global_settings = {
+    "volume": 1.0
+}
+
 # Хранилище состояния игры
 game_state = {
     "phase": "LOGIN",  # LOGIN, PRE_ROUND, ROUND, RESULT
@@ -133,6 +137,7 @@ async def connect(sid, environ):
     
     await sio.emit('state_update', game_state, to=sid)
     await sio.emit('role_update', {'role': 'player'}, to=sid)
+    await sio.emit('settings_update', global_settings, to=sid)
 
 @sio.event
 async def restore_session(sid, data):
@@ -353,6 +358,27 @@ async def admin_sound(sid, data):
     
     add_log(f"Звук: {data.get('sound')}")
     await sio.emit('play_sound', data)
+
+@sio.event
+async def admin_volume(sid, data):
+    if not await require_admin(sid):
+        return
+    
+    try:
+        vol = float(data.get('volume', 1.0))
+        vol = max(0.0, min(1.0, vol))
+        global_settings["volume"] = vol
+        await sio.emit('settings_update', global_settings)
+    except ValueError:
+        pass
+
+@sio.event
+async def admin_stop_sounds(sid):
+    if not await require_admin(sid):
+        return
+    
+    add_log("Звук остановлен")
+    await sio.emit('stop_sound')
 
 @sio.event
 async def admin_log(sid, data):

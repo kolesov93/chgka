@@ -16,11 +16,18 @@ const PLAYER_NAME_KEY = 'chgka_player_name';
 
 function App() {
   const [gameState, setGameState] = useState(null)
+  const [gameSettings, setGameSettings] = useState({ volume: 1.0 })
   const [myRole, setMyRole] = useState('player')
   const [isConnected, setIsConnected] = useState(socket.connected)
   const [hasJoined, setHasJoined] = useState(false) // Флаг, что игрок ввел имя
   
-  const { playSound, stopAllSounds, masterVolume, setMasterVolume } = useGameSound(gameState);
+  const { playSound, stopAllSounds, masterVolume } = useGameSound(gameState, gameSettings?.volume);
+
+  const handleVolumeChange = (e) => {
+      const vol = parseFloat(e.target.value);
+      // Отправляем на сервер
+      socket.emit('admin_volume', { volume: vol });
+  };
 
   const authenticateAdmin = (password) => {
     socket.emit('authenticate_admin', { password });
@@ -72,6 +79,12 @@ function App() {
         setMyRole(data.role);
       }
     }
+
+    function onSettingsUpdate(newSettings) {
+        if (newSettings) {
+            setGameSettings(prev => ({ ...prev, ...newSettings }));
+        }
+    }
     
     function onPlaySound(data) { 
         if (data.category) {
@@ -79,6 +92,10 @@ function App() {
         } else {
             playSound(data.sound); 
         }
+    }
+
+    function onStopSound() {
+        stopAllSounds();
     }
 
     function onAuthSuccess(data) {
@@ -104,7 +121,9 @@ function App() {
     socket.on('disconnect', onDisconnect)
     socket.on('state_update', onStateUpdate)
     socket.on('role_update', onRoleUpdate)
+    socket.on('settings_update', onSettingsUpdate)
     socket.on('play_sound', onPlaySound)
+    socket.on('stop_sound', onStopSound)
     socket.on('auth_success', onAuthSuccess)
     socket.on('auth_failed', onAuthFailed)
     socket.on('auth_restored', onAuthRestored)
@@ -115,7 +134,9 @@ function App() {
       socket.off('disconnect', onDisconnect)
       socket.off('state_update', onStateUpdate)
       socket.off('role_update', onRoleUpdate)
+      socket.off('settings_update', onSettingsUpdate)
       socket.off('play_sound', onPlaySound)
+      socket.off('stop_sound', onStopSound)
       socket.off('auth_success', onAuthSuccess)
       socket.off('auth_failed', onAuthFailed)
       socket.off('auth_restored', onAuthRestored)
@@ -142,6 +163,11 @@ function App() {
     if (confirm('Точно сбросить игру?')) socket.emit('admin_reset')
   }
   
+  const handleSilenceClick = () => {
+      socket.emit('admin_stop_sounds');
+      stopAllSounds(); // Сразу останавливаем у себя
+  }
+
   const handleScoreZnatoki = () => socket.emit('admin_score', { winner: 'znatoki' })
   const handleScoreTV = () => socket.emit('admin_score', { winner: 'tv' })
 
@@ -214,7 +240,7 @@ function App() {
                     <span className="text-sm font-bold text-slate-400 uppercase">Admin Panel</span>
                     <div className="flex gap-2">
                       <button 
-                          onClick={stopAllSounds}
+                          onClick={handleSilenceClick}
                           className="text-[10px] bg-red-900 hover:bg-red-800 text-white py-1 px-2 rounded font-bold uppercase tracking-wider"
                       >
                           Silence
@@ -303,11 +329,11 @@ function App() {
                    <input 
                       type="range" 
                       min="0" max="1" step="0.05"
-                      value={masterVolume}
-                      onChange={(e) => setMasterVolume(parseFloat(e.target.value))}
+                      value={gameSettings?.volume ?? 1.0}
+                      onChange={handleVolumeChange}
                       className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
                   />
-                  <span className="text-xs text-slate-400 w-8 text-right">{Math.round(masterVolume * 100)}%</span>
+                  <span className="text-xs text-slate-400 w-8 text-right">{Math.round((gameSettings?.volume ?? 1.0) * 100)}%</span>
                 </div>
 
                 {/* Логи */}
