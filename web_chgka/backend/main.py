@@ -16,6 +16,7 @@ MIN_SPIN_DURATION = 5.0 if DEBUG else 10.0
 MAX_SPIN_DURATION = 10.0 if DEBUG else 20.0
 SECTORS_COUNT = 13
 ANGLE_STEP = 360 / SECTORS_COUNT
+ADMIN_NAME = 'Господин Ведущий'
 
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 fastapi_app = FastAPI()
@@ -64,7 +65,8 @@ async def require_admin(sid):
 
 # Хранилище состояния игры
 game_state = {
-    "phase": "INTRO",
+    "phase": "LOGIN",  # LOGIN, PRE_ROUND, ROUND, RESULT
+    "players": [],  # Список игроков: [{"sid": "...", "name": "...", "role": "player|admin"}]
     "score": {"znatoki": 0, "tv": 0},
     "current_sector": 1, 
     "target_angle": None, # Точный угол остановки (0-360)
@@ -127,59 +129,148 @@ async def root():
 async def connect(sid, environ):
     logger.info(f"Client connected: {sid}")
     
-    await sio.save_session(sid, {'role': 'player', 'admin_token': None})
+    await sio.save_session(sid, {'role': 'player', 'admin_token': None, 'player_name': None})
     
-    client_state = game_state.copy()
-    client_state['my_role'] = 'player'  # По умолчанию
-    await sio.emit('state_update', client_state, to=sid)
+    await sio.emit('state_update', game_state, to=sid)
+    await sio.emit('role_update', {'role': 'player'}, to=sid)
 
 @sio.event
 async def restore_session(sid, data):
-    """Клиент отправляет токен при переподключении"""
+    """Клиент отправляет токен/имя при переподключении"""
     token = data.get('token')
+    player_name = data.get('player_name')
     
-    if validate_admin_token(token):
-        # Восстанавливаем роль админа
-        await sio.save_session(sid, {'role': 'admin', 'admin_token': token})
+    session_data = {'role': 'player', 'admin_token': None, 'player_name': None}
+    
+    if token and validate_admin_token(token):
+        session_data['role'] = 'admin'
+        session_data['admin_token'] = token
+        await sio.save_session(sid, session_data)
         logger.info(f"Session restored for {sid}: admin")
         
-        # Отправляем обновленный стейт с ролью
-        client_state = game_state.copy()
-        client_state['my_role'] = 'admin'
-        await sio.emit('state_update', client_state, to=sid)
+        admin_exists = any(p['sid'] == sid for p in game_state['players'])
+        if not admin_exists:
+            game_state['players'].append({'sid': sid, 'name': ADMIN_NAME, 'role': 'admin'})
+        
+        await sio.emit('role_update', {'role': 'admin'}, to=sid)
+        await sio.emit('state_update', game_state, to=sid)
         await sio.emit('auth_restored', {}, to=sid)
-    else:
-        # Токен невалидный или отсутствует - остаемся игроком
-        client_state = game_state.copy()
-        client_state['my_role'] = 'player'
-        await sio.emit('state_update', client_state, to=sid)
+        return
+    
+    if player_name:
+        session_data['player_name'] = player_name
+        await sio.save_session(sid, session_data)
+        
+        player_exists = any(p['sid'] == sid for p in game_state['players'])
+        if not player_exists:
+            game_state['players'].append({'sid': sid, 'name': player_name, 'role': 'player'})
+            add_log(f"{player_name} переподключился")
+            await sio.emit('state_update', game_state)
+    
+    await sio.emit('role_update', {'role': 'player'}, to=sid)
+    await sio.emit('state_update', game_state, to=sid)
 
 @sio.event
 async def authenticate_admin(sid, data):
     """Проверка пароля и выдача токена"""
     password = data.get('password')
-    correct_password = os.getenv('ADMIN_PASSWORD', 'admin123')  # По умолчанию для разработки
+    correct_password = os.getenv('ADMIN_PASSWORD', 'admin123')
     
     if password == correct_password:
-        # Генерируем токен и сохраняем в сессии
         token = generate_admin_token()
-        await sio.save_session(sid, {'role': 'admin', 'admin_token': token})
+        await sio.save_session(sid, {'role': 'admin', 'admin_token': token, 'player_name': None})
         logger.info(f"Admin authenticated: {sid}")
         
-        # Отправляем токен клиенту
+        # Добавляем админа в список игроков (если его там нет)
+        admin_exists = any(p['sid'] == sid for p in game_state['players'])
+        if not admin_exists:
+            game_state['players'].append({'sid': sid, 'name': ADMIN_NAME, 'role': 'admin'})
+            add_log("Администратор присоединился")
+            await sio.emit('state_update', game_state)  # Рассылаем всем обновленный список
+        
         await sio.emit('auth_success', {'token': token}, to=sid)
         
-        # Обновляем стейт с ролью
-        client_state = game_state.copy()
-        client_state['my_role'] = 'admin'
-        await sio.emit('state_update', client_state, to=sid)
+        await sio.emit('role_update', {'role': 'admin'}, to=sid)
+        await sio.emit('state_update', game_state, to=sid)
     else:
         logger.warning(f"Failed admin auth attempt from {sid}")
         await sio.emit('auth_failed', {'message': 'Неверный пароль'}, to=sid)
 
 @sio.event
+async def join_game(sid, data):
+    """Игрок вводит имя и присоединяется к игре"""
+    player_name = data.get('name', '').strip()
+    
+    if not player_name or len(player_name) < 1:
+        await sio.emit('join_failed', {'message': 'Имя не может быть пустым'}, to=sid)
+        return
+    
+    if len(player_name) > 50:
+        await sio.emit('join_failed', {'message': 'Имя слишком длинное'}, to=sid)
+        return
+    
+    # Проверяем, не занято ли имя другим игроком (кроме текущего)
+    name_taken = any(p['name'] == player_name and p['sid'] != sid for p in game_state['players'])
+    if name_taken:
+        await sio.emit('join_failed', {'message': 'Это имя уже занято'}, to=sid)
+        return
+    
+    # Сохраняем имя в сессии
+    session = await sio.get_session(sid)
+    session['player_name'] = player_name
+    await sio.save_session(sid, session)
+    
+    # Добавляем/обновляем игрока в списке
+    player_exists = any(p['sid'] == sid for p in game_state['players'])
+    if player_exists:
+        # Обновляем имя существующего игрока
+        for p in game_state['players']:
+            if p['sid'] == sid:
+                p['name'] = player_name
+                break
+    else:
+        # Добавляем нового игрока
+        game_state['players'].append({'sid': sid, 'name': player_name, 'role': 'player'})
+        add_log(f"{player_name} присоединился к игре")
+    
+    # Рассылаем обновленный список всем
+    await sio.emit('state_update', game_state)
+    
+    # Отправляем успех клиенту
+    await sio.emit('join_success', {}, to=sid)
+
+@sio.event
+async def start_game(sid):
+    """Админ запускает игру (переход из LOGIN в PRE_ROUND)"""
+    if not await require_admin(sid):
+        return
+    
+    if game_state['phase'] != 'LOGIN':
+        logger.warning(f"Attempt to start game in wrong phase: {game_state['phase']}")
+        return
+    
+    game_state['phase'] = 'PRE_ROUND'
+    add_log("Игра началась!")
+    await sio.emit('state_update', game_state)
+
+@sio.event
 async def disconnect(sid):
-    print(f"Client disconnected: {sid}")
+    logger.info(f"Client disconnected: {sid}")
+    
+    # Удаляем игрока из списка
+    player_removed = False
+    for i, player in enumerate(game_state['players']):
+        if player['sid'] == sid:
+            player_name = player['name']
+            game_state['players'].pop(i)
+            player_removed = True
+            if game_state['phase'] == 'LOGIN':
+                add_log(f"{player_name} покинул игру")
+            break
+    
+    # Рассылаем обновленный список всем (если игрок был удален)
+    if player_removed:
+        await sio.emit('state_update', game_state)
 
 @sio.event
 async def admin_spin(sid, data=None):
