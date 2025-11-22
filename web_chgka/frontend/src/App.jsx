@@ -138,11 +138,12 @@ function App() {
           </div>
       </div>
 
-      {/* --- ПРАВАЯ КОЛОНКА: АДМИНКА --- */}
-      <div className="w-full lg:w-[600px] flex flex-col gap-4">
-          
-          {/* Панель управления */}
-          <div className="bg-slate-800 p-4 rounded-xl shadow-2xl border border-slate-700 flex flex-col gap-6 sticky top-4">
+      {/* --- ПРАВАЯ КОЛОНКА: АДМИНКА (только для админов) --- */}
+      {gameState?.my_role === 'admin' && (
+        <div className="w-full lg:w-[600px] flex flex-col gap-4">
+            
+            {/* Панель управления */}
+            <div className="bg-slate-800 p-4 rounded-xl shadow-2xl border border-slate-700 flex flex-col gap-6 sticky top-4">
               
               {/* Header */}
               <div className="flex justify-between items-center border-b border-slate-700 pb-2">
@@ -251,7 +252,8 @@ function App() {
               </div>
           </div>
 
-      </div>
+        </div>
+      )}
 
     </div>
   )
