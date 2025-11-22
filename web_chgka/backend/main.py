@@ -2,6 +2,8 @@ import socketio
 import random
 import asyncio
 import logging
+import secrets
+import os
 from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,6 +29,30 @@ fastapi_app.add_middleware(
 )
 
 app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
+
+# --- СИСТЕМА АВТОРИЗАЦИИ ---
+# Хранилище активных админских токенов (в памяти)
+# В продакшене можно использовать Redis для персистентности
+admin_tokens = {}  # {token: True}
+
+def generate_admin_token():
+    """Генерирует безопасный токен для админа"""
+    token = secrets.token_urlsafe(32)
+    admin_tokens[token] = True
+    logger.info(f"Generated admin token (total active: {len(admin_tokens)})")
+    return token
+
+def validate_admin_token(token):
+    """Проверяет, валиден ли токен"""
+    return token is not None and token in admin_tokens
+
+async def get_client_role(sid):
+    """Получает роль клиента из сессии Socket.IO"""
+    try:
+        session = await sio.get_session(sid)
+        return session.get('role', 'player')
+    except:
+        return 'player'
 
 # Хранилище состояния игры
 game_state = {
@@ -91,8 +117,57 @@ async def root():
 
 @sio.event
 async def connect(sid, environ):
-    print(f"Client connected: {sid}")
-    await sio.emit('state_update', game_state, to=sid)
+    logger.info(f"Client connected: {sid}")
+    
+    await sio.save_session(sid, {'role': 'player', 'admin_token': None})
+    
+    client_state = game_state.copy()
+    client_state['my_role'] = 'player'  # По умолчанию
+    await sio.emit('state_update', client_state, to=sid)
+
+@sio.event
+async def restore_session(sid, data):
+    """Клиент отправляет токен при переподключении"""
+    token = data.get('token')
+    
+    if validate_admin_token(token):
+        # Восстанавливаем роль админа
+        await sio.save_session(sid, {'role': 'admin', 'admin_token': token})
+        logger.info(f"Session restored for {sid}: admin")
+        
+        # Отправляем обновленный стейт с ролью
+        client_state = game_state.copy()
+        client_state['my_role'] = 'admin'
+        await sio.emit('state_update', client_state, to=sid)
+        await sio.emit('auth_restored', {}, to=sid)
+    else:
+        # Токен невалидный или отсутствует - остаемся игроком
+        client_state = game_state.copy()
+        client_state['my_role'] = 'player'
+        await sio.emit('state_update', client_state, to=sid)
+
+@sio.event
+async def authenticate_admin(sid, data):
+    """Проверка пароля и выдача токена"""
+    password = data.get('password')
+    correct_password = os.getenv('ADMIN_PASSWORD', 'admin123')  # По умолчанию для разработки
+    
+    if password == correct_password:
+        # Генерируем токен и сохраняем в сессии
+        token = generate_admin_token()
+        await sio.save_session(sid, {'role': 'admin', 'admin_token': token})
+        logger.info(f"Admin authenticated: {sid}")
+        
+        # Отправляем токен клиенту
+        await sio.emit('auth_success', {'token': token}, to=sid)
+        
+        # Обновляем стейт с ролью
+        client_state = game_state.copy()
+        client_state['my_role'] = 'admin'
+        await sio.emit('state_update', client_state, to=sid)
+    else:
+        logger.warning(f"Failed admin auth attempt from {sid}")
+        await sio.emit('auth_failed', {'message': 'Неверный пароль'}, to=sid)
 
 @sio.event
 async def disconnect(sid):

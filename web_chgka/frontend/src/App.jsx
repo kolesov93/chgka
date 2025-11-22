@@ -9,16 +9,43 @@ const socket = io(import.meta.env.DEV ? 'http://localhost:8000' : '/', {
   transports: ['websocket']
 })
 
+const ADMIN_TOKEN_KEY = 'chgka_admin_token';
+
 function App() {
   const [gameState, setGameState] = useState(null)
   const [isConnected, setIsConnected] = useState(socket.connected)
   
   const { playSound, stopAllSounds, masterVolume, setMasterVolume } = useGameSound(gameState);
 
+  const authenticateAdmin = (password) => {
+    socket.emit('authenticate_admin', { password });
+  };
+
+  // Экспортируем в window для отладки
   useEffect(() => {
-    function onConnect() { setIsConnected(true) }
+    window.authenticateAdmin = authenticateAdmin;
+    return () => { delete window.authenticateAdmin; };
+  }, []);
+
+  useEffect(() => {
+    function onConnect() { 
+      setIsConnected(true);
+      
+      const savedToken = localStorage.getItem(ADMIN_TOKEN_KEY);
+      if (savedToken) {
+        console.log('Restoring session with token...');
+        socket.emit('restore_session', { token: savedToken });
+      }
+    }
+    
     function onDisconnect() { setIsConnected(false) }
-    function onStateUpdate(newState) { setGameState(newState) }
+    
+    function onStateUpdate(newState) { 
+      setGameState(newState);
+      if (newState.my_role) {
+        console.log(`[Role] Current role: ${newState.my_role}`);
+      }
+    }
     
     function onPlaySound(data) { 
         if (data.category) {
@@ -28,16 +55,38 @@ function App() {
         }
     }
 
+    // Обработчики авторизации
+    function onAuthSuccess(data) {
+      const token = data.token;
+      localStorage.setItem(ADMIN_TOKEN_KEY, token);
+      console.log('[Auth] Admin authenticated! Token saved.');
+    }
+
+    function onAuthFailed(data) {
+      console.error('[Auth] Failed:', data.message || 'Неверный пароль');
+      localStorage.removeItem(ADMIN_TOKEN_KEY); // Удаляем невалидный токен
+    }
+
+    function onAuthRestored() {
+      console.log('[Auth] Session restored successfully');
+    }
+
     socket.on('connect', onConnect)
     socket.on('disconnect', onDisconnect)
     socket.on('state_update', onStateUpdate)
     socket.on('play_sound', onPlaySound)
+    socket.on('auth_success', onAuthSuccess)
+    socket.on('auth_failed', onAuthFailed)
+    socket.on('auth_restored', onAuthRestored)
 
     return () => {
       socket.off('connect', onConnect)
       socket.off('disconnect', onDisconnect)
       socket.off('state_update', onStateUpdate)
       socket.off('play_sound', onPlaySound)
+      socket.off('auth_success', onAuthSuccess)
+      socket.off('auth_failed', onAuthFailed)
+      socket.off('auth_restored', onAuthRestored)
     }
   }, []) 
 
@@ -70,6 +119,14 @@ function App() {
             <h1 className="text-xl font-bold text-slate-400 flex items-center gap-2">
               CHGKA <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}/>
             </h1>
+            {/* Временный индикатор роли для отладки */}
+            {gameState?.my_role && (
+              <div className="text-xs text-slate-500 uppercase font-bold">
+                Role: <span className={gameState.my_role === 'admin' ? 'text-yellow-500' : 'text-blue-400'}>
+                  {gameState.my_role}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Табло */}
