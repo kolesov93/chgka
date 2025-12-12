@@ -22,6 +22,8 @@ function App() {
   const [myName, setMyName] = useState('');
   const [isConnected, setIsConnected] = useState(socket.connected)
   const [hasJoined, setHasJoined] = useState(false) // Флаг, что игрок ввел имя
+  const [isPending, setIsPending] = useState(false) // Ожидает одобрения админа
+  const [notifications, setNotifications] = useState([]) // Уведомления для админа
   
   const { playSound, stopAllSounds, masterVolume } = useGameSound(gameState, gameSettings?.volume);
 
@@ -119,7 +121,47 @@ function App() {
       if (data.name) {
           setMyName(data.name);
       }
+      setIsPending(false);
       setHasJoined(true);
+    }
+
+    function onJoinPending(data) {
+      // Игрок ожидает одобрения админа
+      if (data.token) {
+          localStorage.setItem(PLAYER_TOKEN_KEY, data.token);
+      }
+      if (data.name) {
+          setMyName(data.name);
+      }
+      setIsPending(true);
+      setHasJoined(true);
+    }
+
+    function onKicked(data) {
+      // Сначала удаляем токен (до alert, который блокирует)
+      localStorage.removeItem(PLAYER_TOKEN_KEY);
+      setGameState(null);
+      setMyRole('player');
+      setMyName('');
+      setHasJoined(false);
+      setIsPending(false);
+      
+      // Показываем сообщение после сброса состояния
+      alert(data.message || 'Вы были отключены');
+      
+      // Принудительно переподключаемся для чистого состояния
+      socket.disconnect();
+      socket.connect();
+    }
+
+    function onAdminNotification(data) {
+      // Добавляем уведомление для админа
+      const id = Date.now();
+      setNotifications(prev => [...prev, { id, ...data }]);
+      // Автоматически убираем через 5 секунд
+      setTimeout(() => {
+        setNotifications(prev => prev.filter(n => n.id !== id));
+      }, 5000);
     }
 
     socket.on('connect', onConnect)
@@ -134,6 +176,9 @@ function App() {
     socket.on('auth_failed', onAuthFailed)
     socket.on('auth_restored', onAuthRestored)
     socket.on('join_success', onJoinSuccess)
+    socket.on('join_pending', onJoinPending)
+    socket.on('kicked', onKicked)
+    socket.on('admin_notification', onAdminNotification)
 
     return () => {
       socket.off('connect', onConnect)
@@ -148,6 +193,9 @@ function App() {
       socket.off('auth_failed', onAuthFailed)
       socket.off('auth_restored', onAuthRestored)
       socket.off('join_success', onJoinSuccess)
+      socket.off('join_pending', onJoinPending)
+      socket.off('kicked', onKicked)
+      socket.off('admin_notification', onAdminNotification)
     }
   }, []) 
 
@@ -158,9 +206,10 @@ function App() {
   
   const handleLogout = () => {
       if (confirm('Вы действительно хотите выйти?')) {
+          socket.emit('leave_game');
+          
           localStorage.removeItem(ADMIN_TOKEN_KEY);
           localStorage.removeItem(PLAYER_TOKEN_KEY);
-          // PLAYER_NAME_KEY можно оставить для автозаполнения формы, но не для входа
           socket.disconnect();
           
           // Сбрасываем стейт
@@ -196,6 +245,20 @@ function App() {
 
   const handleScoreZnatoki = () => socket.emit('admin_score', { winner: 'znatoki' })
   const handleScoreTV = () => socket.emit('admin_score', { winner: 'tv' })
+  
+  const handleKickPlayer = (playerName) => {
+      if (confirm(`Отключить игрока "${playerName}"?`)) {
+          socket.emit('admin_kick', { name: playerName });
+      }
+  }
+  
+  const handleApprovePlayer = (playerName) => {
+      socket.emit('admin_approve', { name: playerName });
+  }
+  
+  const dismissNotification = (id) => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+  }
 
   const usedQuestions = gameState?.used_questions || [];
   const phase = gameState?.phase || 'LOGIN';
@@ -217,23 +280,62 @@ function App() {
       </div>
   );
 
+  // --- КОМПОНЕНТ УВЕДОМЛЕНИЙ ---
+  const NotificationsPanel = () => (
+    notifications.length > 0 && (
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2">
+        {notifications.map(n => (
+          <div 
+            key={n.id}
+            className="bg-yellow-500 text-black px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-pulse"
+          >
+            <span className="font-bold">
+              {n.type === 'player_waiting' && `🔔 ${n.name} ожидает одобрения`}
+            </span>
+            <button 
+              onClick={() => dismissNotification(n.id)}
+              className="text-black/50 hover:text-black font-bold"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+    )
+  );
+
   // --- УСЛОВНЫЙ РЕНДЕРИНГ ПО ФАЗЕ ---
   
-  // Фаза LOGIN: показываем экран входа
+  // Если игрок не залогинен — показываем форму входа
+  if (myRole !== 'admin' && !hasJoined) {
+    return <LoginScreen socket={socket} gameState={gameState} />;
+  }
+  
+  // Если игрок ожидает одобрения админа
+  if (myRole !== 'admin' && isPending) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center relative">
+        <UserHeader />
+        <div className="text-center">
+          <div className="text-6xl mb-6">⏳</div>
+          <h1 className="text-3xl font-bold mb-4 text-yellow-500">Ожидание одобрения</h1>
+          <p className="text-slate-400 mb-2">Игра уже началась</p>
+          <p className="text-slate-500 text-sm">Администратор должен разрешить вам присоединиться</p>
+        </div>
+      </div>
+    );
+  }
+  
   if (phase === 'LOGIN') {
     // Админ видит WaitingRoom
     if (myRole === 'admin') {
       return (
         <>
+            <NotificationsPanel />
             <UserHeader />
             <WaitingRoom socket={socket} gameState={gameState} players={players} />
         </>
       );
-    }
-    
-    // Игрок видит LoginScreen (если еще не присоединился) или экран ожидания
-    if (!hasJoined) {
-      return <LoginScreen socket={socket} gameState={gameState} />;
     }
     
     // Игрок присоединился, но игра еще не началась - показываем экран ожидания
@@ -251,6 +353,7 @@ function App() {
   // Фаза PRE_ROUND и далее: показываем игру
   return (
     <div className="min-h-screen bg-slate-900 text-white p-4 flex flex-col lg:flex-row lg:items-start lg:justify-center gap-8 relative">
+      <NotificationsPanel />
       <UserHeader />
       
       {/* --- ЛЕВАЯ КОЛОНКА: ИГРА --- */}
@@ -384,6 +487,64 @@ function App() {
                       className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
                   />
                   <span className="text-xs text-slate-400 w-8 text-right">{Math.round((gameSettings?.volume ?? 1.0) * 100)}%</span>
+                </div>
+
+                {/* Список игроков */}
+                <div className="border border-slate-700 p-3 rounded bg-slate-900/30">
+                   <div className="text-xs text-slate-500 uppercase font-bold tracking-widest mb-2">
+                     Игроки ({players.filter(p => p.role !== 'admin' && !p.pending).length})
+                     {players.filter(p => p.pending).length > 0 && (
+                       <span className="text-yellow-500 ml-2">
+                         + {players.filter(p => p.pending).length} ожидают
+                       </span>
+                     )}
+                   </div>
+                   <div className="space-y-1 max-h-40 overflow-y-auto">
+                      {players.filter(p => p.role !== 'admin').length === 0 ? (
+                          <div className="text-xs text-slate-600 italic">Нет игроков</div>
+                      ) : (
+                          players.filter(p => p.role !== 'admin').map((player, idx) => (
+                              <div 
+                                key={idx} 
+                                className={`flex items-center justify-between px-2 py-1.5 rounded ${
+                                  player.pending 
+                                    ? 'bg-yellow-900/30 border border-yellow-700/50' 
+                                    : 'bg-slate-800'
+                                }`}
+                              >
+                                  <div className="flex items-center gap-2">
+                                      <span className={`w-2 h-2 rounded-full ${
+                                        player.pending ? 'bg-yellow-500 animate-pulse' :
+                                        player.online ? 'bg-green-500' : 'bg-slate-600'
+                                      }`} />
+                                      <span className={`text-sm ${
+                                        player.pending ? 'text-yellow-300' :
+                                        player.online ? 'text-white' : 'text-slate-500'
+                                      }`}>
+                                          {player.name}
+                                          {player.pending && <span className="text-xs ml-1">(ждёт)</span>}
+                                      </span>
+                                  </div>
+                                  <div className="flex gap-1">
+                                    {player.pending && (
+                                      <button
+                                          onClick={() => handleApprovePlayer(player.name)}
+                                          className="text-[10px] bg-green-700 hover:bg-green-600 text-white px-2 py-0.5 rounded font-bold uppercase transition-colors"
+                                      >
+                                          Пустить
+                                      </button>
+                                    )}
+                                    <button
+                                        onClick={() => handleKickPlayer(player.name)}
+                                        className="text-[10px] bg-red-900/50 hover:bg-red-800 text-red-300 hover:text-white px-2 py-0.5 rounded font-bold uppercase transition-colors"
+                                    >
+                                        Kick
+                                    </button>
+                                  </div>
+                              </div>
+                          ))
+                      )}
+                   </div>
                 </div>
 
                 {/* Логи */}

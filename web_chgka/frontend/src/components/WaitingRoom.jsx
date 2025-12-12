@@ -10,7 +10,15 @@ export function WaitingRoom({ socket, gameState, players = [] }) {
     }
   };
 
-  const playerCount = players.length;
+  const handleKickPlayer = (playerName) => {
+    if (confirm(`Отключить игрока "${playerName}"?`)) {
+      socket.emit('admin_kick', { name: playerName });
+    }
+  };
+
+  // Считаем только не-админов
+  const regularPlayers = players.filter(p => p.role !== 'admin');
+  const playerCount = regularPlayers.length;
 
   return (
     <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center p-4">
@@ -19,7 +27,7 @@ export function WaitingRoom({ socket, gameState, players = [] }) {
           Ожидание игроков
         </h1>
         <p className="text-center text-slate-400 mb-8">
-          Участники: {playerCount}
+          Игроков: {playerCount}
         </p>
 
         {/* Список игроков */}
@@ -28,22 +36,31 @@ export function WaitingRoom({ socket, gameState, players = [] }) {
             <p className="text-center text-slate-500 italic">Пока никого нет</p>
           ) : (
             <div className="space-y-2">
-              {players.map((player, idx) => (
+              {regularPlayers.map((player, idx) => (
                 <div
-                  key={player.sid || idx}
+                  key={idx}
                   className={`p-3 rounded-lg border ${
-                    player.role === 'admin'
-                      ? 'bg-yellow-900/30 border-yellow-700'
-                      : 'bg-slate-700/50 border-slate-600'
+                    player.online
+                      ? 'bg-slate-700/50 border-slate-600'
+                      : 'bg-slate-800/50 border-slate-700'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-bold">
-                      {player.name}
-                      {player.role === 'admin' && (
-                        <span className="ml-2 text-xs text-yellow-500">[Админ]</span>
+                    <div className="flex items-center gap-3">
+                      <span className={`w-2.5 h-2.5 rounded-full ${player.online ? 'bg-green-500' : 'bg-slate-600'}`} />
+                      <span className={`font-bold ${player.online ? 'text-white' : 'text-slate-500'}`}>
+                        {player.name}
+                      </span>
+                      {!player.online && (
+                        <span className="text-xs text-slate-600">(оффлайн)</span>
                       )}
-                    </span>
+                    </div>
+                    <button
+                      onClick={() => handleKickPlayer(player.name)}
+                      className="text-xs bg-red-900/50 hover:bg-red-800 text-red-300 hover:text-white px-3 py-1 rounded font-bold uppercase transition-colors"
+                    >
+                      Kick
+                    </button>
                   </div>
                 </div>
               ))}

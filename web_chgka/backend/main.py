@@ -129,10 +129,17 @@ def calculate_spin_result(force_sector=None, used_questions = []):
 
 
 async def broadcast_players(target_sid=None):
-    """Рассылает список игроков. Админам - полный список, остальным - ничего (или кол-во)"""
-    # Для простоты пока шлем всем админам, а если target_sid указан - то ему лично
+    """Рассылает список игроков. Админам полный, остальным - ничего (или кол-во)"""
     
-    public_list = [{'name': p['name'], 'role': p['role']} for p in players_list]
+    public_list = [
+        {
+            'name': p['name'], 
+            'role': p['role'], 
+            'online': p.get('online', False),
+            'pending': p.get('pending', False)
+        } 
+        for p in players_list
+    ]
     
     # Если нужно послать конкретному клиенту
     if target_sid:
@@ -142,7 +149,7 @@ async def broadcast_players(target_sid=None):
     else:
         # Рассылаем всем админам
         for p in players_list:
-            if p['role'] == 'admin':
+            if p['role'] == 'admin' and p.get('online', False):
                 await sio.emit('players_update', {'players': public_list}, to=p['sid'])
 
 @fastapi_app.get("/")
@@ -178,12 +185,13 @@ async def restore_session(sid, data):
         
         if not admin_record:
             # Если админа не было в списке, добавляем
-            players_list.append({'sid': sid, 'name': ADMIN_NAME, 'role': 'admin', 'token': admin_token})
+            players_list.append({'sid': sid, 'name': ADMIN_NAME, 'role': 'admin', 'token': admin_token, 'online': True})
         else:
             # Если был - обновляем SID (перехват сессии)
             if admin_record['sid'] != sid:
                 logger.info(f"Admin reconnected from new SID: {sid} (old: {admin_record['sid']})")
                 admin_record['sid'] = sid
+            admin_record['online'] = True
 
         await sio.emit('role_update', {'role': 'admin'}, to=sid)
         await sio.emit('state_update', game_state, to=sid)
@@ -205,11 +213,14 @@ async def restore_session(sid, data):
             if player_record['sid'] != sid:
                  logger.info(f"Player {player_record['name']} reconnected from new SID: {sid} (old: {player_record['sid']})")
                  player_record['sid'] = sid
+            player_record['online'] = True
 
             await sio.emit('role_update', {'role': 'player'}, to=sid)
             await sio.emit('state_update', game_state, to=sid)
             # Отправляем join_success, чтобы фронт понял, что он в игре
-            await sio.emit('join_success', {'name': player_record['name']}, to=sid) 
+            await sio.emit('join_success', {'name': player_record['name']}, to=sid)
+            # Уведомляем админов об изменении статуса
+            await broadcast_players()
             return
     
     # Если ничего не подошло - остаемся гостем
@@ -230,11 +241,12 @@ async def authenticate_admin(sid, data):
         # Добавляем/обновляем админа
         admin_record = next((p for p in players_list if p['role'] == 'admin'), None)
         if not admin_record:
-            players_list.append({'sid': sid, 'name': ADMIN_NAME, 'role': 'admin', 'token': token})
+            players_list.append({'sid': sid, 'name': ADMIN_NAME, 'role': 'admin', 'token': token, 'online': True})
             add_log("Администратор присоединился")
         else:
              admin_record['sid'] = sid
              admin_record['token'] = token
+             admin_record['online'] = True
 
         await broadcast_players()
         
@@ -260,8 +272,6 @@ async def join_game(sid, data):
         return
     
     # Проверяем, не занято ли имя другим игроком
-    # (Тут мы запрещаем создавать НОВОГО игрока с тем же именем. 
-    # Чтобы переподключиться к старому, нужно использовать restore_session с токеном)
     name_taken = any(p['name'] == player_name for p in players_list)
     if name_taken:
         await sio.emit('join_failed', {'message': 'Это имя уже занято'}, to=sid)
@@ -275,14 +285,61 @@ async def join_game(sid, data):
     session['player_name'] = player_name
     await sio.save_session(sid, session)
     
+    # Если игра уже началась (не LOGIN), требуется одобрение админа
+    needs_approval = game_state['phase'] != 'LOGIN'
+    
     # Добавляем нового игрока
-    players_list.append({'sid': sid, 'name': player_name, 'role': 'player', 'token': player_token})
-    add_log(f"{player_name} присоединился к игре")
+    players_list.append({
+        'sid': sid, 
+        'name': player_name, 
+        'role': 'player', 
+        'token': player_token, 
+        'online': True,
+        'pending': needs_approval  # Ожидает одобрения
+    })
+    
+    if needs_approval:
+        add_log(f"{player_name} ожидает одобрения")
+        await broadcast_players()
+        # Уведомляем админа о новом игроке
+        await notify_admin('player_waiting', {'name': player_name})
+        # Игроку сообщаем, что он ждёт одобрения
+        await sio.emit('join_pending', {'token': player_token, 'name': player_name}, to=sid)
+    else:
+        add_log(f"{player_name} присоединился к игре")
+        await broadcast_players()
+        # Отправляем успех клиенту вместе с токеном
+        await sio.emit('join_success', {'token': player_token, 'name': player_name}, to=sid)
+
+async def notify_admin(event_type, data):
+    """Отправляет уведомление всем онлайн админам"""
+    for p in players_list:
+        if p['role'] == 'admin' and p.get('online', False):
+            await sio.emit('admin_notification', {'type': event_type, **data}, to=p['sid'])
+
+@sio.event
+async def admin_approve(sid, data):
+    """Админ одобряет игрока"""
+    if not await require_admin(sid):
+        return
+    
+    player_name = data.get('name')
+    if not player_name:
+        return
+    
+    # Ищем pending игрока
+    player = next((p for p in players_list if p['name'] == player_name and p.get('pending')), None)
+    if not player:
+        return
+    
+    # Одобряем
+    player['pending'] = False
+    add_log(f"{player_name} допущен к игре")
     
     await broadcast_players()
     
-    # Отправляем успех клиенту вместе с токеном
-    await sio.emit('join_success', {'token': player_token, 'name': player_name}, to=sid)
+    # Уведомляем игрока
+    await sio.emit('join_success', {'name': player_name}, to=player['sid'])
 
 @sio.event
 async def start_game(sid):
@@ -299,18 +356,40 @@ async def start_game(sid):
     await sio.emit('state_update', game_state)
 
 @sio.event
+async def leave_game(sid):
+    """Явный выход игрока (кнопка Выход). Освобождает имя."""
+    global players_list
+    
+    player = next((p for p in players_list if p['sid'] == sid), None)
+    if player:
+        player_name = player['name']
+        player_role = player['role']
+        
+        # Удаляем из списка
+        players_list = [p for p in players_list if p['sid'] != sid]
+        
+        if player_role == 'admin':
+            add_log("Администратор вышел")
+            # Инвалидируем токен админа (если хранили)
+            token = player.get('token')
+            if token and token in admin_tokens:
+                del admin_tokens[token]
+        else:
+            add_log(f"{player_name} вышел из игры")
+        
+        logger.info(f"Player {player_name} left the game (explicit logout)")
+        await broadcast_players()
+        await sio.emit('state_update', game_state)
+
+@sio.event
 async def disconnect(sid):
     logger.info(f"Client disconnected: {sid}")
     
-    # Мы НЕ удаляем игрока сразу, чтобы дать возможность переподключиться (restore_session)
-    # Если нужно, можно пометить как offline, но для простоты пока оставляем в списке.
-    # Удалять можно по тайм-ауту или явному выходу (которого у нас в API пока нет, кроме client side logout)
-    
-    # Но для логов полезно знать
+    # Ставим offline, но НЕ удаляем (чтобы можно было переподключиться)
     player = next((p for p in players_list if p['sid'] == sid), None)
     if player:
-        # Можно отправить всем (админу), что игрок оффлайн, но пока не усложняем
-        pass
+        player['online'] = False
+        await broadcast_players()
 
 @sio.event
 async def admin_spin(sid, data=None):
@@ -414,6 +493,37 @@ async def admin_stop_sounds(sid):
     
     add_log("Звук остановлен")
     await sio.emit('stop_sound')
+
+@sio.event
+async def admin_kick(sid, data):
+    """Админ отключает игрока"""
+    global players_list
+    
+    if not await require_admin(sid):
+        return
+    
+    player_name = data.get('name')
+    if not player_name:
+        return
+    
+    # Ищем игрока по имени (не админа)
+    player = next((p for p in players_list if p['name'] == player_name and p['role'] != 'admin'), None)
+    if not player:
+        return
+    
+    player_sid = player['sid']
+    
+    # Удаляем из списка
+    players_list = [p for p in players_list if p['name'] != player_name or p['role'] == 'admin']
+    
+    add_log(f"{player_name} был отключён администратором")
+    logger.info(f"Player {player_name} kicked by admin")
+    
+    # Отправляем игроку событие что его кикнули
+    # Не отключаем сокет программно — пусть клиент сам переподключится
+    await sio.emit('kicked', {'message': 'Вы были отключены администратором'}, to=player_sid)
+    
+    await broadcast_players()
 
 @sio.event
 async def admin_log(sid, data):
