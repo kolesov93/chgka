@@ -4,6 +4,7 @@ import asyncio
 import logging
 import secrets
 import os
+import time
 from pathlib import Path
 from typing import Optional
 from contextlib import asynccontextmanager
@@ -105,6 +106,8 @@ game_state = {
     "logs": [], # Лог событий ["12:00:01 - Игра началась", ...]
     # Loaded from question pack at startup (len=13), values: "normal" | "blitz" | "superblitz"
     "question_types": None,
+    # Discussion timer deadline (unix ms). Can go negative on the client; that's OK.
+    "discussion_deadline_ms": None,
 }
 
 # Loaded question pack (kept on server; admin UI may request more details later)
@@ -558,11 +561,13 @@ async def admin_score(sid, data):
     if winner == 'znatoki':
         game_state["score"]["znatoki"] += 1
         add_log("Очко Знатокам!")
-        await sio.emit('play_sound', {'category': 'win'})
+        sound = random.choice(["yes1", "yes2"])
+        await sio.emit('play_sound', {'sound': sound})
     elif winner == 'tv':
         game_state["score"]["tv"] += 1
         add_log("Очко Телезрителям!")
-        await sio.emit('play_sound', {'category': 'lose'})
+        sound = random.choice(["no1", "no2"])
+        await sio.emit('play_sound', {'sound': sound})
     else:
         return
 
@@ -581,6 +586,7 @@ async def admin_start_discussion(sid, data=None):
     if game_state.get("phase") != PHASE_QUESTION_READING:
         return
     game_state["phase"] = PHASE_DISCUSSION
+    game_state["discussion_deadline_ms"] = int(time.time() * 1000) + 60_000
     add_log("Фаза: обсуждение")
     await sio.emit('state_update', game_state)
 
@@ -592,8 +598,32 @@ async def admin_team_answer(sid, data=None):
         return
     if game_state.get("phase") != PHASE_DISCUSSION:
         return
+    # Stop discussion timer and play signal
+    game_state["discussion_deadline_ms"] = None
+    await sio.emit("play_sound", {"sound": "sig1"})
     game_state["phase"] = PHASE_TEAM_ANSWER
     add_log("Фаза: ответ команды")
+    await sio.emit('state_update', game_state)
+
+
+@sio.event
+async def admin_ten_seconds(sid, data=None):
+    """
+    Force 10 seconds left: play warning signal to everyone and reset timer to 10 seconds.
+    Allowed only in DISCUSSION.
+    """
+    if not await require_admin(sid):
+        return
+    if game_state.get("phase") != PHASE_DISCUSSION:
+        await sio.emit(
+            "admin_notification",
+            {"type": "warning", "message": f"Эта команда доступна только в фазе {PHASE_DISCUSSION}"},
+            to=sid,
+        )
+        return
+    game_state["discussion_deadline_ms"] = int(time.time() * 1000) + 10_000
+    await sio.emit("play_sound", {"sound": "sig2"})
+    add_log("Сигнал: 10 секунд (таймер сброшен на 10)")
     await sio.emit('state_update', game_state)
 
 @sio.event

@@ -3,9 +3,15 @@ import { useEffect, useRef, useState } from 'react';
 const SOUNDS = {
   volchok: '/sounds/volchok.mp3',
   gong: '/sounds/sig1.mp3',
+  sig1: '/sounds/sig1.mp3',
+  sig2: '/sounds/sig2.mp3',
+  sig3: '/sounds/sig3.mp3',
   intro: '/sounds/meeting.mp3',
-  win: ['/sounds/yes1.mp3', '/sounds/yes2.mp3'],
-  lose: ['/sounds/no1.mp3', '/sounds/no2.mp3']
+  yes1: '/sounds/yes1.mp3',
+  yes2: '/sounds/yes2.mp3',
+  no1: '/sounds/no1.mp3',
+  no2: '/sounds/no2.mp3',
+  sector13: '/sounds/sector13.mp3',
 };
 
 export function useGameSound(gameState, globalVolume = 1.0) {
@@ -110,13 +116,8 @@ export function useGameSound(gameState, globalVolume = 1.0) {
     return () => clearTimers();
   }, [gameState?.is_spinning, gameState?.spin_duration]);
 
-  const playSound = (soundNameOrCategory) => {
-    let path = SOUNDS[soundNameOrCategory];
-    
-    if (Array.isArray(path)) {
-        const randIndex = Math.floor(Math.random() * path.length);
-        path = path[randIndex];
-    }
+  const playSound = (soundName) => {
+    const path = SOUNDS[soundName];
 
     if (path) {
       const audio = new Audio(path);
