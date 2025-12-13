@@ -241,12 +241,6 @@ def _dedupe_media(media: list[Media]) -> list[Media]:
     return out
 
 
-def _markdown_to_html(md: str) -> str:
-    # Full-featured Markdown -> HTML converter.
-    # NOTE: admin-only content; raw HTML is allowed by default in Python-Markdown.
-    return markdown.markdown(md, extensions=["extra", "sane_lists"])
-
-
 def _validate_media_usage(base_folder: Path, media_links_from_md: set[Path]) -> None:
     media_dir = base_folder / "media"
     if not media_dir.exists():
@@ -308,7 +302,9 @@ def _parse_one_question_folder(folder: Path) -> Question:
         md_with_ph, media, used_rel = _extract_media_and_replace(section_md, folder)
         media_links_from_md.update(used_rel)
         media_all.extend(media)
-        return _markdown_to_html(md_with_ph)
+        # Full-featured Markdown -> HTML converter.
+        # NOTE: admin-only content; raw HTML is allowed by default in Python-Markdown.
+        return markdown.markdown(md_with_ph, extensions=["extra", "sane_lists"])
 
     question_html = _render_section(sections.get("Вопрос"))
     if question_html is None:
