@@ -5,6 +5,7 @@ from pathlib import Path
 
 from questions import (
     parse_question,
+    parse_question_pack,
     Question,
     QuestionType,
     MediaType,
@@ -16,6 +17,14 @@ FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 VALID_DIR = FIXTURES_DIR / "valid_questions"
 INVALID_DIR = FIXTURES_DIR / "invalid_questions"
 SAMPLE_DIR = FIXTURES_DIR / "sample_questions"
+
+
+class TestQuestionPackParsing:
+    def test_parse_sample_pack_has_13_questions(self):
+        pack = parse_question_pack(SAMPLE_DIR)
+        assert len(pack) == 13
+        assert len(pack.questions) == 13
+        assert all(isinstance(q, Question) for q in pack.questions)
 
 
 class TestValidQuestions:
