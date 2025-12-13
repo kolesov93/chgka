@@ -113,7 +113,7 @@ export function GameTable({ gameState, isAdmin = false, questionTitles = null })
                </div>
              </div>
            )}
-           {import.meta.env.DEV && (
+           {isAdmin && import.meta.env.DEV && (
              <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-black font-bold text-xs md:text-sm">
                {i}
              </span>
