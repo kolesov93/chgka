@@ -61,6 +61,14 @@ export function useGameSound(gameState, globalVolume = 1.0) {
     startFadeTimeoutRef.current = null;
   };
 
+  const stopEffectsOnly = () => {
+    activeEffectsRef.current.forEach(audio => {
+      audio.pause();
+      audio.currentTime = 0;
+    });
+    activeEffectsRef.current.clear();
+  };
+
   const startFadeOut = (durationMs) => {
     const audio = volchokRef.current;
     const stepTime = 50; 
@@ -90,6 +98,9 @@ export function useGameSound(gameState, globalVolume = 1.0) {
     const audio = volchokRef.current;
 
     if (gameState?.is_spinning) {
+      // When the wheel starts spinning, stop any previously playing effects
+      // (win/lose/sig sounds) so they don't overlap with the volchok loop.
+      stopEffectsOnly();
       clearTimers();
       fadeLevelRef.current = 1.0;
       applyVolume(audio, true);
