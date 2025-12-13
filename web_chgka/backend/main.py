@@ -5,6 +5,7 @@ import logging
 import secrets
 import os
 from pathlib import Path
+from typing import Optional
 from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -90,7 +91,7 @@ game_state = {
 }
 
 # Loaded question pack (kept on server; admin UI may request more details later)
-loaded_pack: QuestionPack | None = None
+loaded_pack: Optional[QuestionPack] = None
 
 # Admin-only pack info (safe subset to send over socket)
 pack_admin_info: dict = {}
