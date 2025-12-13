@@ -20,7 +20,7 @@ function App() {
   const [players, setPlayers] = useState([]) // Список игроков (только для админа)
   const [myRole, setMyRole] = useState('player')
   const [myName, setMyName] = useState('');
-  const [questionTitles, setQuestionTitles] = useState(null); // Только для админа: названия вопросов по секторам
+  const [packInfo, setPackInfo] = useState(null); // Только для админа: данные пака вопросов
   const [isConnected, setIsConnected] = useState(socket.connected)
   const [hasJoined, setHasJoined] = useState(false) // Флаг, что игрок ввел имя
   const [isPending, setIsPending] = useState(false) // Ожидает одобрения админа
@@ -84,8 +84,8 @@ function App() {
     }
     
     function onPackInfo(data) {
-      if (data && Array.isArray(data.question_titles)) {
-        setQuestionTitles(data.question_titles);
+      if (data && data.pack) {
+        setPackInfo(data.pack);
       }
     }
 
@@ -386,7 +386,11 @@ function App() {
 
           {/* Стол */}
           <div className="w-full flex justify-center mb-4">
-             <GameTable gameState={gameState} isAdmin={myRole === 'admin'} questionTitles={questionTitles} />
+             <GameTable
+               gameState={gameState}
+               isAdmin={myRole === 'admin'}
+               questionTitles={packInfo?.question_titles || null}
+             />
           </div>
       </div>
 
