@@ -322,24 +322,24 @@ def _parse_one_question_folder(folder: Path) -> Question:
     used_rel_all: set[Path] = set()
     media_all: list[Media] = []
 
-    def _render_section(section_md: Optional[str]) -> tuple[Optional[str], list[Media]]:
+    def _render_section(section_md: Optional[str]) -> Optional[str]:
         if section_md is None:
-            return None, []
+            return None
         md_with_ph, media, used_rel = _extract_media_and_replace(section_md, folder)
         used_rel_all.update(used_rel)
         media_all.extend(media)
-        return _simple_markdown_to_html(md_with_ph), media
+        return _simple_markdown_to_html(md_with_ph)
 
-    question_html, q_media = _render_section(sections.get("Вопрос"))
+    question_html = _render_section(sections.get("Вопрос"))
     if question_html is None:
         # Should be unreachable because we validate "Вопрос" presence above.
         raise QuestionParseError("Missing section: Вопрос")
 
-    answer_html, a_media = _render_section(sections.get("Ответ"))
+    answer_html = _render_section(sections.get("Ответ"))
 
-    comment_html, _c_media = _render_section(sections.get("Комментарий"))
+    comment_html = _render_section(sections.get("Комментарий"))
 
-    sources_html, _s_media = _render_section(sections.get("Источник"))
+    sources_html = _render_section(sections.get("Источник"))
 
     # Validate media folder contents vs references
     _validate_media_usage(folder, used_rel_all)
