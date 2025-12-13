@@ -32,8 +32,7 @@ class TestValidQuestions:
         assert q.author is None
         assert q.comment_html is None
         assert q.sources_html is None
-        assert q.question_media == []
-        assert q.answer_media == []
+        assert q.media == []
         assert q.parts == []
     
     def test_full(self):
@@ -51,25 +50,33 @@ class TestValidQuestions:
         """Question with all media types in question and answer."""
         q = parse_question(VALID_DIR / "valid_all_media")
         
-        # Question media: 2 images + 1 audio + 1 video
-        assert len(q.question_media) == 4
-        assert q.question_media[0].type == MediaType.IMAGE
-        assert q.question_media[1].type == MediaType.IMAGE
-        assert q.question_media[2].type == MediaType.AUDIO
-        assert q.question_media[3].type == MediaType.VIDEO
-        
-        # Answer media: 1 image + 1 audio + 1 video
-        assert len(q.answer_media) == 3
-        assert q.answer_media[0].type == MediaType.IMAGE
-        assert q.answer_media[1].type == MediaType.AUDIO
-        assert q.answer_media[2].type == MediaType.VIDEO
+        # Total media: question (4) + answer (3) = 7
+        assert len(q.media) == 7
+        assert q.media[0].type == MediaType.IMAGE
+        assert q.media[1].type == MediaType.IMAGE
+        assert q.media[2].type == MediaType.AUDIO
+        assert q.media[3].type == MediaType.VIDEO
+        assert q.media[4].type == MediaType.IMAGE
+        assert q.media[5].type == MediaType.AUDIO
+        assert q.media[6].type == MediaType.VIDEO
         
         # Check that paths are absolute and exist
-        for media in q.question_media + q.answer_media:
+        for media in q.media:
             assert media.path.is_absolute()
             assert media.path.exists()
         
         # Check placeholders in HTML
+        assert "media-placeholder" in q.question_html
+        assert "media-placeholder" in q.answer_html
+
+    def test_shared_media_question_and_answer(self):
+        """Same media file referenced in both question and answer."""
+        q = parse_question(VALID_DIR / "valid_shared_media")
+
+        assert q.type == QuestionType.NORMAL
+        assert len(q.media) == 1
+        assert q.media[0].type == MediaType.IMAGE
+        assert q.media[0].path.name == "shared.jpg"
         assert "media-placeholder" in q.question_html
         assert "media-placeholder" in q.answer_html
     
@@ -112,24 +119,22 @@ class TestSampleQuestions:
         assert q.title == "Загадка Эйнштейна"
         assert q.author == "Михаил Савченко"
         assert "Скрипка" in q.answer_html
-        assert q.question_media == []
-        assert q.answer_media == []
+        assert q.media == []
     
     def test_sample_02_images(self):
         """Sample question 02: images in question and answer."""
         q = parse_question(SAMPLE_DIR / "02")
         
         assert q.title == "Картины и художник"
-        assert len(q.question_media) == 2  # 2 paintings
-        assert len(q.answer_media) == 1    # 1 portrait
-        assert all(m.type == MediaType.IMAGE for m in q.question_media)
+        assert len(q.media) == 3  # 2 paintings + 1 portrait
+        assert all(m.type == MediaType.IMAGE for m in q.media)
     
     def test_sample_03_audio_in_question(self):
         """Sample question 03: audio in question."""
         q = parse_question(SAMPLE_DIR / "03")
         
-        assert len(q.question_media) == 1
-        assert q.question_media[0].type == MediaType.AUDIO
+        assert len(q.media) == 1
+        assert q.media[0].type == MediaType.AUDIO
     
     def test_sample_04_blitz(self):
         """Sample question 04: blitz."""
@@ -142,15 +147,15 @@ class TestSampleQuestions:
         """Sample question 05: audio in answer."""
         q = parse_question(SAMPLE_DIR / "05")
         
-        assert len(q.answer_media) == 1
-        assert q.answer_media[0].type == MediaType.AUDIO
+        assert len(q.media) == 1
+        assert q.media[0].type == MediaType.AUDIO
     
     def test_sample_06_video_in_question(self):
         """Sample question 06: video in question."""
         q = parse_question(SAMPLE_DIR / "06")
         
-        assert len(q.question_media) == 1
-        assert q.question_media[0].type == MediaType.VIDEO
+        assert len(q.media) == 1
+        assert q.media[0].type == MediaType.VIDEO
     
     def test_sample_07_superblitz(self):
         """Sample question 07: superblitz."""
@@ -163,8 +168,8 @@ class TestSampleQuestions:
         """Sample question 08: video in answer."""
         q = parse_question(SAMPLE_DIR / "08")
         
-        assert len(q.answer_media) == 1
-        assert q.answer_media[0].type == MediaType.VIDEO
+        assert len(q.media) == 1
+        assert q.media[0].type == MediaType.VIDEO
     
     def test_sample_09_no_media(self):
         """Sample question 09: no media."""
@@ -172,30 +177,30 @@ class TestSampleQuestions:
         
         assert q.title == "Литературный псевдоним"
         assert q.type == QuestionType.NORMAL
-        assert q.question_media == []
+        assert q.media == []
     
     def test_sample_10_image_in_question(self):
         """Sample question 10: image in question."""
         q = parse_question(SAMPLE_DIR / "10")
         
         assert q.title == "Архитектурное чудо"
-        assert len(q.question_media) == 1
-        assert q.question_media[0].type == MediaType.IMAGE
+        assert len(q.media) == 1
+        assert q.media[0].type == MediaType.IMAGE
     
     def test_sample_11_no_media(self):
         """Sample question 11: no media."""
         q = parse_question(SAMPLE_DIR / "11")
         
         assert q.title == "Химический элемент"
-        assert q.question_media == []
+        assert q.media == []
     
     def test_sample_12_image_in_question(self):
         """Sample question 12: image in question."""
         q = parse_question(SAMPLE_DIR / "12")
         
         assert q.title == "Спортивный рекорд"
-        assert len(q.question_media) == 1
-        assert q.question_media[0].type == MediaType.IMAGE
+        assert len(q.media) == 1
+        assert q.media[0].type == MediaType.IMAGE
     
     def test_sample_13_no_media(self):
         """Sample question 13: special sector."""
@@ -203,7 +208,7 @@ class TestSampleQuestions:
         
         assert q.title == "Тринадцатый сектор"
         assert q.type == QuestionType.NORMAL
-        assert q.question_media == []
+        assert q.media == []
 
 
 class TestInvalidFileStructure:

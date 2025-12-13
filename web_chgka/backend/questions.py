@@ -51,9 +51,8 @@ class Question:
     comment_html: Optional[str] = None
     sources_html: Optional[str] = None
     
-    # Media extracted from markdown (referenced by placeholders in HTML)
-    question_media: list[Media] = field(default_factory=list)
-    answer_media: list[Media] = field(default_factory=list)
+    # Media extracted from markdown across all sections (referenced by placeholders in HTML)
+    media: list[Media] = field(default_factory=list)
     
     # Question type
     type: QuestionType = QuestionType.NORMAL
@@ -221,6 +220,26 @@ def _extract_media_and_replace(md: str, base_folder: Path) -> tuple[str, list[Me
     return new_md, media_list, used_rel
 
 
+def _dedupe_media(media: list[Media]) -> list[Media]:
+    """
+    Deduplicate media entries by absolute path, preserving first-seen order.
+    If the same file is referenced with conflicting inferred types, fail fast.
+    """
+    seen: dict[Path, MediaType] = {}
+    out: list[Media] = []
+    for m in media:
+        prev = seen.get(m.path)
+        if prev is None:
+            seen[m.path] = m.type
+            out.append(m)
+            continue
+        if prev != m.type:
+            raise QuestionParseError(
+                f"Media file referenced with conflicting types: {m.path.name}"
+            )
+    return out
+
+
 def _simple_markdown_to_html(md: str) -> str:
     # Very small subset sufficient for fixtures/tests.
     # Bold
@@ -301,12 +320,14 @@ def _parse_one_question_folder(folder: Path) -> Question:
         raise QuestionParseError("Missing section: Вопрос")
 
     used_rel_all: set[Path] = set()
+    media_all: list[Media] = []
 
     def _render_section(section_md: Optional[str]) -> tuple[Optional[str], list[Media]]:
         if section_md is None:
             return None, []
         md_with_ph, media, used_rel = _extract_media_and_replace(section_md, folder)
         used_rel_all.update(used_rel)
+        media_all.extend(media)
         return _simple_markdown_to_html(md_with_ph), media
 
     question_html, q_media = _render_section(sections.get("Вопрос"))
@@ -330,8 +351,7 @@ def _parse_one_question_folder(folder: Path) -> Question:
         author=author,
         comment_html=comment_html,
         sources_html=sources_html,
-        question_media=q_media,
-        answer_media=a_media,
+        media=_dedupe_media(media_all),
         type=qtype,
         parts=[],
     )
