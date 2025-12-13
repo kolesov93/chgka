@@ -302,29 +302,28 @@ def _parse_one_question_folder(folder: Path) -> Question:
 
     used_rel_all: set[Path] = set()
 
-    q_md_with_ph, q_media, used_rel_q = _extract_media_and_replace(sections.get("Вопрос", ""), folder)
+    def _render_section(section_md: str) -> tuple[str, list[Media], set[Path]]:
+        md_with_ph, media, used_rel = _extract_media_and_replace(section_md, folder)
+        return _simple_markdown_to_html(md_with_ph), media, used_rel
+
+    question_html, q_media, used_rel_q = _render_section(sections.get("Вопрос", ""))
     used_rel_all |= used_rel_q
 
     answer_html: Optional[str] = None
     a_media: list[Media] = []
     if "Ответ" in sections:
-        a_md_with_ph, a_media, used_rel_a = _extract_media_and_replace(sections.get("Ответ", ""), folder)
+        answer_html, a_media, used_rel_a = _render_section(sections.get("Ответ", ""))
         used_rel_all |= used_rel_a
-        answer_html = _simple_markdown_to_html(a_md_with_ph)
 
     comment_html = None
     if "Комментарий" in sections:
-        c_md_with_ph, _c_media, used_rel_c = _extract_media_and_replace(sections.get("Комментарий", ""), folder)
+        comment_html, _c_media, used_rel_c = _render_section(sections.get("Комментарий", ""))
         used_rel_all |= used_rel_c
-        comment_html = _simple_markdown_to_html(c_md_with_ph)
 
     sources_html = None
     if "Источник" in sections:
-        s_md_with_ph, _s_media, used_rel_s = _extract_media_and_replace(sections.get("Источник", ""), folder)
+        sources_html, _s_media, used_rel_s = _render_section(sections.get("Источник", ""))
         used_rel_all |= used_rel_s
-        sources_html = _simple_markdown_to_html(s_md_with_ph)
-
-    question_html = _simple_markdown_to_html(q_md_with_ph)
 
     # Validate media folder contents vs references
     _validate_media_usage(folder, used_rel_all)
