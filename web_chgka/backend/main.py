@@ -6,6 +6,7 @@ import secrets
 import os
 from pathlib import Path
 from typing import Optional
+from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,7 +24,16 @@ ANGLE_STEP = 360 / SECTORS_COUNT
 ADMIN_NAME = 'Господин Ведущий'
 
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
-fastapi_app = FastAPI()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Load question pack once when the app starts.
+    _load_question_pack_on_startup()
+    yield
+
+
+fastapi_app = FastAPI(lifespan=lifespan)
 
 fastapi_app.add_middleware(
     CORSMiddleware,
@@ -139,10 +149,6 @@ async def _emit_pack_info_to_admin(sid: str) -> None:
         to=sid,
     )
 
-
-@fastapi_app.on_event("startup")
-async def _startup_load_questions() -> None:
-    _load_question_pack_on_startup()
 
 def add_log(message):
     time_str = datetime.now().strftime("%H:%M:%S")
