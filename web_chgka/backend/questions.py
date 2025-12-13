@@ -274,7 +274,7 @@ def _validate_media_usage(base_folder: Path, used_rel_paths: set[Path]) -> None:
         raise QuestionParseError(f"Unused media file: {one}")
 
 
-def _parse_one_question_folder(folder: Path, *, allow_parts: bool) -> Question:
+def _parse_one_question_folder(folder: Path) -> Question:
     qmd = folder / "question.md"
     if not qmd.exists():
         raise QuestionParseError(f"question.md not found in {folder}")
@@ -299,13 +299,6 @@ def _parse_one_question_folder(folder: Path, *, allow_parts: bool) -> Question:
 
     if "Вопрос" not in sections:
         raise QuestionParseError("Missing section: Вопрос")
-
-    # Detect parts folders
-    part_dirs = [folder / f"{i:02d}" for i in (1, 2, 3)]
-    has_any_part_dir = any(p.exists() for p in part_dirs)
-
-    if not allow_parts and has_any_part_dir:
-        raise QuestionParseError("Nested parts are not allowed (subfolder 01/02/03 found)")
 
     used_rel_all: set[Path] = set()
 
@@ -350,6 +343,14 @@ def _parse_one_question_folder(folder: Path, *, allow_parts: bool) -> Question:
     )
 
 
+def _part_dirs(folder: Path) -> list[Path]:
+    return [folder / f"{i:02d}" for i in (1, 2, 3)]
+
+
+def _existing_part_dirs(folder: Path) -> list[Path]:
+    return [p for p in _part_dirs(folder) if p.exists() and p.is_dir()]
+
+
 def parse_question(folder: Path) -> Question:
     """
     Parse a question from a folder.
@@ -367,10 +368,8 @@ def parse_question(folder: Path) -> Question:
     if not folder.exists() or not folder.is_dir():
         raise QuestionParseError(f"Question folder does not exist: {folder}")
 
-    q = _parse_one_question_folder(folder, allow_parts=True)
-
-    part_dirs = [folder / f"{i:02d}" for i in (1, 2, 3)]
-    existing_parts = [p for p in part_dirs if p.exists() and p.is_dir()]
+    q = _parse_one_question_folder(folder)
+    existing_parts = _existing_part_dirs(folder)
 
     if q.type == QuestionType.NORMAL:
         if existing_parts:
@@ -388,15 +387,15 @@ def parse_question(folder: Path) -> Question:
         raise QuestionParseError("Blitz question must have exactly 3 parts (01/02/03)")
 
     parts: list[Question] = []
-    for p in part_dirs:
+    for p in _part_dirs(folder):
         if not p.exists() or not p.is_dir():
             raise QuestionParseError("Blitz question must have exactly 3 parts (01/02/03)")
-        part_q = _parse_one_question_folder(p, allow_parts=False)
+        part_q = _parse_one_question_folder(p)
         if part_q.type != QuestionType.NORMAL:
             raise QuestionParseError("Blitz part has invalid type (must be normal)")
         if part_q.answer_html is None:
             raise QuestionParseError("Missing section: Ответ")
-        if part_q.parts:
+        if _existing_part_dirs(p):
             raise QuestionParseError("Nested parts are not allowed")
         parts.append(part_q)
 
