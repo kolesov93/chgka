@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import io from 'socket.io-client'
 import { GameTable } from './components/GameTable'
 import { ScoreBoard } from './components/ScoreBoard'
@@ -27,6 +27,9 @@ function App() {
   const [notifications, setNotifications] = useState([]) // Уведомления для админа
   
   const { playSound, stopAllSounds, masterVolume } = useGameSound(gameState, gameSettings?.volume);
+  const [discussionRemaining, setDiscussionRemaining] = useState(null); // seconds (can be negative)
+  const tenSecNotifiedRef = useRef(false);
+  const lastDiscussionRemainingRef = useRef(null);
 
   const handleVolumeChange = (e) => {
       const vol = parseFloat(e.target.value);
@@ -242,7 +245,6 @@ function App() {
       }
   }
 
-  const handleGongClick = () => socket.emit('admin_sound', { sound: 'gong' })
   const handleResetClick = () => {
     if (confirm('Точно сбросить игру?')) socket.emit('admin_reset')
   }
@@ -256,6 +258,11 @@ function App() {
   const handleScoreTV = () => socket.emit('admin_score', { winner: 'tv' })
   const handleStartDiscussion = () => socket.emit('admin_start_discussion')
   const handleTeamAnswer = () => socket.emit('admin_team_answer')
+  const handleTenSeconds = () => {
+    // Don't auto-trigger "10 seconds" notification again for this discussion
+    tenSecNotifiedRef.current = true;
+    socket.emit('admin_ten_seconds')
+  }
   
   const handleKickPlayer = (playerName) => {
       if (confirm(`Отключить игрока "${playerName}"?`)) {
@@ -277,6 +284,47 @@ function App() {
   const isQuestionReading = phase === 'QUESTION_READING';
   const isDiscussion = phase === 'DISCUSSION';
   const isTeamAnswer = phase === 'TEAM_ANSWER';
+
+  // Discussion countdown (admin-only). Can go negative.
+  useEffect(() => {
+    if (myRole !== 'admin') return;
+    if (!isDiscussion) {
+      setDiscussionRemaining(null);
+      tenSecNotifiedRef.current = false;
+      lastDiscussionRemainingRef.current = null;
+      return;
+    }
+    tenSecNotifiedRef.current = false;
+    lastDiscussionRemainingRef.current = null;
+
+    const tick = () => {
+      const deadline = gameState?.discussion_deadline_ms;
+      if (!deadline) {
+        setDiscussionRemaining(null);
+        return;
+      }
+      const raw = (deadline - Date.now()) / 1000;
+      const remaining = raw >= 0 ? Math.ceil(raw) : Math.floor(raw);
+      setDiscussionRemaining(remaining);
+
+      const prev = lastDiscussionRemainingRef.current;
+      lastDiscussionRemainingRef.current = remaining;
+
+      // Trigger once when we cross from >10 to <=10 (robust to lag / skipped exact 10).
+      if (!tenSecNotifiedRef.current && prev !== null && prev > 10 && remaining <= 10) {
+        tenSecNotifiedRef.current = true;
+        // Admin-only notification + local "beep" (sig2)
+        const id = Date.now();
+        setNotifications(prev => [...prev, { id, type: 'warning', message: 'Осталось 10 секунд' }]);
+        setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 5000);
+        playSound('sig2');
+      }
+    };
+
+    tick();
+    const interval = setInterval(tick, 250);
+    return () => clearInterval(interval);
+  }, [myRole, isDiscussion, gameState?.discussion_deadline_ms]);
 
   // --- КОМПОНЕНТ ШАПКИ ПОЛЬЗОВАТЕЛЯ ---
   const UserHeader = () => (
@@ -479,12 +527,28 @@ function App() {
                         </button>
                       )}
                       {isDiscussion && (
-                        <button
-                          onClick={handleTeamAnswer}
-                          className="w-full bg-purple-700 hover:bg-purple-600 text-white py-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-xs"
-                        >
-                          Ответ команды
-                        </button>
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between px-2 py-2 rounded bg-slate-950/40 border border-slate-800">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Обсуждение</span>
+                            <span className={`text-lg font-black tabular-nums ${typeof discussionRemaining === 'number' && discussionRemaining <= 10 ? 'text-yellow-400' : 'text-white'}`}>
+                              {typeof discussionRemaining === 'number' ? discussionRemaining : '—'}
+                            </span>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={handleTenSeconds}
+                              className="flex-1 bg-yellow-600 hover:bg-yellow-500 text-black py-2 rounded shadow active:scale-95 transition-all font-black uppercase tracking-wider text-[10px]"
+                            >
+                              10 секунд (сигнал)
+                            </button>
+                            <button
+                              onClick={handleTeamAnswer}
+                              className="flex-1 bg-purple-700 hover:bg-purple-600 text-white py-2 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
+                            >
+                              Ответ команды
+                            </button>
+                          </div>
+                        </div>
                       )}
                       {isTeamAnswer && (
                         <div className="flex gap-2">
@@ -512,14 +576,7 @@ function App() {
                       )}
                    </div>
 
-                   {/* Гонг */}
-                   <button 
-                      onClick={handleGongClick}
-                      className="h-full bg-slate-700 hover:bg-slate-600 text-white font-bold rounded shadow active:scale-95 transition-all flex flex-col items-center justify-center"
-                   >
-                      <span className="text-2xl">🔔</span>
-                      <span className="text-[10px] uppercase">Гонг</span>
-                   </button>
+                   {/* (Гонг убран: теперь сигналы управления фазами покрывают кейсы) */}
                 </div>
 
                 {/* Звук */}
