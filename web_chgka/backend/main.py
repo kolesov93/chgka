@@ -23,6 +23,10 @@ MAX_SPIN_DURATION = 10.0 if DEBUG else 20.0
 SECTORS_COUNT = 13
 ANGLE_STEP = 360 / SECTORS_COUNT
 ADMIN_NAME = 'Господин Ведущий'
+BLITZ_PARTS = 3
+NORMAL_DISCUSSION_SECONDS = 60
+BLITZ_DISCUSSION_SECONDS = 20
+TEN_SECONDS = 10
 
 # Game phases
 PHASE_LOGIN = "LOGIN"
@@ -108,6 +112,11 @@ game_state = {
     "question_types": None,
     # Discussion timer deadline (unix ms). Can go negative on the client; that's OK.
     "discussion_deadline_ms": None,
+    # Current round context (safe to send to all clients; no question text here)
+    # Example:
+    #   {"kind":"normal","sector":5}
+    #   {"kind":"blitz","sector":4,"part_index":0}
+    "round": None,
 }
 
 # Loaded question pack (kept on server; admin UI may request more details later)
@@ -534,6 +543,15 @@ async def admin_spin(sid, data=None):
 
     game_state["phase"] = PHASE_QUESTION_READING
     add_log("Фаза: зачитывание вопроса")
+
+    # Initialize round context based on question type
+    qtypes = game_state.get("question_types") or []
+    qtype = qtypes[playing_sector - 1] if len(qtypes) >= playing_sector else "normal"
+    if qtype in ("blitz", "superblitz"):
+        game_state["round"] = {"kind": qtype, "sector": playing_sector, "part_index": 0}
+    else:
+        game_state["round"] = {"kind": "normal", "sector": playing_sector}
+    game_state["discussion_deadline_ms"] = None
     
     if playing_sector == 13:
         await sio.emit('play_sound', {'sound': 'sector13'})
@@ -544,37 +562,78 @@ async def admin_spin(sid, data=None):
 async def admin_score(sid, data):
     if not await require_admin(sid):
         return
-
-    # Начисление очков разрешаем только в фазе ответа команды
+    
+    # Начисление очков / подтверждение ответа разрешаем только в фазе ответа команды
     if game_state.get("phase") != PHASE_TEAM_ANSWER:
         await sio.emit(
             "admin_notification",
-            {
-                "type": "warning",
-                "message": f"Нельзя начислять очки в фазе {game_state.get('phase')}",
-            },
+            {"type": "warning", "message": f"Нельзя нажимать верно/очки в фазе {game_state.get('phase')}"},
             to=sid,
         )
         return
-    
+
+    round_ctx = game_state.get("round") or {"kind": "normal"}
+    kind = round_ctx.get("kind", "normal")
     winner = data.get('winner')
+
+    # Blitz / superblitz:
+    # - any wrong answer ends the round immediately (TV +1)
+    # - correct answers in part 1/2 advance to next part WITHOUT sounds/scores
+    # - correct answer in part 3 gives Znatoki +1 (normal scoring)
+    if kind in ("blitz", "superblitz"):
+        part_index = int(round_ctx.get("part_index", 0))
+
+        if winner == "tv":
+            game_state["score"]["tv"] += 1
+            add_log("Неверно. Очко Телезрителям!")
+            await sio.emit("play_sound", {"sound": random.choice(["no1", "no2"])})
+            game_state["discussion_deadline_ms"] = None
+            game_state["round"] = None
+            game_state["phase"] = PHASE_PRE_ROUND
+            add_log("Фаза: ожидание следующего вращения")
+            await sio.emit('state_update', game_state)
+            return
+
+        if winner != "znatoki":
+            return
+
+        # Parts 1/2: just advance to next part
+        if part_index < BLITZ_PARTS - 1:
+            round_ctx["part_index"] = part_index + 1
+            game_state["round"] = round_ctx
+            game_state["discussion_deadline_ms"] = None
+            game_state["phase"] = PHASE_QUESTION_READING
+            add_log(f"Верно. Переходим к части {part_index + 2}/{BLITZ_PARTS}")
+            await sio.emit('state_update', game_state)
+            return
+
+        # Last part correct -> Znatoki +1
+        game_state["score"]["znatoki"] += 1
+        add_log("Все ответы верны. Очко Знатокам!")
+        await sio.emit("play_sound", {"sound": random.choice(["yes1", "yes2"])})
+        game_state["discussion_deadline_ms"] = None
+        game_state["round"] = None
+        game_state["phase"] = PHASE_PRE_ROUND
+        add_log("Фаза: ожидание следующего вращения")
+        await sio.emit('state_update', game_state)
+        return
+
+    # Normal scoring
     if winner == 'znatoki':
         game_state["score"]["znatoki"] += 1
         add_log("Очко Знатокам!")
-        sound = random.choice(["yes1", "yes2"])
-        await sio.emit('play_sound', {'sound': sound})
+        await sio.emit("play_sound", {"sound": random.choice(["yes1", "yes2"])})
     elif winner == 'tv':
         game_state["score"]["tv"] += 1
         add_log("Очко Телезрителям!")
-        sound = random.choice(["no1", "no2"])
-        await sio.emit('play_sound', {'sound': sound})
+        await sio.emit("play_sound", {"sound": random.choice(["no1", "no2"])})
     else:
         return
 
-    # После начисления очка возвращаемся в PRE_ROUND
+    game_state["discussion_deadline_ms"] = None
+    game_state["round"] = None
     game_state["phase"] = PHASE_PRE_ROUND
     add_log("Фаза: ожидание следующего вращения")
-    
     await sio.emit('state_update', game_state)
 
 
@@ -586,7 +645,10 @@ async def admin_start_discussion(sid, data=None):
     if game_state.get("phase") != PHASE_QUESTION_READING:
         return
     game_state["phase"] = PHASE_DISCUSSION
-    game_state["discussion_deadline_ms"] = int(time.time() * 1000) + 60_000
+    round_ctx = game_state.get("round") or {}
+    kind = round_ctx.get("kind", "normal")
+    seconds = BLITZ_DISCUSSION_SECONDS if kind in ("blitz", "superblitz") else NORMAL_DISCUSSION_SECONDS
+    game_state["discussion_deadline_ms"] = int(time.time() * 1000) + seconds * 1000
     add_log("Фаза: обсуждение")
     await sio.emit('state_update', game_state)
 
@@ -598,7 +660,7 @@ async def admin_team_answer(sid, data=None):
         return
     if game_state.get("phase") != PHASE_DISCUSSION:
         return
-    # Stop discussion timer and play signal
+    # Stop discussion timer and play signal for everyone
     game_state["discussion_deadline_ms"] = None
     await sio.emit("play_sound", {"sound": "sig1"})
     game_state["phase"] = PHASE_TEAM_ANSWER
@@ -621,7 +683,7 @@ async def admin_ten_seconds(sid, data=None):
             to=sid,
         )
         return
-    game_state["discussion_deadline_ms"] = int(time.time() * 1000) + 10_000
+    game_state["discussion_deadline_ms"] = int(time.time() * 1000) + TEN_SECONDS * 1000
     await sio.emit("play_sound", {"sound": "sig2"})
     add_log("Сигнал: 10 секунд (таймер сброшен на 10)")
     await sio.emit('state_update', game_state)
@@ -708,6 +770,8 @@ async def admin_reset(sid):
     game_state["current_sector"] = 1
     game_state["target_angle"] = None
     game_state["playing_sector"] = None
+    game_state["discussion_deadline_ms"] = None
+    game_state["round"] = None
     game_state["phase"] = "INTRO"
     game_state["logs"] = []
     add_log("Игра сброшена")

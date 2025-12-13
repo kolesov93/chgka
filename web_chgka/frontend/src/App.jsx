@@ -99,11 +99,9 @@ function App() {
     }
     
     function onPlaySound(data) { 
-        if (data.category) {
-            playSound(data.category);
-        } else {
-            playSound(data.sound); 
-        }
+        // Prefer explicit sound (server-picked) to keep clients in sync.
+        if (data.sound) playSound(data.sound);
+        else if (data.category) playSound(data.category);
     }
 
     function onStopSound() {
@@ -284,6 +282,11 @@ function App() {
   const isQuestionReading = phase === 'QUESTION_READING';
   const isDiscussion = phase === 'DISCUSSION';
   const isTeamAnswer = phase === 'TEAM_ANSWER';
+  const round = gameState?.round || null;
+  const roundKind = round?.kind || 'normal';
+  const isBlitzRound = roundKind === 'blitz' || roundKind === 'superblitz';
+  const partIndex = typeof round?.part_index === 'number' ? round.part_index : null; // 0..2
+  const partLabel = isBlitzRound && partIndex !== null ? `${partIndex + 1}/3` : null;
 
   // Discussion countdown (admin-only). Can go negative.
   useEffect(() => {
@@ -556,15 +559,21 @@ function App() {
                               onClick={handleScoreZnatoki}
                               className="flex-1 bg-green-800 hover:bg-green-700 text-white py-2 rounded shadow active:scale-95 transition-all flex flex-col items-center"
                           >
-                              <span className="text-[10px] uppercase opacity-70 font-bold">Знатоки</span>
-                              <span className="text-xl font-bold leading-none">+1</span>
+                              <span className="text-[10px] uppercase opacity-70 font-bold">
+                                {isBlitzRound && partIndex !== null && partIndex < 2 ? `Верно (${partLabel})` : 'Знатоки'}
+                              </span>
+                              <span className="text-xl font-bold leading-none">
+                                {isBlitzRound && partIndex !== null && partIndex < 2 ? '→' : '+1'}
+                              </span>
                           </button>
                           
                           <button 
                               onClick={handleScoreTV}
                               className="flex-1 bg-red-800 hover:bg-red-700 text-white py-2 rounded shadow active:scale-95 transition-all flex flex-col items-center"
                           >
-                              <span className="text-[10px] uppercase opacity-70 font-bold">Телезрители</span>
+                              <span className="text-[10px] uppercase opacity-70 font-bold">
+                                {isBlitzRound ? 'Неверно (ТВ +1)' : 'Телезрители'}
+                              </span>
                               <span className="text-xl font-bold leading-none">+1</span>
                           </button>
                         </div>
