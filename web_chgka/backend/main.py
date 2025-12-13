@@ -9,7 +9,7 @@ from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from questions import parse_question_pack, QuestionParseError
+from questions import parse_question_pack, QuestionParseError, QuestionPack
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -89,8 +89,11 @@ game_state = {
     "question_types": None,
 }
 
-# Admin-only: question titles from the loaded pack (len=13)
-question_titles: list[str] = []
+# Loaded question pack (kept on server; admin UI may request more details later)
+loaded_pack: QuestionPack | None = None
+
+# Admin-only pack info (safe subset to send over socket)
+pack_admin_info: dict = {}
 
 def _load_question_pack_on_startup() -> None:
     """
@@ -103,6 +106,8 @@ def _load_question_pack_on_startup() -> None:
     pack_path = Path(env_path).resolve()
     if not pack_path.exists():
         raise RuntimeError(f"QUESTIONS_PACK_PATH does not exist: {pack_path}")
+    global loaded_pack
+    global pack_admin_info
     try:
         pack = parse_question_pack(pack_path)
     except QuestionParseError as e:
@@ -114,8 +119,12 @@ def _load_question_pack_on_startup() -> None:
         raise RuntimeError(f"Question pack must contain {SECTORS_COUNT} questions, got {len(types)}")
 
     game_state["question_types"] = types
-    global question_titles
-    question_titles = [q.title for q in pack.questions]
+    loaded_pack = pack
+    pack_admin_info = {
+        "path": str(pack.path),
+        "question_titles": [q.title for q in pack.questions],
+        "question_types": types,
+    }
     logger.info(f"Loaded question pack: {pack.path} ({len(types)} questions)")
 
 async def _emit_pack_info_to_admin(sid: str) -> None:
@@ -125,7 +134,7 @@ async def _emit_pack_info_to_admin(sid: str) -> None:
         return
     await sio.emit(
         "pack_info",
-        {"question_titles": question_titles, "question_types": game_state.get("question_types")},
+        {"pack": pack_admin_info},
         to=sid,
     )
 
@@ -148,7 +157,7 @@ def get_sector_from_angle(angle):
     best_sector = 1
     min_diff = 360
     
-    for i in range(1, 14):
+    for i in range(1, SECTORS_COUNT + 1):
         sector_angle = (90 + i * ANGLE_STEP) % 360
         diff = abs(angle - sector_angle)
         if diff > 180: diff = 360 - diff 
