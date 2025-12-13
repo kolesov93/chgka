@@ -23,6 +23,13 @@ SECTORS_COUNT = 13
 ANGLE_STEP = 360 / SECTORS_COUNT
 ADMIN_NAME = 'Господин Ведущий'
 
+# Game phases
+PHASE_LOGIN = "LOGIN"
+PHASE_PRE_ROUND = "PRE_ROUND"
+PHASE_QUESTION_READING = "QUESTION_READING" 
+PHASE_DISCUSSION = "DISCUSSION"
+PHASE_TEAM_ANSWER = "TEAM_ANSWER"
+
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 
 
@@ -87,7 +94,7 @@ players_list = []
 
 # Хранилище состояния игры
 game_state = {
-    "phase": "LOGIN",  # LOGIN, PRE_ROUND, ROUND, RESULT
+    "phase": PHASE_LOGIN,
     "score": {"znatoki": 0, "tv": 0},
     "current_sector": 1, 
     "target_angle": None, # Точный угол остановки (0-360)
@@ -354,7 +361,7 @@ async def join_game(sid, data):
     await sio.save_session(sid, session)
     
     # Если игра уже началась (не LOGIN), требуется одобрение админа
-    needs_approval = game_state['phase'] != 'LOGIN'
+    needs_approval = game_state['phase'] != PHASE_LOGIN
     
     # Добавляем нового игрока
     players_list.append({
@@ -415,11 +422,11 @@ async def start_game(sid):
     if not await require_admin(sid):
         return
     
-    if game_state['phase'] != 'LOGIN':
+    if game_state['phase'] != PHASE_LOGIN:
         logger.warning(f"Attempt to start game in wrong phase: {game_state['phase']}")
         return
     
-    game_state['phase'] = 'PRE_ROUND'
+    game_state['phase'] = PHASE_PRE_ROUND
     add_log("Игра началась!")
     await sio.emit('state_update', game_state)
 
@@ -468,6 +475,17 @@ async def admin_spin(sid, data=None):
 
     if game_state["is_spinning"]:
         return
+
+    if game_state.get("phase") != PHASE_PRE_ROUND:
+        await sio.emit(
+            "admin_notification",
+            {
+                "type": "warning",
+                "message": f"Нельзя крутить волчок в фазе {game_state.get('phase')}",
+            },
+            to=sid,
+        )
+        return
     
     if game_state["score"]["znatoki"] >= 6 or game_state["score"]["tv"] >= 6:
         return
@@ -510,6 +528,9 @@ async def admin_spin(sid, data=None):
     game_state["current_sector"] = playing_sector
     game_state["spin_duration"] = 0
     game_state["used_questions"].append(playing_sector)
+
+    game_state["phase"] = PHASE_QUESTION_READING
+    add_log("Фаза: зачитывание вопроса")
     
     if playing_sector == 13:
         await sio.emit('play_sound', {'sound': 'sector13'})
@@ -519,6 +540,18 @@ async def admin_spin(sid, data=None):
 @sio.event
 async def admin_score(sid, data):
     if not await require_admin(sid):
+        return
+
+    # Начисление очков разрешаем только в фазе ответа команды
+    if game_state.get("phase") != PHASE_TEAM_ANSWER:
+        await sio.emit(
+            "admin_notification",
+            {
+                "type": "warning",
+                "message": f"Нельзя начислять очки в фазе {game_state.get('phase')}",
+            },
+            to=sid,
+        )
         return
     
     winner = data.get('winner')
@@ -530,7 +563,37 @@ async def admin_score(sid, data):
         game_state["score"]["tv"] += 1
         add_log("Очко Телезрителям!")
         await sio.emit('play_sound', {'category': 'lose'})
+    else:
+        return
+
+    # После начисления очка возвращаемся в PRE_ROUND
+    game_state["phase"] = PHASE_PRE_ROUND
+    add_log("Фаза: ожидание следующего вращения")
     
+    await sio.emit('state_update', game_state)
+
+
+@sio.event
+async def admin_start_discussion(sid, data=None):
+    """Переход QUESTION_READING -> DISCUSSION."""
+    if not await require_admin(sid):
+        return
+    if game_state.get("phase") != PHASE_QUESTION_READING:
+        return
+    game_state["phase"] = PHASE_DISCUSSION
+    add_log("Фаза: обсуждение")
+    await sio.emit('state_update', game_state)
+
+
+@sio.event
+async def admin_team_answer(sid, data=None):
+    """Переход DISCUSSION -> TEAM_ANSWER."""
+    if not await require_admin(sid):
+        return
+    if game_state.get("phase") != PHASE_DISCUSSION:
+        return
+    game_state["phase"] = PHASE_TEAM_ANSWER
+    add_log("Фаза: ответ команды")
     await sio.emit('state_update', game_state)
 
 @sio.event

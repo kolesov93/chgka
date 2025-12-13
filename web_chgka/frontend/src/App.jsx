@@ -254,6 +254,8 @@ function App() {
 
   const handleScoreZnatoki = () => socket.emit('admin_score', { winner: 'znatoki' })
   const handleScoreTV = () => socket.emit('admin_score', { winner: 'tv' })
+  const handleStartDiscussion = () => socket.emit('admin_start_discussion')
+  const handleTeamAnswer = () => socket.emit('admin_team_answer')
   
   const handleKickPlayer = (playerName) => {
       if (confirm(`Отключить игрока "${playerName}"?`)) {
@@ -271,6 +273,10 @@ function App() {
 
   const usedQuestions = gameState?.used_questions || [];
   const phase = gameState?.phase || 'LOGIN';
+  const isPreRound = phase === 'PRE_ROUND';
+  const isQuestionReading = phase === 'QUESTION_READING';
+  const isDiscussion = phase === 'DISCUSSION';
+  const isTeamAnswer = phase === 'TEAM_ANSWER';
 
   // --- КОМПОНЕНТ ШАПКИ ПОЛЬЗОВАТЕЛЯ ---
   const UserHeader = () => (
@@ -299,7 +305,9 @@ function App() {
             className="bg-yellow-500 text-black px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-pulse"
           >
             <span className="font-bold">
-              {n.type === 'player_waiting' && `🔔 ${n.name} ожидает одобрения`}
+              {n.type === 'player_waiting'
+                ? `🔔 ${n.name} ожидает одобрения`
+                : (n.message || `🔔 ${n.type}`)}
             </span>
             <button 
               onClick={() => dismissNotification(n.id)}
@@ -427,7 +435,7 @@ function App() {
                    {/* Большая кнопка Случайно */}
                    <button 
                       onClick={handleSpinRandom}
-                      disabled={gameState?.is_spinning}
+                      disabled={gameState?.is_spinning || !isPreRound}
                       className="w-full bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-black py-3 rounded-lg text-lg shadow active:scale-[0.98] transition-all uppercase tracking-wider"
                    >
                       {gameState?.is_spinning ? 'Вращаем...' : '🎲 Случайный выбор'}
@@ -443,7 +451,7 @@ function App() {
                               <button
                                   key={sectorId}
                                   onClick={() => handleSpinForced(sectorId)}
-                                  disabled={gameState?.is_spinning || isUsed}
+                                  disabled={gameState?.is_spinning || isUsed || !isPreRound}
                                   className={`
                                       text-xs font-bold py-2 rounded transition-all
                                       ${isUsed 
@@ -460,23 +468,48 @@ function App() {
 
                 {/* --- СЕКЦИЯ ИГРЫ --- */}
                 <div className="grid grid-cols-3 gap-4 items-center border border-slate-700 p-3 rounded bg-slate-900/30">
-                   {/* Очки */}
-                   <div className="col-span-2 flex gap-2">
-                      <button 
-                          onClick={handleScoreZnatoki}
-                          className="flex-1 bg-green-800 hover:bg-green-700 text-white py-2 rounded shadow active:scale-95 transition-all flex flex-col items-center"
-                      >
-                          <span className="text-[10px] uppercase opacity-70 font-bold">Знатоки</span>
-                          <span className="text-xl font-bold leading-none">+1</span>
-                      </button>
-                      
-                      <button 
-                          onClick={handleScoreTV}
-                          className="flex-1 bg-red-800 hover:bg-red-700 text-white py-2 rounded shadow active:scale-95 transition-all flex flex-col items-center"
-                      >
-                          <span className="text-[10px] uppercase opacity-70 font-bold">Телезрители</span>
-                          <span className="text-xl font-bold leading-none">+1</span>
-                      </button>
+                   {/* Кнопка перехода фазы */}
+                   <div className="col-span-2">
+                      {isQuestionReading && (
+                        <button
+                          onClick={handleStartDiscussion}
+                          className="w-full bg-blue-700 hover:bg-blue-600 text-white py-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-xs"
+                        >
+                          Начать обсуждение
+                        </button>
+                      )}
+                      {isDiscussion && (
+                        <button
+                          onClick={handleTeamAnswer}
+                          className="w-full bg-purple-700 hover:bg-purple-600 text-white py-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-xs"
+                        >
+                          Ответ команды
+                        </button>
+                      )}
+                      {isTeamAnswer && (
+                        <div className="flex gap-2">
+                          <button 
+                              onClick={handleScoreZnatoki}
+                              className="flex-1 bg-green-800 hover:bg-green-700 text-white py-2 rounded shadow active:scale-95 transition-all flex flex-col items-center"
+                          >
+                              <span className="text-[10px] uppercase opacity-70 font-bold">Знатоки</span>
+                              <span className="text-xl font-bold leading-none">+1</span>
+                          </button>
+                          
+                          <button 
+                              onClick={handleScoreTV}
+                              className="flex-1 bg-red-800 hover:bg-red-700 text-white py-2 rounded shadow active:scale-95 transition-all flex flex-col items-center"
+                          >
+                              <span className="text-[10px] uppercase opacity-70 font-bold">Телезрители</span>
+                              <span className="text-xl font-bold leading-none">+1</span>
+                          </button>
+                        </div>
+                      )}
+                      {isPreRound && (
+                        <div className="text-xs text-slate-500 font-bold uppercase tracking-widest">
+                          Фаза: ожидание вращения
+                        </div>
+                      )}
                    </div>
 
                    {/* Гонг */}
