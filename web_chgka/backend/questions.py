@@ -267,12 +267,12 @@ def _simple_markdown_to_html(md: str) -> str:
     return "\n".join(out)
 
 
-def _validate_media_usage(base_folder: Path, used_rel_paths: set[Path]) -> None:
+def _validate_media_usage(base_folder: Path, media_links_from_md: set[Path]) -> None:
     media_dir = base_folder / "media"
     if not media_dir.exists():
-        if used_rel_paths:
+        if media_links_from_md:
             # referenced media but no media dir; treated as missing earlier, but keep defensive
-            missing = next(iter(used_rel_paths))
+            missing = next(iter(media_links_from_md))
             raise QuestionParseError(f"Media file not found: {missing.as_posix()}")
         return
 
@@ -287,7 +287,7 @@ def _validate_media_usage(base_folder: Path, used_rel_paths: set[Path]) -> None:
         if suffix and suffix not in (_IMAGE_EXTS | _AUDIO_EXTS | _VIDEO_EXTS):
             raise QuestionParseError(f"Unsupported media format: {rel.as_posix()}")
 
-    unused = existing_files - used_rel_paths
+    unused = existing_files - media_links_from_md
     if unused:
         one = sorted(unused)[0].as_posix()
         raise QuestionParseError(f"Unused media file: {one}")
@@ -319,14 +319,14 @@ def _parse_one_question_folder(folder: Path) -> Question:
     if "Вопрос" not in sections:
         raise QuestionParseError("Missing section: Вопрос")
 
-    used_rel_all: set[Path] = set()
+    media_links_from_md: set[Path] = set()
     media_all: list[Media] = []
 
     def _render_section(section_md: Optional[str]) -> Optional[str]:
         if section_md is None:
             return None
         md_with_ph, media, used_rel = _extract_media_and_replace(section_md, folder)
-        used_rel_all.update(used_rel)
+        media_links_from_md.update(used_rel)
         media_all.extend(media)
         return _simple_markdown_to_html(md_with_ph)
 
@@ -342,7 +342,7 @@ def _parse_one_question_folder(folder: Path) -> Question:
     sources_html = _render_section(sections.get("Источник"))
 
     # Validate media folder contents vs references
-    _validate_media_usage(folder, used_rel_all)
+    _validate_media_usage(folder, media_links_from_md)
 
     return Question(
         title=title,
