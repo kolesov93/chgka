@@ -94,8 +94,13 @@ def _load_question_pack_on_startup() -> None:
     """
     Load questions pack once at startup and expose per-sector question types via game_state.
     """
-    default_pack = (Path(__file__).resolve().parent.parent / "fixtures" / "sample_questions").resolve()
-    pack_path = Path(os.getenv("QUESTIONS_PACK_PATH", str(default_pack))).resolve()
+    env_path = os.getenv("QUESTIONS_PACK_PATH")
+    if not env_path:
+        raise RuntimeError("QUESTIONS_PACK_PATH is required (path to pack folder with 01..13).")
+
+    pack_path = Path(env_path).resolve()
+    if not pack_path.exists():
+        raise RuntimeError(f"QUESTIONS_PACK_PATH does not exist: {pack_path}")
     try:
         pack = parse_question_pack(pack_path)
     except QuestionParseError as e:

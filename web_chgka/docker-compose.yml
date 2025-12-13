@@ -7,8 +7,10 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - ./fixtures:/fixtures:ro
     environment:
       - PYTHONUNBUFFERED=1
+      - QUESTIONS_PACK_PATH=/fixtures/sample_questions
 
   frontend:
     build: ./frontend
