@@ -10,6 +10,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 import re
+import markdown
 
 
 class QuestionType(Enum):
@@ -240,31 +241,10 @@ def _dedupe_media(media: list[Media]) -> list[Media]:
     return out
 
 
-def _simple_markdown_to_html(md: str) -> str:
-    # Very small subset sufficient for fixtures/tests.
-    # Bold
-    html = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", md, flags=re.DOTALL)
-    # Bullet lists (- item)
-    lines = html.splitlines()
-    out: list[str] = []
-    in_ul = False
-    for line in lines:
-        m = re.match(r"^\s*-\s+(.*)$", line)
-        if m:
-            if not in_ul:
-                out.append("<ul>")
-                in_ul = True
-            out.append(f"<li>{m.group(1).strip()}</li>")
-        else:
-            if in_ul:
-                out.append("</ul>")
-                in_ul = False
-            if line.strip() == "":
-                continue
-            out.append(f"<p>{line}</p>")
-    if in_ul:
-        out.append("</ul>")
-    return "\n".join(out)
+def _markdown_to_html(md: str) -> str:
+    # Full-featured Markdown -> HTML converter.
+    # NOTE: admin-only content; raw HTML is allowed by default in Python-Markdown.
+    return markdown.markdown(md, extensions=["extra", "sane_lists"])
 
 
 def _validate_media_usage(base_folder: Path, media_links_from_md: set[Path]) -> None:
@@ -328,7 +308,7 @@ def _parse_one_question_folder(folder: Path) -> Question:
         md_with_ph, media, used_rel = _extract_media_and_replace(section_md, folder)
         media_links_from_md.update(used_rel)
         media_all.extend(media)
-        return _simple_markdown_to_html(md_with_ph)
+        return _markdown_to_html(md_with_ph)
 
     question_html = _render_section(sections.get("Вопрос"))
     if question_html is None:
