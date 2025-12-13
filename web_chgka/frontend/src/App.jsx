@@ -21,6 +21,7 @@ function App() {
   const [myRole, setMyRole] = useState('player')
   const [myName, setMyName] = useState('');
   const [packInfo, setPackInfo] = useState(null); // Только для админа: данные пака вопросов
+  const [adminQuestion, setAdminQuestion] = useState(null); // Только для админа: текущий вопрос (текст/ответ/коммент/источники)
   const [isConnected, setIsConnected] = useState(socket.connected)
   const [hasJoined, setHasJoined] = useState(false) // Флаг, что игрок ввел имя
   const [isPending, setIsPending] = useState(false) // Ожидает одобрения админа
@@ -90,6 +91,10 @@ function App() {
       if (data && data.pack) {
         setPackInfo(data.pack);
       }
+    }
+
+    function onAdminQuestion(data) {
+      setAdminQuestion(data || null);
     }
 
     function onSettingsUpdate(newSettings) {
@@ -188,6 +193,7 @@ function App() {
     socket.on('kicked', onKicked)
     socket.on('admin_notification', onAdminNotification)
     socket.on('pack_info', onPackInfo)
+    socket.on('admin_question', onAdminQuestion)
 
     return () => {
       socket.off('connect', onConnect)
@@ -206,6 +212,7 @@ function App() {
       socket.off('kicked', onKicked)
       socket.off('admin_notification', onAdminNotification)
       socket.off('pack_info', onPackInfo)
+      socket.off('admin_question', onAdminQuestion)
     }
   }, []) 
 
@@ -287,6 +294,8 @@ function App() {
   const isBlitzRound = roundKind === 'blitz' || roundKind === 'superblitz';
   const partIndex = typeof round?.part_index === 'number' ? round.part_index : null; // 0..2
   const partLabel = isBlitzRound && partIndex !== null ? `${partIndex + 1}/3` : null;
+  const isAdmin = myRole === 'admin';
+  const showTableForAdmin = isPreRound || !!gameState?.is_spinning;
 
   // Discussion countdown (admin-only). Can go negative.
   useEffect(() => {
@@ -345,6 +354,72 @@ function App() {
         </button>
       </div>
   );
+
+  const AdminQuestionPanel = () => {
+    if (!isAdmin) return null;
+    if (!adminQuestion) return null;
+    // Show question card when the table is hidden for admin (reading/discussion/answer)
+    if (showTableForAdmin) return null;
+
+    const isBlitz = adminQuestion.kind === 'blitz' || adminQuestion.kind === 'superblitz';
+    const header = isBlitz
+      ? `${adminQuestion.kind.toUpperCase()} • Сектор ${adminQuestion.sector} • Часть ${(adminQuestion.part_index ?? 0) + 1}/3`
+      : `Сектор ${adminQuestion.sector}`;
+
+    const renderHtml = (html) =>
+      html ? <div className="text-sm text-slate-200 [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5" dangerouslySetInnerHTML={{ __html: html }} /> : null;
+
+    const Section = ({ title, children, highlight, accentClass }) => (
+      <div
+        className={[
+          "rounded-lg border p-3",
+          "bg-slate-950/40 border-slate-700",
+          highlight ? `ring-2 ${accentClass} border-transparent bg-slate-900/60` : "",
+        ].join(" ")}
+      >
+        <div className="text-xs text-slate-400 uppercase font-bold tracking-widest mb-2">{title}</div>
+        {children}
+      </div>
+    );
+
+    const highlightQuestion = phase === 'QUESTION_READING' || phase === 'DISCUSSION';
+    const highlightAnswer = phase === 'TEAM_ANSWER';
+
+    return (
+      <div className="w-full bg-slate-800/70 border border-slate-700 rounded-xl p-4 mb-4">
+        <div className="text-xs text-slate-400 uppercase font-bold tracking-widest mb-2">{header}</div>
+        {isBlitz && adminQuestion.round_title && (
+          <div className="text-sm text-slate-300 mb-3">
+            <span className="text-slate-500">Блиц:</span> {adminQuestion.round_title}
+          </div>
+        )}
+        <div className="text-lg font-bold text-white mb-2">{adminQuestion.title}</div>
+        {adminQuestion.author && <div className="text-xs text-slate-500 mb-3">Автор: {adminQuestion.author}</div>}
+
+        <div className="flex flex-col gap-3">
+          {isBlitz && adminQuestion.intro_html && (
+            <Section title="Вступление">{renderHtml(adminQuestion.intro_html)}</Section>
+          )}
+
+          <Section title="Вопрос" highlight={highlightQuestion} accentClass="ring-yellow-500/60">
+            {renderHtml(adminQuestion.question_html)}
+          </Section>
+
+          <Section title="Ответ" highlight={highlightAnswer} accentClass="ring-green-500/60">
+            {renderHtml(adminQuestion.answer_html)}
+          </Section>
+
+          {adminQuestion.comment_html && (
+            <Section title="Комментарий">{renderHtml(adminQuestion.comment_html)}</Section>
+          )}
+
+          {adminQuestion.sources_html && (
+            <Section title="Источники">{renderHtml(adminQuestion.sources_html)}</Section>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   // --- КОМПОНЕНТ УВЕДОМЛЕНИЙ ---
   const NotificationsPanel = () => (
@@ -443,14 +518,22 @@ function App() {
           {/* Табло */}
           <ScoreBoard score={gameState?.score} />
 
-          {/* Стол */}
-          <div className="w-full flex justify-center mb-4">
-             <GameTable
-               gameState={gameState}
-               isAdmin={myRole === 'admin'}
-               questionTitles={packInfo?.question_titles || null}
-             />
-          </div>
+          {/* Для ведущего: либо стол (только PRE_ROUND/вращение), либо карточка вопроса */}
+          {isAdmin && !showTableForAdmin ? (
+            <div className="w-full flex justify-center mb-4">
+              <div className="w-full">
+                <AdminQuestionPanel />
+              </div>
+            </div>
+          ) : (
+            <div className="w-full flex justify-center mb-4">
+              <GameTable
+                gameState={gameState}
+                isAdmin={isAdmin}
+                questionTitles={packInfo?.question_titles || null}
+              />
+            </div>
+          )}
       </div>
 
       {/* --- ПРАВАЯ КОЛОНКА: АДМИНКА (только для админов) --- */}
