@@ -89,6 +89,8 @@ game_state = {
     "question_types": None,
 }
 
+# Admin-only: question titles from the loaded pack (len=13)
+question_titles: list[str] = []
 
 def _load_question_pack_on_startup() -> None:
     """
@@ -112,7 +114,20 @@ def _load_question_pack_on_startup() -> None:
         raise RuntimeError(f"Question pack must contain {SECTORS_COUNT} questions, got {len(types)}")
 
     game_state["question_types"] = types
+    global question_titles
+    question_titles = [q.title for q in pack.questions]
     logger.info(f"Loaded question pack: {pack.path} ({len(types)} questions)")
+
+async def _emit_pack_info_to_admin(sid: str) -> None:
+    """Send question titles (and types) to admin only."""
+    role = await get_client_role(sid)
+    if role != "admin":
+        return
+    await sio.emit(
+        "pack_info",
+        {"question_titles": question_titles, "question_types": game_state.get("question_types")},
+        to=sid,
+    )
 
 
 @fastapi_app.on_event("startup")
@@ -230,6 +245,7 @@ async def restore_session(sid, data):
 
         await sio.emit('role_update', {'role': 'admin'}, to=sid)
         await sio.emit('state_update', game_state, to=sid)
+        await _emit_pack_info_to_admin(sid)
         await sio.emit('auth_restored', {}, to=sid)
         await broadcast_players()
         return
@@ -289,6 +305,7 @@ async def authenticate_admin(sid, data):
         
         await sio.emit('role_update', {'role': 'admin'}, to=sid)
         await sio.emit('state_update', game_state, to=sid)
+        await _emit_pack_info_to_admin(sid)
     else:
         logger.warning(f"Failed admin auth attempt from {sid}")
         await sio.emit('auth_failed', {'message': 'Неверный пароль'}, to=sid)

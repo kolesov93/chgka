@@ -13,7 +13,7 @@ const IMAGES = {
   volchok: '/images/volchok.png',
 };
 
-export function GameTable({ gameState }) {
+export function GameTable({ gameState, isAdmin = false, questionTitles = null }) {
   const { current_sector, target_angle, is_spinning, used_questions = [] } = gameState || {};
   const questionTypes = gameState?.question_types || null;
   
@@ -84,11 +84,12 @@ export function GameTable({ gameState }) {
           : qType === 'superblitz'
             ? IMAGES.superblitz
             : IMAGES.letter;
+      const title = Array.isArray(questionTitles) ? questionTitles[i - 1] : null;
 
       envelopes.push(
         <div
           key={i}
-          className="absolute transition-all"
+          className="absolute transition-all group"
           style={{
             top: `${top}%`,
             left: `${left}%`,
@@ -102,6 +103,16 @@ export function GameTable({ gameState }) {
              alt={`Sector ${i}`}
              className="w-full h-full object-contain drop-shadow-lg"
            />
+           {isAdmin && title && (
+             <div
+               className="pointer-events-none absolute left-1/2 top-0 z-30 w-[220px] -translate-x-1/2 -translate-y-full opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+               style={{ transform: `translate(-50%, -100%) rotate(${-rotation}deg)` }}
+             >
+               <div className="rounded-md bg-slate-950/90 border border-slate-700 px-2 py-1 text-xs text-slate-100 shadow-xl">
+                 {title}
+               </div>
+             </div>
+           )}
            {import.meta.env.DEV && (
              <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-black font-bold text-xs md:text-sm">
                {i}

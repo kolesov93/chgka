@@ -20,6 +20,7 @@ function App() {
   const [players, setPlayers] = useState([]) // Список игроков (только для админа)
   const [myRole, setMyRole] = useState('player')
   const [myName, setMyName] = useState('');
+  const [questionTitles, setQuestionTitles] = useState(null); // Только для админа: названия вопросов по секторам
   const [isConnected, setIsConnected] = useState(socket.connected)
   const [hasJoined, setHasJoined] = useState(false) // Флаг, что игрок ввел имя
   const [isPending, setIsPending] = useState(false) // Ожидает одобрения админа
@@ -79,6 +80,12 @@ function App() {
     function onRoleUpdate(data) {
       if (data && data.role) {
         setMyRole(data.role);
+      }
+    }
+    
+    function onPackInfo(data) {
+      if (data && Array.isArray(data.question_titles)) {
+        setQuestionTitles(data.question_titles);
       }
     }
 
@@ -179,6 +186,7 @@ function App() {
     socket.on('join_pending', onJoinPending)
     socket.on('kicked', onKicked)
     socket.on('admin_notification', onAdminNotification)
+    socket.on('pack_info', onPackInfo)
 
     return () => {
       socket.off('connect', onConnect)
@@ -196,6 +204,7 @@ function App() {
       socket.off('join_pending', onJoinPending)
       socket.off('kicked', onKicked)
       socket.off('admin_notification', onAdminNotification)
+      socket.off('pack_info', onPackInfo)
     }
   }, []) 
 
@@ -377,7 +386,7 @@ function App() {
 
           {/* Стол */}
           <div className="w-full flex justify-center mb-4">
-             <GameTable gameState={gameState} />
+             <GameTable gameState={gameState} isAdmin={myRole === 'admin'} questionTitles={questionTitles} />
           </div>
       </div>
 
