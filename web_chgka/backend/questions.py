@@ -61,6 +61,27 @@ class Question:
     parts: list["Question"] = field(default_factory=list)
 
 
+class QuestionParseError(Exception):
+    """Raised when question parsing fails."""
+    pass
+
+
+def parse_question(folder: Path) -> Question:
+    """
+    Parse a question from a folder.
+    
+    Args:
+        folder: Path to question folder containing question.md and optional media/
+        
+    Returns:
+        Parsed Question object
+        
+    Raises:
+        QuestionParseError: If the question format is invalid
+    """
+    raise NotImplementedError("TODO: implement parser")
+
+
 @dataclass
 class QuestionPack:
     """
