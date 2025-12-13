@@ -518,9 +518,9 @@ function App() {
                 </div>
 
                 {/* --- СЕКЦИЯ ИГРЫ --- */}
-                <div className="grid grid-cols-3 gap-4 items-center border border-slate-700 p-3 rounded bg-slate-900/30">
+                <div className="border border-slate-700 p-3 rounded bg-slate-900/30">
                    {/* Кнопка перехода фазы */}
-                   <div className="col-span-2">
+                   <div className="w-full">
                       {isQuestionReading && (
                         <button
                           onClick={handleStartDiscussion}
