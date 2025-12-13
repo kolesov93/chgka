@@ -169,6 +169,67 @@ async def _emit_pack_info_to_admin(sid: str) -> None:
     )
 
 
+async def _emit_current_question_to_admins() -> None:
+    """Send current question content to all online admins (admin-only)."""
+    if loaded_pack is None:
+        return
+    round_ctx = game_state.get("round")
+    if not round_ctx:
+        return
+    sector = round_ctx.get("sector")
+    if not isinstance(sector, int) or not (1 <= sector <= SECTORS_COUNT):
+        return
+
+    try:
+        q = loaded_pack.get_by_sector(sector)
+    except Exception:
+        return
+
+    kind = round_ctx.get("kind", "normal")
+    payload = {
+        "sector": sector,
+        "kind": kind,
+        "phase": game_state.get("phase"),
+    }
+
+    if kind in ("blitz", "superblitz"):
+        part_index = int(round_ctx.get("part_index", 0))
+        part = q.parts[part_index] if 0 <= part_index < len(q.parts) else None
+        payload.update(
+            {
+                "round_title": q.title,
+                "part_index": part_index,
+                "intro_html": q.question_html,
+            }
+        )
+        if part is not None:
+            payload.update(
+                {
+                    "title": part.title,
+                    "author": part.author,
+                    "question_html": part.question_html,
+                    "answer_html": part.answer_html,
+                    "comment_html": part.comment_html,
+                    "sources_html": part.sources_html,
+                }
+            )
+    else:
+        payload.update(
+            {
+                "title": q.title,
+                "author": q.author,
+                "question_html": q.question_html,
+                "answer_html": q.answer_html,
+                "comment_html": q.comment_html,
+                "sources_html": q.sources_html,
+            }
+        )
+
+    for p in players_list:
+        if p.get("role") == "admin" and p.get("online", False):
+            await sio.emit("admin_question", payload, to=p["sid"])
+
+
 def add_log(message):
     time_str = datetime.now().strftime("%H:%M:%S")
     log_entry = f"[{time_str}] {message}"
@@ -281,6 +342,7 @@ async def restore_session(sid, data):
         await sio.emit('role_update', {'role': 'admin'}, to=sid)
         await sio.emit('state_update', game_state, to=sid)
         await _emit_pack_info_to_admin(sid)
+        await _emit_current_question_to_admins()
         await sio.emit('auth_restored', {}, to=sid)
         await broadcast_players()
         return
@@ -341,6 +403,7 @@ async def authenticate_admin(sid, data):
         await sio.emit('role_update', {'role': 'admin'}, to=sid)
         await sio.emit('state_update', game_state, to=sid)
         await _emit_pack_info_to_admin(sid)
+        await _emit_current_question_to_admins()
     else:
         logger.warning(f"Failed admin auth attempt from {sid}")
         await sio.emit('auth_failed', {'message': 'Неверный пароль'}, to=sid)
@@ -557,6 +620,7 @@ async def admin_spin(sid, data=None):
         await sio.emit('play_sound', {'sound': 'sector13'})
 
     await sio.emit('state_update', game_state)
+    await _emit_current_question_to_admins()
 
 @sio.event
 async def admin_score(sid, data):
@@ -605,6 +669,7 @@ async def admin_score(sid, data):
             game_state["phase"] = PHASE_QUESTION_READING
             add_log(f"Верно. Переходим к части {part_index + 2}/{BLITZ_PARTS}")
             await sio.emit('state_update', game_state)
+            await _emit_current_question_to_admins()
             return
 
         # Last part correct -> Znatoki +1
