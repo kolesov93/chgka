@@ -4,9 +4,12 @@ import asyncio
 import logging
 import secrets
 import os
+from pathlib import Path
 from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from questions import parse_question_pack, QuestionParseError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -81,8 +84,35 @@ game_state = {
     "spin_duration": 0,
     "used_questions": [], 
     "is_spinning": False,
-    "logs": [] # Лог событий ["12:00:01 - Игра началась", ...]
+    "logs": [], # Лог событий ["12:00:01 - Игра началась", ...]
+    # Loaded from question pack at startup (len=13), values: "normal" | "blitz" | "superblitz"
+    "question_types": None,
 }
+
+
+def _load_question_pack_on_startup() -> None:
+    """
+    Load questions pack once at startup and expose per-sector question types via game_state.
+    """
+    default_pack = (Path(__file__).resolve().parent.parent / "fixtures" / "sample_questions").resolve()
+    pack_path = Path(os.getenv("QUESTIONS_PACK_PATH", str(default_pack))).resolve()
+    try:
+        pack = parse_question_pack(pack_path)
+    except QuestionParseError as e:
+        logger.error(f"Failed to load question pack from {pack_path}: {e}")
+        raise
+
+    types = [q.type.value for q in pack.questions]
+    if len(types) != SECTORS_COUNT:
+        raise RuntimeError(f"Question pack must contain {SECTORS_COUNT} questions, got {len(types)}")
+
+    game_state["question_types"] = types
+    logger.info(f"Loaded question pack: {pack.path} ({len(types)} questions)")
+
+
+@fastapi_app.on_event("startup")
+async def _startup_load_questions() -> None:
+    _load_question_pack_on_startup()
 
 def add_log(message):
     time_str = datetime.now().strftime("%H:%M:%S")

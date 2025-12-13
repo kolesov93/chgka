@@ -15,6 +15,7 @@ const IMAGES = {
 
 export function GameTable({ gameState }) {
   const { current_sector, target_angle, is_spinning, used_questions = [] } = gameState || {};
+  const questionTypes = gameState?.question_types || null;
   
   const [rotationAngle, setRotationAngle] = React.useState(0);
 
@@ -76,6 +77,13 @@ export function GameTable({ gameState }) {
       const top = 50 + Math.sin(angleRad) * RADIUS;
       const left = 50 + Math.cos(angleRad) * RADIUS;
       const rotation = angleDeg + 90; 
+      const qType = Array.isArray(questionTypes) ? questionTypes[i - 1] : null;
+      const envelopeSrc =
+        qType === 'blitz'
+          ? IMAGES.blitz
+          : qType === 'superblitz'
+            ? IMAGES.superblitz
+            : IMAGES.letter;
 
       envelopes.push(
         <div
@@ -90,7 +98,7 @@ export function GameTable({ gameState }) {
           }}
         >
            <img 
-             src={IMAGES.letter} 
+             src={envelopeSrc} 
              alt={`Sector ${i}`}
              className="w-full h-full object-contain drop-shadow-lg"
            />
