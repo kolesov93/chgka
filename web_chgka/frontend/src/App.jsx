@@ -263,6 +263,7 @@ function App() {
   const handleScoreTV = () => socket.emit('admin_score', { winner: 'tv' })
   const handleStartDiscussion = () => socket.emit('admin_start_discussion')
   const handleTeamAnswer = () => socket.emit('admin_team_answer')
+  const handleEndRound = () => socket.emit('admin_end_round')
   const handleTenSeconds = () => {
     // Don't auto-trigger "10 seconds" notification again for this discussion
     tenSecNotifiedRef.current = true;
@@ -289,13 +290,41 @@ function App() {
   const isQuestionReading = phase === 'QUESTION_READING';
   const isDiscussion = phase === 'DISCUSSION';
   const isTeamAnswer = phase === 'TEAM_ANSWER';
+  const isPostRound = phase === 'POST_ROUND';
   const round = gameState?.round || null;
   const roundKind = round?.kind || 'normal';
   const isBlitzRound = roundKind === 'blitz' || roundKind === 'superblitz';
   const partIndex = typeof round?.part_index === 'number' ? round.part_index : null; // 0..2
   const partLabel = isBlitzRound && partIndex !== null ? `${partIndex + 1}/3` : null;
+  const blitzHasNextPart = isBlitzRound && round?.advance_next_part === true;
   const isAdmin = myRole === 'admin';
   const showTableForAdmin = isPreRound || !!gameState?.is_spinning;
+  const sharedMedia = gameState?.shared_media || null;
+
+  const [adminMediaPreview, setAdminMediaPreview] = useState(null); // { media_id, type, url, section, path }
+
+  const warnAnswerShare = () => {
+    if (!adminMediaPreview) return true;
+    if (adminMediaPreview.section !== 'answer') return true;
+    if (!(isQuestionReading || isDiscussion)) return true;
+    return confirm('Это медиа из секции "Ответ". Точно показать игрокам прямо сейчас?');
+  };
+
+  // Drop preview when round changes or when admin returns to table/spin.
+  const previewRoundKeyRef = useRef(null);
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (showTableForAdmin) {
+      setAdminMediaPreview(null);
+      previewRoundKeyRef.current = null;
+      return;
+    }
+    const key = `${round?.sector ?? ''}:${round?.kind ?? ''}:${round?.part_index ?? ''}`;
+    if (previewRoundKeyRef.current !== null && previewRoundKeyRef.current !== key) {
+      setAdminMediaPreview(null);
+    }
+    previewRoundKeyRef.current = key;
+  }, [isAdmin, showTableForAdmin, round?.sector, round?.kind, round?.part_index]);
 
   // Discussion countdown (admin-only). Can go negative.
   useEffect(() => {
@@ -366,8 +395,44 @@ function App() {
       ? `${adminQuestion.kind.toUpperCase()} • Сектор ${adminQuestion.sector} • Часть ${(adminQuestion.part_index ?? 0) + 1}/3`
       : `Сектор ${adminQuestion.sector}`;
 
-    const renderHtml = (html) =>
-      html ? <div className="text-sm text-slate-200 [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5" dangerouslySetInnerHTML={{ __html: html }} /> : null;
+    const renderHtml = (html, section) => {
+      if (!html) return null;
+      const onClick = (e) => {
+        const el = e.target?.closest?.('.media-placeholder[data-media-type][data-media-path]');
+        if (!el) return;
+        const media_type = el.getAttribute('data-media-type');
+        const media_path = el.getAttribute('data-media-path');
+        if (!media_type || !media_path) return;
+        if (media_type !== 'image') {
+          const id = Date.now();
+          setNotifications(prev => [...prev, { id, type: 'warning', message: `Пока поддерживаем только картинки (media_type=${media_type})` }]);
+          setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 5000);
+          return;
+        }
+        socket.emit('admin_resolve_media', { media_type, media_path }, (resp) => {
+          if (!resp || !resp.ok) {
+            const id = Date.now();
+            setNotifications(prev => [...prev, { id, type: 'warning', message: `Не удалось открыть медиа: ${resp?.error || 'unknown'}` }]);
+            setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 5000);
+            return;
+          }
+          setAdminMediaPreview({
+            media_id: resp.media_id,
+            type: resp.type,
+            url: `/media/${resp.media_id}`,
+            section,
+            path: media_path,
+          });
+        });
+      };
+      return (
+        <div
+          className="text-sm text-slate-200 [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_.media-placeholder]:inline-block [&_.media-placeholder]:w-10 [&_.media-placeholder]:h-6 [&_.media-placeholder]:rounded [&_.media-placeholder]:bg-slate-700 [&_.media-placeholder]:border [&_.media-placeholder]:border-slate-500 [&_.media-placeholder]:cursor-pointer [&_.media-placeholder]:align-middle [&_.media-placeholder:hover]:bg-slate-600"
+          onClick={onClick}
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      );
+    };
 
     const Section = ({ title, children, highlight, accentClass }) => (
       <div
@@ -383,7 +448,7 @@ function App() {
     );
 
     const highlightQuestion = phase === 'QUESTION_READING' || phase === 'DISCUSSION';
-    const highlightAnswer = phase === 'TEAM_ANSWER';
+    const highlightAnswer = phase === 'TEAM_ANSWER' || phase === 'POST_ROUND';
 
     return (
       <div className="w-full bg-slate-800/70 border border-slate-700 rounded-xl p-4 mb-4">
@@ -398,23 +463,79 @@ function App() {
 
         <div className="flex flex-col gap-3">
           {isBlitz && adminQuestion.intro_html && (
-            <Section title="Вступление">{renderHtml(adminQuestion.intro_html)}</Section>
+            <Section title="Вступление">{renderHtml(adminQuestion.intro_html, 'intro')}</Section>
           )}
 
           <Section title="Вопрос" highlight={highlightQuestion} accentClass="ring-yellow-500/60">
-            {renderHtml(adminQuestion.question_html)}
+            {renderHtml(adminQuestion.question_html, 'question')}
           </Section>
 
           <Section title="Ответ" highlight={highlightAnswer} accentClass="ring-green-500/60">
-            {renderHtml(adminQuestion.answer_html)}
+            {renderHtml(adminQuestion.answer_html, 'answer')}
           </Section>
 
           {adminQuestion.comment_html && (
-            <Section title="Комментарий">{renderHtml(adminQuestion.comment_html)}</Section>
+            <Section title="Комментарий">{renderHtml(adminQuestion.comment_html, 'comment')}</Section>
           )}
 
           {adminQuestion.sources_html && (
-            <Section title="Источники">{renderHtml(adminQuestion.sources_html)}</Section>
+            <Section title="Источники">{renderHtml(adminQuestion.sources_html, 'sources')}</Section>
+          )}
+        </div>
+
+        {/* Media preview + share controls */}
+        <div className="mt-4 rounded-lg border border-slate-700 bg-slate-950/30 p-3">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="text-xs text-slate-400 uppercase font-bold tracking-widest">Медиа</div>
+            <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">
+              Шарим: {sharedMedia ? 'да' : 'нет'}
+            </div>
+          </div>
+
+          {adminMediaPreview ? (
+            <div className="flex flex-col gap-3">
+              <div className="text-[11px] text-slate-400">
+                Preview: <span className="text-slate-200">{adminMediaPreview.path}</span>
+                <span className="text-slate-600"> • </span>
+                <span className="text-slate-500">секция:</span> <span className="text-slate-200">{adminMediaPreview.section}</span>
+              </div>
+              {adminMediaPreview.type === 'image' && (
+                <div className="rounded border border-slate-700 bg-slate-900/40 p-2 flex justify-center">
+                  <img
+                    src={adminMediaPreview.url}
+                    alt={adminMediaPreview.path}
+                    className="max-h-[320px] w-auto object-contain"
+                  />
+                </div>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    if (!warnAnswerShare()) return;
+                    socket.emit('admin_share_media', { media_id: adminMediaPreview.media_id });
+                  }}
+                  className="flex-1 bg-blue-700 hover:bg-blue-600 text-white py-2 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
+                >
+                  Показать игрокам
+                </button>
+                <button
+                  onClick={() => socket.emit('admin_hide_media')}
+                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 py-2 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
+                >
+                  Скрыть
+                </button>
+                <button
+                  onClick={() => setAdminMediaPreview(null)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-400 py-2 px-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-slate-500">
+              Кликни по “плашке” медиа в тексте вопроса/ответа, чтобы открыть превью.
+            </div>
           )}
         </div>
       </div>
@@ -527,11 +648,21 @@ function App() {
             </div>
           ) : (
             <div className="w-full flex justify-center mb-4">
-              <GameTable
-                gameState={gameState}
-                isAdmin={isAdmin}
-                questionTitles={packInfo?.question_titles || null}
-              />
+              {sharedMedia && sharedMedia.type === 'image' ? (
+                <div className="w-full bg-slate-800/40 border border-slate-700 rounded-xl p-4 flex justify-center">
+                  <img
+                    src={`/media/${sharedMedia.media_id}`}
+                    alt="Shared media"
+                    className="max-h-[520px] w-auto object-contain"
+                  />
+                </div>
+              ) : (
+                <GameTable
+                  gameState={gameState}
+                  isAdmin={isAdmin}
+                  questionTitles={packInfo?.question_titles || null}
+                />
+              )}
             </div>
           )}
       </div>
@@ -660,6 +791,14 @@ function App() {
                               <span className="text-xl font-bold leading-none">+1</span>
                           </button>
                         </div>
+                      )}
+                      {isPostRound && (
+                        <button
+                          onClick={handleEndRound}
+                          className="w-full bg-emerald-700 hover:bg-emerald-600 text-white py-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-xs"
+                        >
+                          {blitzHasNextPart ? 'Следующая часть' : 'Завершить раунд'}
+                        </button>
                       )}
                       {isPreRound && (
                         <div className="text-xs text-slate-500 font-bold uppercase tracking-widest">

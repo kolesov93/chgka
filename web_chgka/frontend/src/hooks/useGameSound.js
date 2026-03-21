@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 
 const SOUNDS = {
   volchok: '/sounds/volchok.mp3',
-  gong: '/sounds/sig1.mp3',
+  gong1: '/sounds/gong1.mp3',
+  gong2: '/sounds/gong2.mp3',
+  gong3: '/sounds/gong3.mp3',
   sig1: '/sounds/sig1.mp3',
   sig2: '/sounds/sig2.mp3',
   sig3: '/sounds/sig3.mp3',

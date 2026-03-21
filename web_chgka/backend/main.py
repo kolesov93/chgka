@@ -10,7 +10,9 @@ from typing import Optional
 from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi import FastAPI
+from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from questions import parse_question_pack, QuestionParseError, QuestionPack
 
@@ -34,6 +36,10 @@ PHASE_PRE_ROUND = "PRE_ROUND"
 PHASE_QUESTION_READING = "QUESTION_READING" 
 PHASE_DISCUSSION = "DISCUSSION"
 PHASE_TEAM_ANSWER = "TEAM_ANSWER"
+PHASE_POST_ROUND = "POST_ROUND"
+
+# Media access
+MEDIA_TOKEN_TTL_SECONDS = 10 * 60  # 10 minutes
 
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 
@@ -117,6 +123,9 @@ game_state = {
     #   {"kind":"normal","sector":5}
     #   {"kind":"blitz","sector":4,"part_index":0}
     "round": None,
+    # Shared media shown to all clients (rendered instead of the table on frontend)
+    # Example: {"type":"image","media_id":"..."}
+    "shared_media": None,
 }
 
 # Loaded question pack (kept on server; admin UI may request more details later)
@@ -124,6 +133,117 @@ loaded_pack: Optional[QuestionPack] = None
 
 # Admin-only pack info (safe subset to send over socket)
 pack_admin_info: dict = {}
+
+# Temporary media tokens (media_id -> info)
+# Stored only in-memory; safe enough for development.
+media_tokens: dict = {}
+
+def _get_round_ctx_and_sector() -> Optional[tuple[dict, int]]:
+    """
+    Common validation helper: ensure we have a loaded pack, an active round context,
+    and a valid sector (1..SECTORS_COUNT). Returns (round_ctx, sector) or None.
+    """
+    if loaded_pack is None:
+        return None
+    round_ctx = game_state.get("round")
+    if not round_ctx:
+        return None
+    sector = round_ctx.get("sector")
+    if not isinstance(sector, int) or not (1 <= sector <= SECTORS_COUNT):
+        return None
+    return round_ctx, sector
+
+def _get_round_kind_and_part_index(round_ctx: dict) -> tuple[str, int]:
+    kind = round_ctx.get("kind", "normal")
+    part_index = int(round_ctx.get("part_index", 0)) if kind in ("blitz", "superblitz") else 0
+    return kind, part_index
+
+
+def _cleanup_expired_media_tokens(now_ts: Optional[float] = None) -> None:
+    now = now_ts if now_ts is not None else time.time()
+    expired = [mid for mid, info in media_tokens.items() if info.get("expires_at", 0) <= now]
+    for mid in expired:
+        media_tokens.pop(mid, None)
+
+
+def _clear_all_media_tokens() -> None:
+    media_tokens.clear()
+
+
+def _current_round_key() -> Optional[tuple[int, str, int]]:
+    """
+    Return a stable key for the current round context:
+      (sector, kind, part_index)
+    For normal questions part_index is always 0.
+    """
+    res = _get_round_ctx_and_sector()
+    if not res:
+        return None
+    round_ctx, sector = res
+    kind, part_index = _get_round_kind_and_part_index(round_ctx)
+    return (sector, kind, part_index)
+
+
+def _get_current_questions_for_media() -> list:
+    """
+    Return a list of Question objects whose media are allowed to be shown
+    for the current round context.
+    For blitz: includes both intro (top-level) and the current part.
+    """
+    res = _get_round_ctx_and_sector()
+    if not res:
+        return []
+    round_ctx, sector = res
+    try:
+        q = loaded_pack.get_by_sector(sector)
+    except Exception:
+        return []
+    kind, _part_index = _get_round_kind_and_part_index(round_ctx)
+    if kind in ("blitz", "superblitz"):
+        part_index = int(round_ctx.get("part_index", 0))
+        part = q.parts[part_index] if 0 <= part_index < len(q.parts) else None
+        out = [q]
+        if part is not None:
+            out.append(part)
+        return out
+    return [q]
+
+
+def _resolve_media_path_to_abs(rel_path: str) -> Optional[Path]:
+    """
+    Given a relative media path from markdown (e.g. 'media/img.png'),
+    resolve it to an absolute Path within the *current round* question folder.
+    Returns None if not allowed / not found.
+    """
+    res = _get_round_ctx_and_sector()
+    if not res:
+        return None
+    round_ctx, sector = res
+
+    # Allowed absolute media paths from parsed pack for current question context
+    allowed_abs: set[Path] = set()
+    for qq in _get_current_questions_for_media():
+        for m in getattr(qq, "media", []) or []:
+            allowed_abs.add(Path(m.path))
+
+    rel = Path(rel_path)
+    if rel.is_absolute() or ".." in rel.parts:
+        return None
+
+    kind, part_index_norm = _get_round_kind_and_part_index(round_ctx)
+    base_candidates: list[Path] = []
+    base_candidates.append(Path(loaded_pack.path) / f"{sector:02d}")
+    if kind in ("blitz", "superblitz"):
+        base_candidates.append(Path(loaded_pack.path) / f"{sector:02d}" / f"{part_index_norm + 1:02d}")
+
+    for base in base_candidates:
+        try:
+            cand = (base / rel).resolve()
+        except Exception:
+            continue
+        if cand in allowed_abs and cand.exists() and cand.is_file():
+            return cand
+    return None
 
 def _load_question_pack_on_startup() -> None:
     """
@@ -171,21 +291,17 @@ async def _emit_pack_info_to_admin(sid: str) -> None:
 
 async def _emit_current_question_to_admins() -> None:
     """Send current question content to all online admins (admin-only)."""
-    if loaded_pack is None:
+    res = _get_round_ctx_and_sector()
+    if not res:
         return
-    round_ctx = game_state.get("round")
-    if not round_ctx:
-        return
-    sector = round_ctx.get("sector")
-    if not isinstance(sector, int) or not (1 <= sector <= SECTORS_COUNT):
-        return
+    round_ctx, sector = res
 
     try:
         q = loaded_pack.get_by_sector(sector)
     except Exception:
         return
 
-    kind = round_ctx.get("kind", "normal")
+    kind, _part_index_norm = _get_round_kind_and_part_index(round_ctx)
     payload = {
         "sector": sector,
         "kind": kind,
@@ -301,6 +417,22 @@ async def broadcast_players(target_sid=None):
 @fastapi_app.get("/")
 async def root():
     return {"message": "CHGKA Game Server is running"}
+
+
+@fastapi_app.get("/media/{media_id}")
+async def get_media(media_id: str):
+    _cleanup_expired_media_tokens()
+    info = media_tokens.get(media_id)
+    if not info:
+        raise HTTPException(status_code=404, detail="Media not found")
+    path = info.get("path")
+    if not path:
+        raise HTTPException(status_code=404, detail="Media not found")
+    p = Path(path)
+    if not p.exists() or not p.is_file():
+        raise HTTPException(status_code=404, detail="Media not found")
+    # Inline display
+    return FileResponse(str(p))
 
 @sio.event
 async def connect(sid, environ):
@@ -561,6 +693,10 @@ async def admin_spin(sid, data=None):
             to=sid,
         )
         return
+
+    # Ensure any previously shared media is hidden when we start a new spin.
+    game_state["shared_media"] = None
+    _clear_all_media_tokens()
     
     if game_state["score"]["znatoki"] >= 6 or game_state["score"]["tv"] >= 6:
         return
@@ -652,22 +788,24 @@ async def admin_score(sid, data):
             add_log("Неверно. Очко Телезрителям!")
             await sio.emit("play_sound", {"sound": random.choice(["no1", "no2"])})
             game_state["discussion_deadline_ms"] = None
-            game_state["round"] = None
-            game_state["phase"] = PHASE_PRE_ROUND
-            add_log("Фаза: ожидание следующего вращения")
+            game_state["phase"] = PHASE_POST_ROUND
+            add_log("Фаза: послераунд (обсуждение ответа)")
             await sio.emit('state_update', game_state)
+            await _emit_current_question_to_admins()
             return
 
         if winner != "znatoki":
             return
 
-        # Parts 1/2: just advance to next part
+        # Parts 1/2: go to POST_ROUND, then advance to the next part on explicit admin action.
         if part_index < BLITZ_PARTS - 1:
-            round_ctx["part_index"] = part_index + 1
+            # We need an explicit flag here; we cannot infer it later from part_index alone
+            # (wrong answers in parts 1/2 must NOT advance).
+            round_ctx["advance_next_part"] = True
             game_state["round"] = round_ctx
             game_state["discussion_deadline_ms"] = None
-            game_state["phase"] = PHASE_QUESTION_READING
-            add_log(f"Верно. Переходим к части {part_index + 2}/{BLITZ_PARTS}")
+            game_state["phase"] = PHASE_POST_ROUND
+            add_log(f"Верно (часть {part_index + 1}/{BLITZ_PARTS}). Фаза: послераунд")
             await sio.emit('state_update', game_state)
             await _emit_current_question_to_admins()
             return
@@ -677,10 +815,10 @@ async def admin_score(sid, data):
         add_log("Все ответы верны. Очко Знатокам!")
         await sio.emit("play_sound", {"sound": random.choice(["yes1", "yes2"])})
         game_state["discussion_deadline_ms"] = None
-        game_state["round"] = None
-        game_state["phase"] = PHASE_PRE_ROUND
-        add_log("Фаза: ожидание следующего вращения")
+        game_state["phase"] = PHASE_POST_ROUND
+        add_log("Фаза: послераунд (обсуждение ответа)")
         await sio.emit('state_update', game_state)
+        await _emit_current_question_to_admins()
         return
 
     # Normal scoring
@@ -696,10 +834,156 @@ async def admin_score(sid, data):
         return
 
     game_state["discussion_deadline_ms"] = None
-    game_state["round"] = None
-    game_state["phase"] = PHASE_PRE_ROUND
-    add_log("Фаза: ожидание следующего вращения")
+    game_state["phase"] = PHASE_POST_ROUND
+    add_log("Фаза: послераунд (обсуждение ответа)")
     await sio.emit('state_update', game_state)
+    await _emit_current_question_to_admins()
+
+
+@sio.event
+async def admin_end_round(sid, data=None):
+    """
+    POST_ROUND handler.
+    - Normal flow: POST_ROUND -> PRE_ROUND (end round), clears round context and shared media, plays gong.
+    - Blitz flow: if round has advance_next_part, then POST_ROUND -> QUESTION_READING and advances to next part
+      WITHOUT gong.
+    """
+    if not await require_admin(sid):
+        return
+    if game_state.get("phase") != PHASE_POST_ROUND:
+        await sio.emit(
+            "admin_notification",
+            {"type": "warning", "message": f"Нельзя завершить раунд в фазе {game_state.get('phase')}"},
+            to=sid,
+        )
+        return
+
+    # Blitz intermediate part: advance to next part instead of ending the round.
+    round_ctx = game_state.get("round") or {}
+    kind = round_ctx.get("kind", "normal")
+    if kind in ("blitz", "superblitz") and round_ctx.get("advance_next_part") is True:
+        part_index = int(round_ctx.get("part_index", 0))
+        next_part_index = part_index + 1
+        # Hide shared media and drop media tokens (bound to current part).
+        game_state["shared_media"] = None
+        _clear_all_media_tokens()
+        game_state["discussion_deadline_ms"] = None
+
+        round_ctx["part_index"] = next_part_index
+        round_ctx.pop("advance_next_part", None)
+        game_state["round"] = round_ctx
+        game_state["phase"] = PHASE_QUESTION_READING
+        add_log(f"Переходим к части {next_part_index + 1}/{BLITZ_PARTS}. Фаза: зачитывание вопроса")
+        await sio.emit("state_update", game_state)
+        await _emit_current_question_to_admins()
+        return
+
+    # Hide shared media and drop media tokens (they are tied to the round context).
+    game_state["shared_media"] = None
+    _clear_all_media_tokens()
+
+    # Clear timers and round context.
+    game_state["discussion_deadline_ms"] = None
+    game_state["round"] = None
+
+    # Phase transition.
+    game_state["phase"] = PHASE_PRE_ROUND
+    add_log("Раунд завершён. Фаза: ожидание следующего вращения")
+
+    # Gong at the end of post-round (same for all clients).
+    await sio.emit("play_sound", {"sound": random.choice(["gong1", "gong2", "gong3"])})
+
+    await sio.emit("state_update", game_state)
+
+
+@sio.event
+async def admin_resolve_media(sid, data):
+    """
+    Resolve a markdown media path to a secure media_id for preview/share.
+    Returns acknowledgement payload to the caller (admin).
+    """
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+
+    phase = game_state.get("phase")
+    if phase not in (PHASE_QUESTION_READING, PHASE_DISCUSSION, PHASE_TEAM_ANSWER, PHASE_POST_ROUND):
+        return {"ok": False, "error": f"bad_phase:{phase}"}
+    if game_state.get("is_spinning"):
+        return {"ok": False, "error": "spinning"}
+    if not game_state.get("round"):
+        return {"ok": False, "error": "no_round"}
+
+    media_type = (data.get("media_type") or "").strip().lower()
+    media_path = (data.get("media_path") or "").strip()
+    if media_type != "image":
+        return {"ok": False, "error": "unsupported_media_type"}
+    if not media_path:
+        return {"ok": False, "error": "missing_media_path"}
+
+    abs_path = _resolve_media_path_to_abs(media_path)
+    if abs_path is None:
+        return {"ok": False, "error": "media_not_allowed"}
+
+    # Create token bound to the current round context.
+    _cleanup_expired_media_tokens()
+    media_id = secrets.token_urlsafe(16)
+    media_tokens[media_id] = {
+        "path": str(abs_path),
+        "type": media_type,
+        "round_key": _current_round_key(),
+        "expires_at": time.time() + MEDIA_TOKEN_TTL_SECONDS,
+    }
+    return {"ok": True, "media_id": media_id, "type": media_type}
+
+
+@sio.event
+async def admin_share_media(sid, data):
+    """Share resolved media_id to all clients (rendered instead of the table)."""
+    if not await require_admin(sid):
+        return
+    phase = game_state.get("phase")
+    if phase not in (PHASE_QUESTION_READING, PHASE_DISCUSSION, PHASE_TEAM_ANSWER, PHASE_POST_ROUND):
+        return
+    if game_state.get("is_spinning"):
+        return
+    if not game_state.get("round"):
+        return
+
+    media_id = (data.get("media_id") or "").strip()
+    if not media_id:
+        return
+
+    _cleanup_expired_media_tokens()
+    info = media_tokens.get(media_id)
+    if not info:
+        await sio.emit(
+            "admin_notification",
+            {"type": "warning", "message": "Медиа устарело. Нажми превью ещё раз."},
+            to=sid,
+        )
+        return
+
+    if info.get("round_key") != _current_round_key():
+        await sio.emit(
+            "admin_notification",
+            {"type": "warning", "message": "Это медиа относится к другому раунду."},
+            to=sid,
+        )
+        return
+
+    game_state["shared_media"] = {"type": info.get("type", "image"), "media_id": media_id}
+    add_log("Медиа показано игрокам")
+    await sio.emit("state_update", game_state)
+
+
+@sio.event
+async def admin_hide_media(sid, data=None):
+    """Hide shared media for all clients."""
+    if not await require_admin(sid):
+        return
+    game_state["shared_media"] = None
+    add_log("Медиа скрыто")
+    await sio.emit("state_update", game_state)
 
 
 @sio.event
