@@ -1121,7 +1121,9 @@ async def admin_reset(sid):
     game_state["playing_sector"] = None
     game_state["discussion_deadline_ms"] = None
     game_state["round"] = None
-    game_state["phase"] = "INTRO"
+    game_state["shared_media"] = None
+    _clear_all_media_tokens()
+    game_state["phase"] = PHASE_PRE_ROUND
     game_state["logs"] = []
     add_log("Игра сброшена")
     await sio.emit('state_update', game_state)
