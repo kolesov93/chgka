@@ -15,6 +15,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from questions import parse_question_pack, QuestionParseError, QuestionPack
+from state import (
+    PHASE_LOGIN,
+    PHASE_PRE_ROUND,
+    PHASE_QUESTION_READING,
+    PHASE_DISCUSSION,
+    PHASE_TEAM_ANSWER,
+    PHASE_POST_ROUND,
+    create_initial_game_state,
+    public_game_state,
+    reset_game_state,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,14 +40,6 @@ BLITZ_PARTS = 3
 NORMAL_DISCUSSION_SECONDS = 60
 BLITZ_DISCUSSION_SECONDS = 20
 TEN_SECONDS = 10
-
-# Game phases
-PHASE_LOGIN = "LOGIN"
-PHASE_PRE_ROUND = "PRE_ROUND"
-PHASE_QUESTION_READING = "QUESTION_READING" 
-PHASE_DISCUSSION = "DISCUSSION"
-PHASE_TEAM_ANSWER = "TEAM_ANSWER"
-PHASE_POST_ROUND = "POST_ROUND"
 
 # Media access
 MEDIA_TOKEN_TTL_SECONDS = 10 * 60  # 10 minutes
@@ -104,29 +107,7 @@ global_settings = {
 players_list = []
 
 # Хранилище состояния игры
-game_state = {
-    "phase": PHASE_LOGIN,
-    "score": {"znatoki": 0, "tv": 0},
-    "current_sector": 1, 
-    "target_angle": None, # Точный угол остановки (0-360)
-    "playing_sector": None, # Какой сектор реально играет (с учетом скачки)
-    "spin_duration": 0,
-    "used_questions": [], 
-    "is_spinning": False,
-    "logs": [], # Лог событий ["12:00:01 - Игра началась", ...]
-    # Loaded from question pack at startup (len=13), values: "normal" | "blitz" | "superblitz"
-    "question_types": None,
-    # Discussion timer deadline (unix ms). Can go negative on the client; that's OK.
-    "discussion_deadline_ms": None,
-    # Current round context (safe to send to all clients; no question text here)
-    # Example:
-    #   {"kind":"normal","sector":5}
-    #   {"kind":"blitz","sector":4,"part_index":0}
-    "round": None,
-    # Shared media shown to all clients (rendered instead of the table on frontend)
-    # Example: {"type":"image","media_id":"..."}
-    "shared_media": None,
-}
+game_state = create_initial_game_state()
 
 # Loaded question pack (kept on server; admin UI may request more details later)
 loaded_pack: Optional[QuestionPack] = None
@@ -355,6 +336,14 @@ def add_log(message):
         game_state["logs"] = game_state["logs"][:50]
     return log_entry
 
+
+async def emit_state_update(to: Optional[str] = None) -> None:
+    payload = public_game_state(game_state)
+    if to is None:
+        await sio.emit("state_update", payload)
+    else:
+        await sio.emit("state_update", payload, to=to)
+
 def get_sector_from_angle(angle):
     # В GameTable: angleDeg = 90 + (i * angleStep)
     best_sector = 1
@@ -440,7 +429,7 @@ async def connect(sid, environ):
     
     await sio.save_session(sid, {'role': 'player'})
     
-    await sio.emit('state_update', game_state, to=sid)
+    await emit_state_update(to=sid)
     await sio.emit('role_update', {'role': 'player'}, to=sid)
     await sio.emit('settings_update', global_settings, to=sid)
 
@@ -472,7 +461,7 @@ async def restore_session(sid, data):
             admin_record['online'] = True
 
         await sio.emit('role_update', {'role': 'admin'}, to=sid)
-        await sio.emit('state_update', game_state, to=sid)
+        await emit_state_update(to=sid)
         await _emit_pack_info_to_admin(sid)
         await _emit_current_question_to_admins()
         await sio.emit('auth_restored', {}, to=sid)
@@ -496,7 +485,7 @@ async def restore_session(sid, data):
             player_record['online'] = True
 
             await sio.emit('role_update', {'role': 'player'}, to=sid)
-            await sio.emit('state_update', game_state, to=sid)
+            await emit_state_update(to=sid)
             # Отправляем join_success, чтобы фронт понял, что он в игре
             await sio.emit('join_success', {'name': player_record['name']}, to=sid)
             # Уведомляем админов об изменении статуса
@@ -505,7 +494,7 @@ async def restore_session(sid, data):
     
     # Если ничего не подошло - остаемся гостем
     await sio.emit('role_update', {'role': 'player'}, to=sid)
-    await sio.emit('state_update', game_state, to=sid)
+    await emit_state_update(to=sid)
 
 @sio.event
 async def authenticate_admin(sid, data):
@@ -533,7 +522,7 @@ async def authenticate_admin(sid, data):
         await sio.emit('auth_success', {'token': token}, to=sid)
         
         await sio.emit('role_update', {'role': 'admin'}, to=sid)
-        await sio.emit('state_update', game_state, to=sid)
+        await emit_state_update(to=sid)
         await _emit_pack_info_to_admin(sid)
         await _emit_current_question_to_admins()
     else:
@@ -635,7 +624,7 @@ async def start_game(sid):
     
     game_state['phase'] = PHASE_PRE_ROUND
     add_log("Игра началась!")
-    await sio.emit('state_update', game_state)
+    await emit_state_update()
 
 @sio.event
 async def leave_game(sid):
@@ -661,7 +650,7 @@ async def leave_game(sid):
         
         logger.info(f"Player {player_name} left the game (explicit logout)")
         await broadcast_players()
-        await sio.emit('state_update', game_state)
+        await emit_state_update()
 
 @sio.event
 async def disconnect(sid):
@@ -731,7 +720,7 @@ async def admin_spin(sid, data=None):
     if playing_sector == SECTORS_COUNT:
         add_log("Внимание! 13-й сектор!")
     
-    await sio.emit('state_update', game_state)
+    await emit_state_update()
 
     await asyncio.sleep(duration)
 
@@ -755,7 +744,7 @@ async def admin_spin(sid, data=None):
     if playing_sector == 13:
         await sio.emit('play_sound', {'sound': 'sector13'})
 
-    await sio.emit('state_update', game_state)
+    await emit_state_update()
     await _emit_current_question_to_admins()
 
 @sio.event
@@ -790,7 +779,7 @@ async def admin_score(sid, data):
             game_state["discussion_deadline_ms"] = None
             game_state["phase"] = PHASE_POST_ROUND
             add_log("Фаза: послераунд (обсуждение ответа)")
-            await sio.emit('state_update', game_state)
+            await emit_state_update()
             await _emit_current_question_to_admins()
             return
 
@@ -806,7 +795,7 @@ async def admin_score(sid, data):
             game_state["discussion_deadline_ms"] = None
             game_state["phase"] = PHASE_POST_ROUND
             add_log(f"Верно (часть {part_index + 1}/{BLITZ_PARTS}). Фаза: послераунд")
-            await sio.emit('state_update', game_state)
+            await emit_state_update()
             await _emit_current_question_to_admins()
             return
 
@@ -817,7 +806,7 @@ async def admin_score(sid, data):
         game_state["discussion_deadline_ms"] = None
         game_state["phase"] = PHASE_POST_ROUND
         add_log("Фаза: послераунд (обсуждение ответа)")
-        await sio.emit('state_update', game_state)
+        await emit_state_update()
         await _emit_current_question_to_admins()
         return
 
@@ -836,7 +825,7 @@ async def admin_score(sid, data):
     game_state["discussion_deadline_ms"] = None
     game_state["phase"] = PHASE_POST_ROUND
     add_log("Фаза: послераунд (обсуждение ответа)")
-    await sio.emit('state_update', game_state)
+    await emit_state_update()
     await _emit_current_question_to_admins()
 
 
@@ -874,7 +863,7 @@ async def admin_end_round(sid, data=None):
         game_state["round"] = round_ctx
         game_state["phase"] = PHASE_QUESTION_READING
         add_log(f"Переходим к части {next_part_index + 1}/{BLITZ_PARTS}. Фаза: зачитывание вопроса")
-        await sio.emit("state_update", game_state)
+        await emit_state_update()
         await _emit_current_question_to_admins()
         return
 
@@ -893,7 +882,7 @@ async def admin_end_round(sid, data=None):
     # Gong at the end of post-round (same for all clients).
     await sio.emit("play_sound", {"sound": random.choice(["gong1", "gong2", "gong3"])})
 
-    await sio.emit("state_update", game_state)
+    await emit_state_update()
 
 
 @sio.event
@@ -973,7 +962,7 @@ async def admin_share_media(sid, data):
 
     game_state["shared_media"] = {"type": info.get("type", "image"), "media_id": media_id}
     add_log("Медиа показано игрокам")
-    await sio.emit("state_update", game_state)
+    await emit_state_update()
 
 
 @sio.event
@@ -983,7 +972,7 @@ async def admin_hide_media(sid, data=None):
         return
     game_state["shared_media"] = None
     add_log("Медиа скрыто")
-    await sio.emit("state_update", game_state)
+    await emit_state_update()
 
 
 @sio.event
@@ -999,7 +988,7 @@ async def admin_start_discussion(sid, data=None):
     seconds = BLITZ_DISCUSSION_SECONDS if kind in ("blitz", "superblitz") else NORMAL_DISCUSSION_SECONDS
     game_state["discussion_deadline_ms"] = int(time.time() * 1000) + seconds * 1000
     add_log("Фаза: обсуждение")
-    await sio.emit('state_update', game_state)
+    await emit_state_update()
 
 
 @sio.event
@@ -1014,7 +1003,7 @@ async def admin_team_answer(sid, data=None):
     await sio.emit("play_sound", {"sound": "sig1"})
     game_state["phase"] = PHASE_TEAM_ANSWER
     add_log("Фаза: ответ команды")
-    await sio.emit('state_update', game_state)
+    await emit_state_update()
 
 
 @sio.event
@@ -1035,7 +1024,7 @@ async def admin_ten_seconds(sid, data=None):
     game_state["discussion_deadline_ms"] = int(time.time() * 1000) + TEN_SECONDS * 1000
     await sio.emit("play_sound", {"sound": "sig2"})
     add_log("Сигнал: 10 секунд (таймер сброшен на 10)")
-    await sio.emit('state_update', game_state)
+    await emit_state_update()
 
 @sio.event
 async def admin_sound(sid, data):
@@ -1105,25 +1094,14 @@ async def admin_log(sid, data):
     msg = data.get('message')
     if msg:
         add_log(msg)
-        await sio.emit('state_update', game_state)
+        await emit_state_update()
 
 @sio.event
 async def admin_reset(sid):
     if not await require_admin(sid):
         return
-    
-    game_state["used_questions"] = []
-    game_state["score"] = {"znatoki": 0, "tv": 0}
-    game_state["spin_duration"] = 0
-    game_state["is_spinning"] = False
-    game_state["current_sector"] = 1
-    game_state["target_angle"] = None
-    game_state["playing_sector"] = None
-    game_state["discussion_deadline_ms"] = None
-    game_state["round"] = None
-    game_state["shared_media"] = None
+
+    reset_game_state(game_state)
     _clear_all_media_tokens()
-    game_state["phase"] = PHASE_PRE_ROUND
-    game_state["logs"] = []
     add_log("Игра сброшена")
-    await sio.emit('state_update', game_state)
+    await emit_state_update()
