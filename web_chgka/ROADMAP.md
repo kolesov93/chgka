@@ -18,7 +18,7 @@
 
 ### P0: техническая прочность
 
-1. Схема состояния
+1. Схема состояния — `В работе`, branch: `task/game-state-schema`, task: `docs/tasks/0001-game-state-schema.md`
    - Описать `game_state` через dataclass/Pydantic или TypedDict.
    - Убрать "магические" dict-поля из бизнес-логики.
    - Явно разделить public state и admin-only state.
