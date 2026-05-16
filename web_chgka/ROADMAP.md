@@ -18,7 +18,7 @@
 
 ### P0: техническая прочность
 
-1. Тестируемая модель переходов
+1. Тестируемая модель переходов — `В работе`, branch: `task/game-transitions`, task: `docs/tasks/0002-game-transitions.md`
    - Вынести ключевую game-логику из Socket.IO handlers в чистые функции/сервис.
    - Покрыть spin, scoring, blitz progression, reset, game over и bad-phase actions тестами.
    - Оставить Socket.IO handlers тонким слоем авторизации и emit-ов.

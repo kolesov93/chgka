@@ -1,8 +1,11 @@
-"""Typed game-state contract and serialization helpers.
+"""Typed server-state contract and serialization helpers.
 
-The game state is the shared server-side snapshot that is broadcast to clients
-through `state_update`. It includes the public game situation, client display
-context, and a small amount of round workflow state needed by the current UI.
+`AppState` is the internal server-side state. It is split into domain sections
+so game rules, wheel animation, timers, presentation, pack metadata, and logs do
+not all live in one flat bucket.
+
+`public_game_state()` serializes that internal state to the flat `state_update`
+payload expected by the current frontend.
 """
 
 from copy import deepcopy
@@ -60,22 +63,26 @@ class SharedMediaState(TypedDict):
     media_id: str
 
 
-class GameState(TypedDict):
-    """State snapshot emitted through `state_update`.
-
-    Field groups:
-    - Game progress: `phase`, `score`, `used_questions`, `round`.
-    - Table/spin display: `current_sector`, `target_angle`, `playing_sector`,
-      `spin_duration`, `is_spinning`, `question_types`.
-    - Admin/live context: `logs`, `discussion_deadline_ms`.
-    - Shared presentation: `shared_media`.
-    """
+class GameProgressState(TypedDict):
+    """Actual game progress governed by game rules."""
 
     # Current game phase. Drives backend action guards and frontend screens.
     phase: GamePhase
 
     # Public score shown to clients and used by backend game guards.
     score: ScoreState
+
+    # Sectors that have already been played and should no longer show envelopes
+    # or be available for normal selection.
+    used_questions: list[int]
+
+    # Current question/round context. Does not contain question text; admin-only
+    # question content is sent separately via `admin_question`.
+    round: Optional[RoundState]
+
+
+class WheelState(TypedDict):
+    """Wheel/table animation and sector-selection state."""
 
     # Sector where the arrow/table should rest when there is no active spin.
     current_sector: int
@@ -92,87 +99,141 @@ class GameState(TypedDict):
     # the volchok sound fade.
     spin_duration: float
 
-    # Sectors that have already been played and should no longer show envelopes
-    # or be available for normal selection.
-    used_questions: list[int]
-
     # True while the backend is waiting for the spin animation duration to pass.
     is_spinning: bool
 
-    # Recent game log entries, newest first.
-    logs: list[str]
 
-    # Per-sector question kinds loaded from the pack. The frontend uses this to
-    # render normal/blitz/superblitz envelope icons.
-    question_types: Optional[list[QuestionTypeValue]]
+class TimerState(TypedDict):
+    """Discussion timer state."""
 
     # Unix timestamp in milliseconds for the end of discussion. Only the admin
     # UI currently renders the countdown.
     discussion_deadline_ms: Optional[int]
 
-    # Current question/round context. Does not contain question text; admin-only
-    # question content is sent separately via `admin_question`.
-    round: Optional[RoundState]
+
+class PresentationState(TypedDict):
+    """Shared presentation state shown to players."""
 
     # Media currently shown to all clients instead of the game table.
     shared_media: Optional[SharedMediaState]
 
 
-def create_initial_game_state(
+class PackUiState(TypedDict):
+    """Pack metadata needed by shared UI surfaces."""
+
+    # Per-sector question kinds loaded from the pack. The frontend uses this to
+    # render normal/blitz/superblitz envelope icons.
+    question_types: Optional[list[QuestionTypeValue]]
+
+
+class PublicGameState(TypedDict):
+    """Flat `state_update` payload consumed by the current frontend."""
+
+    phase: GamePhase
+    score: ScoreState
+    current_sector: int
+    target_angle: Optional[float]
+    playing_sector: Optional[int]
+    spin_duration: float
+    used_questions: list[int]
+    is_spinning: bool
+    logs: list[str]
+    question_types: Optional[list[QuestionTypeValue]]
+    discussion_deadline_ms: Optional[int]
+    round: Optional[RoundState]
+    shared_media: Optional[SharedMediaState]
+
+
+class AppState(TypedDict):
+    """Internal server state grouped by domain."""
+
+    game: GameProgressState
+    wheel: WheelState
+    timer: TimerState
+    presentation: PresentationState
+    pack: PackUiState
+    logs: list[str]
+
+
+def create_initial_app_state(
     *,
     phase: GamePhase = PHASE_LOGIN,
     question_types: Optional[list[QuestionTypeValue]] = None,
-) -> GameState:
-    """Create a fresh game state with no runtime round/spin/media context."""
+) -> AppState:
+    """Create a fresh app state with no runtime round/spin/media context."""
 
     return {
-        "phase": phase,
-        "score": {"znatoki": 0, "tv": 0},
-        "current_sector": 1,
-        "target_angle": None,
-        "playing_sector": None,
-        "spin_duration": 0,
-        "used_questions": [],
-        "is_spinning": False,
+        "game": {
+            "phase": phase,
+            "score": {"znatoki": 0, "tv": 0},
+            "used_questions": [],
+            "round": None,
+        },
+        "wheel": {
+            "current_sector": 1,
+            "target_angle": None,
+            "playing_sector": None,
+            "spin_duration": 0,
+            "is_spinning": False,
+        },
+        "timer": {
+            "discussion_deadline_ms": None,
+        },
+        "presentation": {
+            "shared_media": None,
+        },
+        "pack": {
+            "question_types": list(question_types) if question_types is not None else None,
+        },
         "logs": [],
-        "question_types": list(question_types) if question_types is not None else None,
-        "discussion_deadline_ms": None,
-        "round": None,
-        "shared_media": None,
     }
 
 
-def reset_game_state(
-    state: GameState,
+def reset_app_state(
+    state: AppState,
     *,
     phase: GamePhase = PHASE_PRE_ROUND,
 ) -> None:
     """Reset an existing state dict in place.
 
     The in-place update preserves references held by `main.py`, while resetting
-    runtime fields to the same shape as `create_initial_game_state()`. Loaded
+    runtime fields to the same shape as `create_initial_app_state()`. Loaded
     `question_types` are preserved because they come from the pack parsed at
     startup and are still needed after an admin reset.
     """
 
-    question_types = state.get("question_types")
+    question_types = state["pack"]["question_types"]
     state.clear()
     state.update(
-        create_initial_game_state(
+        create_initial_app_state(
             phase=phase,
             question_types=question_types,
         )
     )
 
 
-def public_game_state(state: GameState) -> GameState:
+def public_game_state(state: AppState) -> PublicGameState:
     """
     Return the current state_update payload.
 
-    This is intentionally wire-compatible with the previous raw game_state dict.
-    Keeping it as a helper makes the public boundary explicit and gives us a
-    single place to narrow the payload later. A deep copy prevents accidental
-    mutation of server state by code that treats the returned payload as a
-    disposable message object.
+    The current frontend expects a flat payload. Keeping that serialization here
+    lets backend internals become cleaner without forcing a frontend protocol
+    migration in the same step.
     """
-    return deepcopy(state)
+    return deepcopy(
+        {
+            "phase": state["game"]["phase"],
+            "score": state["game"]["score"],
+            "current_sector": state["wheel"]["current_sector"],
+            "target_angle": state["wheel"]["target_angle"],
+            "playing_sector": state["wheel"]["playing_sector"],
+            "spin_duration": state["wheel"]["spin_duration"],
+            "used_questions": state["game"]["used_questions"],
+            "is_spinning": state["wheel"]["is_spinning"],
+            "logs": state["logs"],
+            "question_types": state["pack"]["question_types"],
+            "discussion_deadline_ms": state["timer"]["discussion_deadline_ms"],
+            "round": state["game"]["round"],
+            "shared_media": state["presentation"]["shared_media"],
+        }
+    )

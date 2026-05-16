@@ -22,9 +22,9 @@ from state import (
     PHASE_DISCUSSION,
     PHASE_TEAM_ANSWER,
     PHASE_POST_ROUND,
-    create_initial_game_state,
+    create_initial_app_state,
     public_game_state,
-    reset_game_state,
+    reset_app_state,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -107,7 +107,7 @@ global_settings = {
 players_list = []
 
 # Хранилище состояния игры
-game_state = create_initial_game_state()
+app_state = create_initial_app_state()
 
 # Loaded question pack (kept on server; admin UI may request more details later)
 loaded_pack: Optional[QuestionPack] = None
@@ -126,7 +126,7 @@ def _get_round_ctx_and_sector() -> Optional[tuple[dict, int]]:
     """
     if loaded_pack is None:
         return None
-    round_ctx = game_state.get("round")
+    round_ctx = app_state["game"]["round"]
     if not round_ctx:
         return None
     sector = round_ctx.get("sector")
@@ -228,7 +228,7 @@ def _resolve_media_path_to_abs(rel_path: str) -> Optional[Path]:
 
 def _load_question_pack_on_startup() -> None:
     """
-    Load questions pack once at startup and expose per-sector question types via game_state.
+    Load questions pack once at startup and expose per-sector question types via app_state.
     """
     env_path = os.getenv("QUESTIONS_PACK_PATH")
     if not env_path:
@@ -249,7 +249,7 @@ def _load_question_pack_on_startup() -> None:
     if len(types) != SECTORS_COUNT:
         raise RuntimeError(f"Question pack must contain {SECTORS_COUNT} questions, got {len(types)}")
 
-    game_state["question_types"] = types
+    app_state["pack"]["question_types"] = types
     loaded_pack = pack
     pack_admin_info = {
         "path": str(pack.path),
@@ -286,7 +286,7 @@ async def _emit_current_question_to_admins() -> None:
     payload = {
         "sector": sector,
         "kind": kind,
-        "phase": game_state.get("phase"),
+        "phase": app_state["game"]["phase"],
     }
 
     if kind in ("blitz", "superblitz"):
@@ -330,15 +330,15 @@ async def _emit_current_question_to_admins() -> None:
 def add_log(message):
     time_str = datetime.now().strftime("%H:%M:%S")
     log_entry = f"[{time_str}] {message}"
-    game_state["logs"].insert(0, log_entry) # Новые сверху
+    app_state["logs"].insert(0, log_entry) # Новые сверху
     # Ограничим размер лога
-    if len(game_state["logs"]) > 50:
-        game_state["logs"] = game_state["logs"][:50]
+    if len(app_state["logs"]) > 50:
+        app_state["logs"] = app_state["logs"][:50]
     return log_entry
 
 
 async def emit_state_update(to: Optional[str] = None) -> None:
-    payload = public_game_state(game_state)
+    payload = public_game_state(app_state)
     if to is None:
         await sio.emit("state_update", payload)
     else:
@@ -557,7 +557,7 @@ async def join_game(sid, data):
     await sio.save_session(sid, session)
     
     # Если игра уже началась (не LOGIN), требуется одобрение админа
-    needs_approval = game_state['phase'] != PHASE_LOGIN
+    needs_approval = app_state["game"]["phase"] != PHASE_LOGIN
     
     # Добавляем нового игрока
     players_list.append({
@@ -618,11 +618,11 @@ async def start_game(sid):
     if not await require_admin(sid):
         return
     
-    if game_state['phase'] != PHASE_LOGIN:
-        logger.warning(f"Attempt to start game in wrong phase: {game_state['phase']}")
+    if app_state["game"]["phase"] != PHASE_LOGIN:
+        logger.warning(f"Attempt to start game in wrong phase: {app_state['game']['phase']}")
         return
     
-    game_state['phase'] = PHASE_PRE_ROUND
+    app_state["game"]["phase"] = PHASE_PRE_ROUND
     add_log("Игра началась!")
     await emit_state_update()
 
@@ -669,36 +669,36 @@ async def admin_spin(sid, data=None):
     
     force_sector = data.get('force_sector') if data else None
 
-    if game_state["is_spinning"]:
+    if app_state["wheel"]["is_spinning"]:
         return
 
-    if game_state.get("phase") != PHASE_PRE_ROUND:
+    if app_state["game"]["phase"] != PHASE_PRE_ROUND:
         await sio.emit(
             "admin_notification",
             {
                 "type": "warning",
-                "message": f"Нельзя крутить волчок в фазе {game_state.get('phase')}",
+                "message": f"Нельзя крутить волчок в фазе {app_state['game']['phase']}",
             },
             to=sid,
         )
         return
 
     # Ensure any previously shared media is hidden when we start a new spin.
-    game_state["shared_media"] = None
+    app_state["presentation"]["shared_media"] = None
     _clear_all_media_tokens()
     
-    if game_state["score"]["znatoki"] >= 6 or game_state["score"]["tv"] >= 6:
+    if app_state["game"]["score"]["znatoki"] >= 6 or app_state["game"]["score"]["tv"] >= 6:
         return
 
     # 1. Генерируем результат
-    raw_angle, raw_sector = calculate_spin_result(force_sector, game_state["used_questions"])
+    raw_angle, raw_sector = calculate_spin_result(force_sector, app_state["game"]["used_questions"])
     
     # 2. Определяем играющий сектор (Скачка)
     playing_sector = raw_sector
     
     # Защита от бесконечного цикла (если все сыграны)
     loop_check = 0
-    while playing_sector in game_state["used_questions"] and loop_check < SECTORS_COUNT + 1:
+    while playing_sector in app_state["game"]["used_questions"] and loop_check < SECTORS_COUNT + 1:
         playing_sector += 1
         if playing_sector > 13:
             playing_sector = 1
@@ -712,10 +712,10 @@ async def admin_spin(sid, data=None):
     log_msg += f" -> Играет: {playing_sector}"
     add_log(log_msg)
 
-    game_state["target_angle"] = raw_angle
-    game_state["playing_sector"] = playing_sector
-    game_state["spin_duration"] = duration
-    game_state["is_spinning"] = True
+    app_state["wheel"]["target_angle"] = raw_angle
+    app_state["wheel"]["playing_sector"] = playing_sector
+    app_state["wheel"]["spin_duration"] = duration
+    app_state["wheel"]["is_spinning"] = True
     
     if playing_sector == SECTORS_COUNT:
         add_log("Внимание! 13-й сектор!")
@@ -724,22 +724,22 @@ async def admin_spin(sid, data=None):
 
     await asyncio.sleep(duration)
 
-    game_state["is_spinning"] = False
-    game_state["current_sector"] = playing_sector
-    game_state["spin_duration"] = 0
-    game_state["used_questions"].append(playing_sector)
+    app_state["wheel"]["is_spinning"] = False
+    app_state["wheel"]["current_sector"] = playing_sector
+    app_state["wheel"]["spin_duration"] = 0
+    app_state["game"]["used_questions"].append(playing_sector)
 
-    game_state["phase"] = PHASE_QUESTION_READING
+    app_state["game"]["phase"] = PHASE_QUESTION_READING
     add_log("Фаза: зачитывание вопроса")
 
     # Initialize round context based on question type
-    qtypes = game_state.get("question_types") or []
+    qtypes = app_state["pack"]["question_types"] or []
     qtype = qtypes[playing_sector - 1] if len(qtypes) >= playing_sector else "normal"
     if qtype in ("blitz", "superblitz"):
-        game_state["round"] = {"kind": qtype, "sector": playing_sector, "part_index": 0}
+        app_state["game"]["round"] = {"kind": qtype, "sector": playing_sector, "part_index": 0}
     else:
-        game_state["round"] = {"kind": "normal", "sector": playing_sector}
-    game_state["discussion_deadline_ms"] = None
+        app_state["game"]["round"] = {"kind": "normal", "sector": playing_sector}
+    app_state["timer"]["discussion_deadline_ms"] = None
     
     if playing_sector == 13:
         await sio.emit('play_sound', {'sound': 'sector13'})
@@ -753,15 +753,15 @@ async def admin_score(sid, data):
         return
     
     # Начисление очков / подтверждение ответа разрешаем только в фазе ответа команды
-    if game_state.get("phase") != PHASE_TEAM_ANSWER:
+    if app_state["game"]["phase"] != PHASE_TEAM_ANSWER:
         await sio.emit(
             "admin_notification",
-            {"type": "warning", "message": f"Нельзя нажимать верно/очки в фазе {game_state.get('phase')}"},
+            {"type": "warning", "message": f"Нельзя нажимать верно/очки в фазе {app_state['game']['phase']}"},
             to=sid,
         )
         return
 
-    round_ctx = game_state.get("round") or {"kind": "normal"}
+    round_ctx = app_state["game"]["round"] or {"kind": "normal"}
     kind = round_ctx.get("kind", "normal")
     winner = data.get('winner')
 
@@ -773,11 +773,11 @@ async def admin_score(sid, data):
         part_index = int(round_ctx.get("part_index", 0))
 
         if winner == "tv":
-            game_state["score"]["tv"] += 1
+            app_state["game"]["score"]["tv"] += 1
             add_log("Неверно. Очко Телезрителям!")
             await sio.emit("play_sound", {"sound": random.choice(["no1", "no2"])})
-            game_state["discussion_deadline_ms"] = None
-            game_state["phase"] = PHASE_POST_ROUND
+            app_state["timer"]["discussion_deadline_ms"] = None
+            app_state["game"]["phase"] = PHASE_POST_ROUND
             add_log("Фаза: послераунд (обсуждение ответа)")
             await emit_state_update()
             await _emit_current_question_to_admins()
@@ -791,20 +791,20 @@ async def admin_score(sid, data):
             # We need an explicit flag here; we cannot infer it later from part_index alone
             # (wrong answers in parts 1/2 must NOT advance).
             round_ctx["advance_next_part"] = True
-            game_state["round"] = round_ctx
-            game_state["discussion_deadline_ms"] = None
-            game_state["phase"] = PHASE_POST_ROUND
+            app_state["game"]["round"] = round_ctx
+            app_state["timer"]["discussion_deadline_ms"] = None
+            app_state["game"]["phase"] = PHASE_POST_ROUND
             add_log(f"Верно (часть {part_index + 1}/{BLITZ_PARTS}). Фаза: послераунд")
             await emit_state_update()
             await _emit_current_question_to_admins()
             return
 
         # Last part correct -> Znatoki +1
-        game_state["score"]["znatoki"] += 1
+        app_state["game"]["score"]["znatoki"] += 1
         add_log("Все ответы верны. Очко Знатокам!")
         await sio.emit("play_sound", {"sound": random.choice(["yes1", "yes2"])})
-        game_state["discussion_deadline_ms"] = None
-        game_state["phase"] = PHASE_POST_ROUND
+        app_state["timer"]["discussion_deadline_ms"] = None
+        app_state["game"]["phase"] = PHASE_POST_ROUND
         add_log("Фаза: послераунд (обсуждение ответа)")
         await emit_state_update()
         await _emit_current_question_to_admins()
@@ -812,18 +812,18 @@ async def admin_score(sid, data):
 
     # Normal scoring
     if winner == 'znatoki':
-        game_state["score"]["znatoki"] += 1
+        app_state["game"]["score"]["znatoki"] += 1
         add_log("Очко Знатокам!")
         await sio.emit("play_sound", {"sound": random.choice(["yes1", "yes2"])})
     elif winner == 'tv':
-        game_state["score"]["tv"] += 1
+        app_state["game"]["score"]["tv"] += 1
         add_log("Очко Телезрителям!")
         await sio.emit("play_sound", {"sound": random.choice(["no1", "no2"])})
     else:
         return
 
-    game_state["discussion_deadline_ms"] = None
-    game_state["phase"] = PHASE_POST_ROUND
+    app_state["timer"]["discussion_deadline_ms"] = None
+    app_state["game"]["phase"] = PHASE_POST_ROUND
     add_log("Фаза: послераунд (обсуждение ответа)")
     await emit_state_update()
     await _emit_current_question_to_admins()
@@ -839,44 +839,44 @@ async def admin_end_round(sid, data=None):
     """
     if not await require_admin(sid):
         return
-    if game_state.get("phase") != PHASE_POST_ROUND:
+    if app_state["game"]["phase"] != PHASE_POST_ROUND:
         await sio.emit(
             "admin_notification",
-            {"type": "warning", "message": f"Нельзя завершить раунд в фазе {game_state.get('phase')}"},
+            {"type": "warning", "message": f"Нельзя завершить раунд в фазе {app_state['game']['phase']}"},
             to=sid,
         )
         return
 
     # Blitz intermediate part: advance to next part instead of ending the round.
-    round_ctx = game_state.get("round") or {}
+    round_ctx = app_state["game"]["round"] or {}
     kind = round_ctx.get("kind", "normal")
     if kind in ("blitz", "superblitz") and round_ctx.get("advance_next_part") is True:
         part_index = int(round_ctx.get("part_index", 0))
         next_part_index = part_index + 1
         # Hide shared media and drop media tokens (bound to current part).
-        game_state["shared_media"] = None
+        app_state["presentation"]["shared_media"] = None
         _clear_all_media_tokens()
-        game_state["discussion_deadline_ms"] = None
+        app_state["timer"]["discussion_deadline_ms"] = None
 
         round_ctx["part_index"] = next_part_index
         round_ctx.pop("advance_next_part", None)
-        game_state["round"] = round_ctx
-        game_state["phase"] = PHASE_QUESTION_READING
+        app_state["game"]["round"] = round_ctx
+        app_state["game"]["phase"] = PHASE_QUESTION_READING
         add_log(f"Переходим к части {next_part_index + 1}/{BLITZ_PARTS}. Фаза: зачитывание вопроса")
         await emit_state_update()
         await _emit_current_question_to_admins()
         return
 
     # Hide shared media and drop media tokens (they are tied to the round context).
-    game_state["shared_media"] = None
+    app_state["presentation"]["shared_media"] = None
     _clear_all_media_tokens()
 
     # Clear timers and round context.
-    game_state["discussion_deadline_ms"] = None
-    game_state["round"] = None
+    app_state["timer"]["discussion_deadline_ms"] = None
+    app_state["game"]["round"] = None
 
     # Phase transition.
-    game_state["phase"] = PHASE_PRE_ROUND
+    app_state["game"]["phase"] = PHASE_PRE_ROUND
     add_log("Раунд завершён. Фаза: ожидание следующего вращения")
 
     # Gong at the end of post-round (same for all clients).
@@ -894,12 +894,12 @@ async def admin_resolve_media(sid, data):
     if not await require_admin(sid):
         return {"ok": False, "error": "not_admin"}
 
-    phase = game_state.get("phase")
+    phase = app_state["game"]["phase"]
     if phase not in (PHASE_QUESTION_READING, PHASE_DISCUSSION, PHASE_TEAM_ANSWER, PHASE_POST_ROUND):
         return {"ok": False, "error": f"bad_phase:{phase}"}
-    if game_state.get("is_spinning"):
+    if app_state["wheel"]["is_spinning"]:
         return {"ok": False, "error": "spinning"}
-    if not game_state.get("round"):
+    if not app_state["game"]["round"]:
         return {"ok": False, "error": "no_round"}
 
     media_type = (data.get("media_type") or "").strip().lower()
@@ -930,12 +930,12 @@ async def admin_share_media(sid, data):
     """Share resolved media_id to all clients (rendered instead of the table)."""
     if not await require_admin(sid):
         return
-    phase = game_state.get("phase")
+    phase = app_state["game"]["phase"]
     if phase not in (PHASE_QUESTION_READING, PHASE_DISCUSSION, PHASE_TEAM_ANSWER, PHASE_POST_ROUND):
         return
-    if game_state.get("is_spinning"):
+    if app_state["wheel"]["is_spinning"]:
         return
-    if not game_state.get("round"):
+    if not app_state["game"]["round"]:
         return
 
     media_id = (data.get("media_id") or "").strip()
@@ -960,7 +960,7 @@ async def admin_share_media(sid, data):
         )
         return
 
-    game_state["shared_media"] = {"type": info.get("type", "image"), "media_id": media_id}
+    app_state["presentation"]["shared_media"] = {"type": info.get("type", "image"), "media_id": media_id}
     add_log("Медиа показано игрокам")
     await emit_state_update()
 
@@ -970,7 +970,7 @@ async def admin_hide_media(sid, data=None):
     """Hide shared media for all clients."""
     if not await require_admin(sid):
         return
-    game_state["shared_media"] = None
+    app_state["presentation"]["shared_media"] = None
     add_log("Медиа скрыто")
     await emit_state_update()
 
@@ -980,13 +980,13 @@ async def admin_start_discussion(sid, data=None):
     """Переход QUESTION_READING -> DISCUSSION."""
     if not await require_admin(sid):
         return
-    if game_state.get("phase") != PHASE_QUESTION_READING:
+    if app_state["game"]["phase"] != PHASE_QUESTION_READING:
         return
-    game_state["phase"] = PHASE_DISCUSSION
-    round_ctx = game_state.get("round") or {}
+    app_state["game"]["phase"] = PHASE_DISCUSSION
+    round_ctx = app_state["game"]["round"] or {}
     kind = round_ctx.get("kind", "normal")
     seconds = BLITZ_DISCUSSION_SECONDS if kind in ("blitz", "superblitz") else NORMAL_DISCUSSION_SECONDS
-    game_state["discussion_deadline_ms"] = int(time.time() * 1000) + seconds * 1000
+    app_state["timer"]["discussion_deadline_ms"] = int(time.time() * 1000) + seconds * 1000
     add_log("Фаза: обсуждение")
     await emit_state_update()
 
@@ -996,12 +996,12 @@ async def admin_team_answer(sid, data=None):
     """Переход DISCUSSION -> TEAM_ANSWER."""
     if not await require_admin(sid):
         return
-    if game_state.get("phase") != PHASE_DISCUSSION:
+    if app_state["game"]["phase"] != PHASE_DISCUSSION:
         return
     # Stop discussion timer and play signal for everyone
-    game_state["discussion_deadline_ms"] = None
+    app_state["timer"]["discussion_deadline_ms"] = None
     await sio.emit("play_sound", {"sound": "sig1"})
-    game_state["phase"] = PHASE_TEAM_ANSWER
+    app_state["game"]["phase"] = PHASE_TEAM_ANSWER
     add_log("Фаза: ответ команды")
     await emit_state_update()
 
@@ -1014,14 +1014,14 @@ async def admin_ten_seconds(sid, data=None):
     """
     if not await require_admin(sid):
         return
-    if game_state.get("phase") != PHASE_DISCUSSION:
+    if app_state["game"]["phase"] != PHASE_DISCUSSION:
         await sio.emit(
             "admin_notification",
             {"type": "warning", "message": f"Эта команда доступна только в фазе {PHASE_DISCUSSION}"},
             to=sid,
         )
         return
-    game_state["discussion_deadline_ms"] = int(time.time() * 1000) + TEN_SECONDS * 1000
+    app_state["timer"]["discussion_deadline_ms"] = int(time.time() * 1000) + TEN_SECONDS * 1000
     await sio.emit("play_sound", {"sound": "sig2"})
     add_log("Сигнал: 10 секунд (таймер сброшен на 10)")
     await emit_state_update()
@@ -1101,7 +1101,7 @@ async def admin_reset(sid):
     if not await require_admin(sid):
         return
 
-    reset_game_state(game_state)
+    reset_app_state(app_state)
     _clear_all_media_tokens()
     add_log("Игра сброшена")
     await emit_state_update()
