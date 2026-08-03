@@ -18,7 +18,7 @@
 
 ### P0: техническая прочность
 
-2. Frontend decomposition
+2. Frontend decomposition — `В работе`, branch: `task/frontend-decomposition`, task: `docs/tasks/0004-frontend-decomposition.md`
    - `App.jsx` слишком большой и содержит socket wiring, state logic, admin UI и rendering.
    - Разнести на hooks/components: socket session, admin question panel, admin controls, shared media renderer.
    - Это сильно упростит мобильную версию и тестирование.

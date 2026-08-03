@@ -27,6 +27,26 @@
 
 The branch has clean-install and container checks, and all three GitHub Actions jobs pass remotely.
 
+## Active task: frontend decomposition
+
+The task is documented in `docs/tasks/0004-frontend-decomposition.md` on branch `task/frontend-decomposition`. Local implementation and automated checks are complete; remote CI and focused browser regression acceptance remain.
+
+Implemented:
+
+- reduced `frontend/src/App.jsx` from 899 to 156 lines, leaving phase routing and layout at the top level;
+- centralized backend/media URLs and the Socket.IO singleton in `frontend/src/socket.js`;
+- moved session state/event wiring, discussion timing, and sound-event bridging into dedicated hooks;
+- extracted admin question/media, admin controls, shared media, header, and notification components;
+- preserved existing Socket.IO event names, payloads, storage keys, confirmations, and state ownership.
+
+Local verification:
+
+- clean frontend install and production build pass;
+- all 71 backend tests pass;
+- Compose validation passes without warnings.
+
+Acceptance still required: remote CI plus a two-browser smoke covering login/session restore, normal and blitz controls, discussion timing/sounds, media preview/share/hide, moderation/logout, and reset during spin.
+
 ## Completed task: Build and CI
 
 The task is documented in `docs/tasks/0003-build-ci.md` on branch `task/build-ci`. Local clean-environment checks, container checks, and the remote backend/frontend/Compose CI jobs all pass.
@@ -112,9 +132,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Take frontend decomposition next, splitting socket session, admin question panel, admin controls, and shared media rendering out of `App.jsx`.
-2. Before expanding media, take the dependency/toolchain refresh recorded in the roadmap.
-3. Before public deployment, take the dedicated deployment/security task.
+1. Push `task/frontend-decomposition` and verify all three CI jobs.
+2. Run the focused two-browser regression smoke described in `docs/tasks/0004-frontend-decomposition.md`.
+3. If accepted, close task 0004, merge it into `web`, then take the dependency/toolchain refresh before expanding media.
 
 ## Resume checklist
 
@@ -127,7 +147,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. `docs/tasks/0003-build-ci.md` for the latest completed infrastructure work and `docs/tasks/0002-game-transitions.md` for the latest completed game-state work;
+4. `docs/tasks/0004-frontend-decomposition.md` for the active task, then tasks 0003 and 0002 for the latest completed infrastructure and game-state work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:

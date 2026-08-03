@@ -23,12 +23,16 @@ FastAPI + python-socketio (backend/main.py)
 
 ### Frontend
 
-- `frontend/src/App.jsx` owns the socket connection, session restore, shared state, discussion timer, media preview, notifications, and most admin UI.
-- `frontend/src/components/` contains the table, login, waiting room, score, and log views.
-- `frontend/src/hooks/useGameSound.js` manages the wheel loop, fade-out, and effect sounds.
+- `frontend/src/App.jsx` owns only top-level phase routing and the main page layout.
+- `frontend/src/socket.js` owns the single Socket.IO client plus backend/media URL construction.
+- `frontend/src/hooks/useGameSession.js` owns session restore, shared server state, players, pack/admin data, notifications, logout, and non-audio socket listeners.
+- `frontend/src/hooks/useDiscussionTimer.js` owns the admin countdown and one-shot local ten-second notification; `useSocketSoundEvents.js` bridges sound events to `useGameSound.js`.
+- `frontend/src/components/` contains the admin question/media panel, admin controls, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
 - Development connects Socket.IO and media requests directly to `http://localhost:8000`. A production build uses the current origin (`/`).
 
 The frontend receives the shared game snapshot through `state_update`. Admin-only data uses separate events such as `players_update`, `pack_info`, and `admin_question`.
+
+UI components may emit existing user actions through the shared socket, but they do not create connections or own session restoration. The decomposition preserves the existing Socket.IO event names, payloads, and flat `state_update` contract.
 
 ### Backend
 

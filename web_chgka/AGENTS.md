@@ -49,6 +49,7 @@ Development startup is documented in `README.md`. The backend requires `QUESTION
 - Internal runtime state is `AppState`, split into `game`, `wheel`, `timer`, `presentation`, `pack`, and `logs`.
 - `public_game_state()` is the compatibility boundary for the existing flat `state_update` Socket.IO payload. Change that wire contract only as an explicit migration.
 - Question text and answers are admin-only and travel separately through `admin_question`.
+- Keep the frontend Socket.IO singleton and backend URL construction in `frontend/src/socket.js`. Session event wiring belongs in `useGameSession`; do not create additional socket connections inside UI components.
 - Keep Socket.IO handlers focused on authorization, input validation, transition invocation, and emits. Put game rules in testable synchronous functions/services, not directly in handlers.
 - Treat spin completion, reset, scoring, reconnect, and repeated admin actions as concurrent scenarios even when the UI normally serializes them.
 - Question packs contain exactly 13 sector directories. Preserve parser validation for normal, blitz, superblitz, section order, and media usage.

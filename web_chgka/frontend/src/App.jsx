@@ -1,588 +1,69 @@
-import { useState, useEffect, useRef } from 'react'
-import io from 'socket.io-client'
-import { GameTable } from './components/GameTable'
-import { ScoreBoard } from './components/ScoreBoard'
-import { GameLog } from './components/GameLog'
-import { LoginScreen } from './components/LoginScreen'
-import { WaitingRoom } from './components/WaitingRoom'
-import { useGameSound } from './hooks/useGameSound'
-
-const backendOrigin = import.meta.env.DEV ? 'http://localhost:8000' : '';
-const mediaUrl = (mediaId) => `${backendOrigin}/media/${encodeURIComponent(mediaId)}`;
-
-const socket = io(backendOrigin || '/', {
-  transports: ['websocket']
-})
-
-const ADMIN_TOKEN_KEY = 'chgka_admin_token';
-const PLAYER_TOKEN_KEY = 'chgka_player_token';
+import { GameTable } from './components/GameTable';
+import { ScoreBoard } from './components/ScoreBoard';
+import { LoginScreen } from './components/LoginScreen';
+import { WaitingRoom } from './components/WaitingRoom';
+import { AdminControls } from './components/AdminControls';
+import { AdminQuestionPanel } from './components/AdminQuestionPanel';
+import { NotificationsPanel } from './components/NotificationsPanel';
+import { SharedMediaRenderer } from './components/SharedMediaRenderer';
+import { UserHeader } from './components/UserHeader';
+import { useDiscussionTimer } from './hooks/useDiscussionTimer';
+import { useGameSession } from './hooks/useGameSession';
+import { useGameSound } from './hooks/useGameSound';
+import { useSocketSoundEvents } from './hooks/useSocketSoundEvents';
+import { socket } from './socket';
 
 function App() {
-  const [gameState, setGameState] = useState(null)
-  const [gameSettings, setGameSettings] = useState({ volume: 1.0 })
-  const [players, setPlayers] = useState([]) // Список игроков (только для админа)
-  const [myRole, setMyRole] = useState('player')
-  const [myName, setMyName] = useState('');
-  const [packInfo, setPackInfo] = useState(null); // Только для админа: данные пака вопросов
-  const [adminQuestion, setAdminQuestion] = useState(null); // Только для админа: текущий вопрос (текст/ответ/коммент/источники)
-  const [isConnected, setIsConnected] = useState(socket.connected)
-  const [hasJoined, setHasJoined] = useState(false) // Флаг, что игрок ввел имя
-  const [isPending, setIsPending] = useState(false) // Ожидает одобрения админа
-  const [notifications, setNotifications] = useState([]) // Уведомления для админа
-  
-  const { playSound, stopAllSounds, masterVolume } = useGameSound(gameState, gameSettings?.volume);
-  const [discussionRemaining, setDiscussionRemaining] = useState(null); // seconds (can be negative)
-  const tenSecNotifiedRef = useRef(false);
-  const lastDiscussionRemainingRef = useRef(null);
+  const {
+    gameState,
+    gameSettings,
+    players,
+    myRole,
+    myName,
+    packInfo,
+    adminQuestion,
+    isConnected,
+    hasJoined,
+    isPending,
+    notifications,
+    addNotification,
+    dismissNotification,
+    logout,
+  } = useGameSession();
 
-  const handleVolumeChange = (e) => {
-      const vol = parseFloat(e.target.value);
-      // Отправляем на сервер
-      socket.emit('admin_volume', { volume: vol });
-  };
+  const { playSound, stopAllSounds } = useGameSound(gameState, gameSettings?.volume);
+  useSocketSoundEvents(playSound, stopAllSounds);
 
-  const authenticateAdmin = (password) => {
-    socket.emit('authenticate_admin', { password });
-  };
-
-  useEffect(() => {
-    window.authenticateAdmin = authenticateAdmin;
-    return () => { delete window.authenticateAdmin; };
-  }, []);
-
-  useEffect(() => {
-    function onConnect() { 
-      setIsConnected(true);
-      
-      // Восстанавливаем админа (если есть токен)
-      const savedToken = localStorage.getItem(ADMIN_TOKEN_KEY);
-      if (savedToken) {
-        socket.emit('restore_session', { token: savedToken });
-      }
-      
-      // Восстанавливаем игрока (если есть токен)
-      const savedPlayerToken = localStorage.getItem(PLAYER_TOKEN_KEY);
-      if (savedPlayerToken) {
-        socket.emit('restore_session', { player_token: savedPlayerToken });
-      }
-    }
-    
-    function onDisconnect() { 
-      setIsConnected(false)
-      setMyRole('player')
-      setMyName('')
-    }
-    
-    function onStateUpdate(newState) { 
-      setGameState(newState);
-      // hasJoined теперь управляется через join_success / auth_restored
-    }
-
-    function onPlayersUpdate(data) {
-        if (data && data.players) {
-            setPlayers(data.players);
-        }
-    }
-
-    function onRoleUpdate(data) {
-      if (data && data.role) {
-        setMyRole(data.role);
-      }
-    }
-    
-    function onPackInfo(data) {
-      if (data && data.pack) {
-        setPackInfo(data.pack);
-      }
-    }
-
-    function onAdminQuestion(data) {
-      setAdminQuestion(data || null);
-    }
-
-    function onSettingsUpdate(newSettings) {
-        if (newSettings) {
-            setGameSettings(prev => ({ ...prev, ...newSettings }));
-        }
-    }
-    
-    function onPlaySound(data) { 
-        // Prefer explicit sound (server-picked) to keep clients in sync.
-        if (data.sound) playSound(data.sound);
-        else if (data.category) playSound(data.category);
-    }
-
-    function onStopSound() {
-        stopAllSounds();
-    }
-
-    function onAuthSuccess(data) {
-      const token = data.token;
-      localStorage.setItem(ADMIN_TOKEN_KEY, token);
-    }
-
-    function onAuthFailed(data) {
-      console.error('[Auth] Failed:', data.message || 'Неверный пароль');
-      localStorage.removeItem(ADMIN_TOKEN_KEY);
-    }
-
-    function onAuthRestored() {
-      console.log('[Auth] Session restored successfully');
-    }
-
-    function onJoinSuccess(data) {
-      if (data.token) {
-          localStorage.setItem(PLAYER_TOKEN_KEY, data.token);
-      }
-      if (data.name) {
-          setMyName(data.name);
-      }
-      setIsPending(false);
-      setHasJoined(true);
-    }
-
-    function onJoinPending(data) {
-      // Игрок ожидает одобрения админа
-      if (data.token) {
-          localStorage.setItem(PLAYER_TOKEN_KEY, data.token);
-      }
-      if (data.name) {
-          setMyName(data.name);
-      }
-      setIsPending(true);
-      setHasJoined(true);
-    }
-
-    function onKicked(data) {
-      // Сначала удаляем токен (до alert, который блокирует)
-      localStorage.removeItem(PLAYER_TOKEN_KEY);
-      setGameState(null);
-      setMyRole('player');
-      setMyName('');
-      setHasJoined(false);
-      setIsPending(false);
-      
-      // Показываем сообщение после сброса состояния
-      alert(data.message || 'Вы были отключены');
-      
-      // Принудительно переподключаемся для чистого состояния
-      socket.disconnect();
-      socket.connect();
-    }
-
-    function onAdminNotification(data) {
-      // Добавляем уведомление для админа
-      const id = Date.now();
-      setNotifications(prev => [...prev, { id, ...data }]);
-      // Автоматически убираем через 5 секунд
-      setTimeout(() => {
-        setNotifications(prev => prev.filter(n => n.id !== id));
-      }, 5000);
-    }
-
-    socket.on('connect', onConnect)
-    socket.on('disconnect', onDisconnect)
-    socket.on('state_update', onStateUpdate)
-    socket.on('role_update', onRoleUpdate)
-    socket.on('settings_update', onSettingsUpdate)
-    socket.on('players_update', onPlayersUpdate)
-    socket.on('play_sound', onPlaySound)
-    socket.on('stop_sound', onStopSound)
-    socket.on('auth_success', onAuthSuccess)
-    socket.on('auth_failed', onAuthFailed)
-    socket.on('auth_restored', onAuthRestored)
-    socket.on('join_success', onJoinSuccess)
-    socket.on('join_pending', onJoinPending)
-    socket.on('kicked', onKicked)
-    socket.on('admin_notification', onAdminNotification)
-    socket.on('pack_info', onPackInfo)
-    socket.on('admin_question', onAdminQuestion)
-
-    return () => {
-      socket.off('connect', onConnect)
-      socket.off('disconnect', onDisconnect)
-      socket.off('state_update', onStateUpdate)
-      socket.off('role_update', onRoleUpdate)
-      socket.off('settings_update', onSettingsUpdate)
-      socket.off('players_update', onPlayersUpdate)
-      socket.off('play_sound', onPlaySound)
-      socket.off('stop_sound', onStopSound)
-      socket.off('auth_success', onAuthSuccess)
-      socket.off('auth_failed', onAuthFailed)
-      socket.off('auth_restored', onAuthRestored)
-      socket.off('join_success', onJoinSuccess)
-      socket.off('join_pending', onJoinPending)
-      socket.off('kicked', onKicked)
-      socket.off('admin_notification', onAdminNotification)
-      socket.off('pack_info', onPackInfo)
-      socket.off('admin_question', onAdminQuestion)
-    }
-  }, []) 
-
-  const handleJoinSuccess = () => {
-     // Эта функция вызывалась из LoginScreen, но теперь основная логика в socket.on('join_success')
-     // Оставим пустым или удалим пропс
-  };
-  
-  const handleLogout = () => {
-      if (confirm('Вы действительно хотите выйти?')) {
-          socket.emit('leave_game');
-          
-          localStorage.removeItem(ADMIN_TOKEN_KEY);
-          localStorage.removeItem(PLAYER_TOKEN_KEY);
-          socket.disconnect();
-          
-          // Сбрасываем стейт
-          setGameState(null);
-          setMyRole('player');
-          setMyName('');
-          setHasJoined(false);
-          setPlayers([]);
-          setIsConnected(false);
-          
-          // Подключаемся заново
-          socket.connect();
-      }
-  };
-
-  const handleSpinRandom = () => socket.emit('admin_spin')
-  
-  const handleSpinForced = (sectorId) => {
-      if (confirm(`Крутим на сектор ${sectorId}?`)) {
-          socket.emit('admin_spin', { force_sector: sectorId })
-      }
-  }
-
-  const handleResetClick = () => {
-    if (confirm('Точно сбросить игру?')) socket.emit('admin_reset')
-  }
-  
-  const handleSilenceClick = () => {
-      socket.emit('admin_stop_sounds');
-      stopAllSounds(); // Сразу останавливаем у себя
-  }
-
-  const handleScoreZnatoki = () => socket.emit('admin_score', { winner: 'znatoki' })
-  const handleScoreTV = () => socket.emit('admin_score', { winner: 'tv' })
-  const handleStartDiscussion = () => socket.emit('admin_start_discussion')
-  const handleTeamAnswer = () => socket.emit('admin_team_answer')
-  const handleEndRound = () => socket.emit('admin_end_round')
-  const handleTenSeconds = () => {
-    // Don't auto-trigger "10 seconds" notification again for this discussion
-    tenSecNotifiedRef.current = true;
-    socket.emit('admin_ten_seconds')
-  }
-  
-  const handleKickPlayer = (playerName) => {
-      if (confirm(`Отключить игрока "${playerName}"?`)) {
-          socket.emit('admin_kick', { name: playerName });
-      }
-  }
-  
-  const handleApprovePlayer = (playerName) => {
-      socket.emit('admin_approve', { name: playerName });
-  }
-  
-  const dismissNotification = (id) => {
-      setNotifications(prev => prev.filter(n => n.id !== id));
-  }
-
-  const usedQuestions = gameState?.used_questions || [];
   const phase = gameState?.phase || 'LOGIN';
-  const isPreRound = phase === 'PRE_ROUND';
-  const isQuestionReading = phase === 'QUESTION_READING';
-  const isDiscussion = phase === 'DISCUSSION';
-  const isTeamAnswer = phase === 'TEAM_ANSWER';
-  const isPostRound = phase === 'POST_ROUND';
-  const round = gameState?.round || null;
-  const roundKind = round?.kind || 'normal';
-  const isBlitzRound = roundKind === 'blitz' || roundKind === 'superblitz';
-  const partIndex = typeof round?.part_index === 'number' ? round.part_index : null; // 0..2
-  const partLabel = isBlitzRound && partIndex !== null ? `${partIndex + 1}/3` : null;
-  const blitzHasNextPart = isBlitzRound && round?.advance_next_part === true;
   const isAdmin = myRole === 'admin';
+  const isPreRound = phase === 'PRE_ROUND';
+  const isDiscussion = phase === 'DISCUSSION';
+  const round = gameState?.round || null;
   const showTableForAdmin = isPreRound || !!gameState?.is_spinning;
   const sharedMedia = gameState?.shared_media || null;
+  const questionPanelKey = `${round?.sector ?? ''}:${round?.kind ?? ''}:${round?.part_index ?? ''}`;
 
-  const [adminMediaPreview, setAdminMediaPreview] = useState(null); // { media_id, type, url, section, path }
+  const { discussionRemaining, markTenSecondsNotified } = useDiscussionTimer({
+    isAdmin,
+    isDiscussion,
+    deadlineMs: gameState?.discussion_deadline_ms,
+    addNotification,
+    playSound,
+  });
 
-  const warnAnswerShare = () => {
-    if (!adminMediaPreview) return true;
-    if (adminMediaPreview.section !== 'answer') return true;
-    if (!(isQuestionReading || isDiscussion)) return true;
-    return confirm('Это медиа из секции "Ответ". Точно показать игрокам прямо сейчас?');
-  };
-
-  // Drop preview when round changes or when admin returns to table/spin.
-  const previewRoundKeyRef = useRef(null);
-  useEffect(() => {
-    if (!isAdmin) return;
-    if (showTableForAdmin) {
-      setAdminMediaPreview(null);
-      previewRoundKeyRef.current = null;
-      return;
-    }
-    const key = `${round?.sector ?? ''}:${round?.kind ?? ''}:${round?.part_index ?? ''}`;
-    if (previewRoundKeyRef.current !== null && previewRoundKeyRef.current !== key) {
-      setAdminMediaPreview(null);
-    }
-    previewRoundKeyRef.current = key;
-  }, [isAdmin, showTableForAdmin, round?.sector, round?.kind, round?.part_index]);
-
-  // Discussion countdown (admin-only). Can go negative.
-  useEffect(() => {
-    if (myRole !== 'admin') return;
-    if (!isDiscussion) {
-      setDiscussionRemaining(null);
-      tenSecNotifiedRef.current = false;
-      lastDiscussionRemainingRef.current = null;
-      return;
-    }
-    tenSecNotifiedRef.current = false;
-    lastDiscussionRemainingRef.current = null;
-
-    const tick = () => {
-      const deadline = gameState?.discussion_deadline_ms;
-      if (!deadline) {
-        setDiscussionRemaining(null);
-        return;
-      }
-      const raw = (deadline - Date.now()) / 1000;
-      const remaining = raw >= 0 ? Math.ceil(raw) : Math.floor(raw);
-      setDiscussionRemaining(remaining);
-
-      const prev = lastDiscussionRemainingRef.current;
-      lastDiscussionRemainingRef.current = remaining;
-
-      // Trigger once when we cross from >10 to <=10 (robust to lag / skipped exact 10).
-      if (!tenSecNotifiedRef.current && prev !== null && prev > 10 && remaining <= 10) {
-        tenSecNotifiedRef.current = true;
-        // Admin-only notification + local "beep" (sig2)
-        const id = Date.now();
-        setNotifications(prev => [...prev, { id, type: 'warning', message: 'Осталось 10 секунд' }]);
-        setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 5000);
-        playSound('sig2');
-      }
-    };
-
-    tick();
-    const interval = setInterval(tick, 250);
-    return () => clearInterval(interval);
-  }, [myRole, isDiscussion, gameState?.discussion_deadline_ms]);
-
-  // --- КОМПОНЕНТ ШАПКИ ПОЛЬЗОВАТЕЛЯ ---
-  const UserHeader = () => (
-      <div className="absolute top-4 right-4 flex items-center gap-4">
-        {myName && (
-            <div className="text-slate-400 text-sm font-bold">
-                {myRole === 'admin' ? <span className="text-yellow-500">Ведущий</span> : myName}
-            </div>
-        )}
-        <button 
-            onClick={handleLogout}
-            className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 py-2 px-3 rounded font-bold uppercase tracking-wider transition-colors"
-        >
-            Выход
-        </button>
-      </div>
+  const userHeader = <UserHeader name={myName} role={myRole} onLogout={logout} />;
+  const notificationsPanel = (
+    <NotificationsPanel notifications={notifications} onDismiss={dismissNotification} />
   );
 
-  const AdminQuestionPanel = () => {
-    if (!isAdmin) return null;
-    if (!adminQuestion) return null;
-    // Show question card when the table is hidden for admin (reading/discussion/answer)
-    if (showTableForAdmin) return null;
-
-    const isBlitz = adminQuestion.kind === 'blitz' || adminQuestion.kind === 'superblitz';
-    const header = isBlitz
-      ? `${adminQuestion.kind.toUpperCase()} • Сектор ${adminQuestion.sector} • Часть ${(adminQuestion.part_index ?? 0) + 1}/3`
-      : `Сектор ${adminQuestion.sector}`;
-
-    const renderHtml = (html, section) => {
-      if (!html) return null;
-      const onClick = (e) => {
-        const el = e.target?.closest?.('.media-placeholder[data-media-type][data-media-path]');
-        if (!el) return;
-        const media_type = el.getAttribute('data-media-type');
-        const media_path = el.getAttribute('data-media-path');
-        if (!media_type || !media_path) return;
-        if (media_type !== 'image') {
-          const id = Date.now();
-          setNotifications(prev => [...prev, { id, type: 'warning', message: `Пока поддерживаем только картинки (media_type=${media_type})` }]);
-          setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 5000);
-          return;
-        }
-        socket.emit('admin_resolve_media', { media_type, media_path }, (resp) => {
-          if (!resp || !resp.ok) {
-            const id = Date.now();
-            setNotifications(prev => [...prev, { id, type: 'warning', message: `Не удалось открыть медиа: ${resp?.error || 'unknown'}` }]);
-            setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 5000);
-            return;
-          }
-          setAdminMediaPreview({
-            media_id: resp.media_id,
-            type: resp.type,
-            url: mediaUrl(resp.media_id),
-            section,
-            path: media_path,
-          });
-        });
-      };
-      return (
-        <div
-          className="text-sm text-slate-200 [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_.media-placeholder]:inline-block [&_.media-placeholder]:w-10 [&_.media-placeholder]:h-6 [&_.media-placeholder]:rounded [&_.media-placeholder]:bg-slate-700 [&_.media-placeholder]:border [&_.media-placeholder]:border-slate-500 [&_.media-placeholder]:cursor-pointer [&_.media-placeholder]:align-middle [&_.media-placeholder:hover]:bg-slate-600"
-          onClick={onClick}
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-      );
-    };
-
-    const Section = ({ title, children, highlight, accentClass }) => (
-      <div
-        className={[
-          "rounded-lg border p-3",
-          "bg-slate-950/40 border-slate-700",
-          highlight ? `ring-2 ${accentClass} border-transparent bg-slate-900/60` : "",
-        ].join(" ")}
-      >
-        <div className="text-xs text-slate-400 uppercase font-bold tracking-widest mb-2">{title}</div>
-        {children}
-      </div>
-    );
-
-    const highlightQuestion = phase === 'QUESTION_READING' || phase === 'DISCUSSION';
-    const highlightAnswer = phase === 'TEAM_ANSWER' || phase === 'POST_ROUND';
-
-    return (
-      <div className="w-full bg-slate-800/70 border border-slate-700 rounded-xl p-4 mb-4">
-        <div className="text-xs text-slate-400 uppercase font-bold tracking-widest mb-2">{header}</div>
-        {isBlitz && adminQuestion.round_title && (
-          <div className="text-sm text-slate-300 mb-3">
-            <span className="text-slate-500">Блиц:</span> {adminQuestion.round_title}
-          </div>
-        )}
-        <div className="text-lg font-bold text-white mb-2">{adminQuestion.title}</div>
-        {adminQuestion.author && <div className="text-xs text-slate-500 mb-3">Автор: {adminQuestion.author}</div>}
-
-        <div className="flex flex-col gap-3">
-          {isBlitz && adminQuestion.intro_html && (
-            <Section title="Вступление">{renderHtml(adminQuestion.intro_html, 'intro')}</Section>
-          )}
-
-          <Section title="Вопрос" highlight={highlightQuestion} accentClass="ring-yellow-500/60">
-            {renderHtml(adminQuestion.question_html, 'question')}
-          </Section>
-
-          <Section title="Ответ" highlight={highlightAnswer} accentClass="ring-green-500/60">
-            {renderHtml(adminQuestion.answer_html, 'answer')}
-          </Section>
-
-          {adminQuestion.comment_html && (
-            <Section title="Комментарий">{renderHtml(adminQuestion.comment_html, 'comment')}</Section>
-          )}
-
-          {adminQuestion.sources_html && (
-            <Section title="Источники">{renderHtml(adminQuestion.sources_html, 'sources')}</Section>
-          )}
-        </div>
-
-        {/* Media preview + share controls */}
-        <div className="mt-4 rounded-lg border border-slate-700 bg-slate-950/30 p-3">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <div className="text-xs text-slate-400 uppercase font-bold tracking-widest">Медиа</div>
-            <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">
-              Шарим: {sharedMedia ? 'да' : 'нет'}
-            </div>
-          </div>
-
-          {adminMediaPreview ? (
-            <div className="flex flex-col gap-3">
-              <div className="text-[11px] text-slate-400">
-                Preview: <span className="text-slate-200">{adminMediaPreview.path}</span>
-                <span className="text-slate-600"> • </span>
-                <span className="text-slate-500">секция:</span> <span className="text-slate-200">{adminMediaPreview.section}</span>
-              </div>
-              {adminMediaPreview.type === 'image' && (
-                <div className="rounded border border-slate-700 bg-slate-900/40 p-2 flex justify-center">
-                  <img
-                    src={adminMediaPreview.url}
-                    alt={adminMediaPreview.path}
-                    className="max-h-[320px] w-auto object-contain"
-                  />
-                </div>
-              )}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    if (!warnAnswerShare()) return;
-                    socket.emit('admin_share_media', { media_id: adminMediaPreview.media_id });
-                  }}
-                  className="flex-1 bg-blue-700 hover:bg-blue-600 text-white py-2 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
-                >
-                  Показать игрокам
-                </button>
-                <button
-                  onClick={() => socket.emit('admin_hide_media')}
-                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 py-2 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
-                >
-                  Скрыть
-                </button>
-                <button
-                  onClick={() => setAdminMediaPreview(null)}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-400 py-2 px-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="text-xs text-slate-500">
-              Кликни по “плашке” медиа в тексте вопроса/ответа, чтобы открыть превью.
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  // --- КОМПОНЕНТ УВЕДОМЛЕНИЙ ---
-  const NotificationsPanel = () => (
-    notifications.length > 0 && (
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2">
-        {notifications.map(n => (
-          <div 
-            key={n.id}
-            className="bg-yellow-500 text-black px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-pulse"
-          >
-            <span className="font-bold">
-              {n.type === 'player_waiting'
-                ? `🔔 ${n.name} ожидает одобрения`
-                : (n.message || `🔔 ${n.type}`)}
-            </span>
-            <button 
-              onClick={() => dismissNotification(n.id)}
-              className="text-black/50 hover:text-black font-bold"
-            >
-              ✕
-            </button>
-          </div>
-        ))}
-      </div>
-    )
-  );
-
-  // --- УСЛОВНЫЙ РЕНДЕРИНГ ПО ФАЗЕ ---
-  
-  // Если игрок не залогинен — показываем форму входа
-  if (myRole !== 'admin' && !hasJoined) {
+  if (!isAdmin && !hasJoined) {
     return <LoginScreen socket={socket} gameState={gameState} />;
   }
-  
-  // Если игрок ожидает одобрения админа
-  if (myRole !== 'admin' && isPending) {
+
+  if (!isAdmin && isPending) {
     return (
       <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center relative">
-        <UserHeader />
+        {userHeader}
         <div className="text-center">
           <div className="text-6xl mb-6">⏳</div>
           <h1 className="text-3xl font-bold mb-4 text-yellow-500">Ожидание одобрения</h1>
@@ -592,23 +73,21 @@ function App() {
       </div>
     );
   }
-  
+
   if (phase === 'LOGIN') {
-    // Админ видит WaitingRoom
-    if (myRole === 'admin') {
+    if (isAdmin) {
       return (
         <>
-            <NotificationsPanel />
-            <UserHeader />
-            <WaitingRoom socket={socket} gameState={gameState} players={players} />
+          {notificationsPanel}
+          {userHeader}
+          <WaitingRoom socket={socket} gameState={gameState} players={players} />
         </>
       );
     }
-    
-    // Игрок присоединился, но игра еще не началась - показываем экран ожидания
+
     return (
       <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center relative">
-        <UserHeader />
+        {userHeader}
         <div className="text-center">
           <h1 className="text-4xl font-bold mb-4 text-yellow-500">Ожидание начала игры</h1>
           <p className="text-slate-400">Администратор запустит игру, когда все будут готовы</p>
@@ -617,283 +96,61 @@ function App() {
     );
   }
 
-  // Фаза PRE_ROUND и далее: показываем игру
   return (
     <div className="min-h-screen bg-slate-900 text-white p-4 flex flex-col lg:flex-row lg:items-start lg:justify-center gap-8 relative">
-      <NotificationsPanel />
-      <UserHeader />
-      
-      {/* --- ЛЕВАЯ КОЛОНКА: ИГРА --- */}
+      {notificationsPanel}
+      {userHeader}
+
       <div className="flex-1 flex flex-col items-center w-full max-w-3xl">
-          
-          {/* Шапка */}
-          <div className="w-full flex justify-between items-center mb-4">
-            <h1 className="text-xl font-bold text-slate-400 flex items-center gap-2">
-              CHGKA <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}/>
-            </h1>
-            {/* Индикатор фазы для админа */}
-            {myRole === 'admin' && (
-              <div className="text-xs text-slate-500 uppercase font-bold">
-                Phase: {phase}
-              </div>
-            )}
-          </div>
-
-          {/* Табло */}
-          <ScoreBoard score={gameState?.score} />
-
-          {/* Для ведущего: либо стол (только PRE_ROUND/вращение), либо карточка вопроса */}
-          {isAdmin && !showTableForAdmin ? (
-            <div className="w-full flex justify-center mb-4">
-              <div className="w-full">
-                <AdminQuestionPanel />
-              </div>
-            </div>
-          ) : (
-            <div className="w-full flex justify-center mb-4">
-              {sharedMedia && sharedMedia.type === 'image' ? (
-                <div className="w-full bg-slate-800/40 border border-slate-700 rounded-xl p-4 flex justify-center">
-                  <img
-                    src={mediaUrl(sharedMedia.media_id)}
-                    alt="Shared media"
-                    className="max-h-[520px] w-auto object-contain"
-                  />
-                </div>
-              ) : (
-                <GameTable
-                  gameState={gameState}
-                  isAdmin={isAdmin}
-                  questionTitles={packInfo?.question_titles || null}
-                />
-              )}
-            </div>
+        <div className="w-full flex justify-between items-center mb-4">
+          <h1 className="text-xl font-bold text-slate-400 flex items-center gap-2">
+            CHGKA
+            <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+          </h1>
+          {isAdmin && (
+            <div className="text-xs text-slate-500 uppercase font-bold">Phase: {phase}</div>
           )}
+        </div>
+
+        <ScoreBoard score={gameState?.score} />
+
+        {isAdmin && !showTableForAdmin ? (
+          <div className="w-full flex justify-center mb-4">
+            <div className="w-full">
+              <AdminQuestionPanel
+                key={questionPanelKey}
+                adminQuestion={adminQuestion}
+                phase={phase}
+                sharedMedia={sharedMedia}
+                addNotification={addNotification}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="w-full flex justify-center mb-4">
+            <SharedMediaRenderer media={sharedMedia}>
+              <GameTable
+                gameState={gameState}
+                isAdmin={isAdmin}
+                questionTitles={packInfo?.question_titles || null}
+              />
+            </SharedMediaRenderer>
+          </div>
+        )}
       </div>
 
-      {/* --- ПРАВАЯ КОЛОНКА: АДМИНКА (только для админов) --- */}
-      {myRole === 'admin' && (
-        <div className="w-full lg:w-[600px] flex flex-col gap-4">
-            
-            {/* Панель управления */}
-            <div className="bg-slate-800 p-4 rounded-xl shadow-2xl border border-slate-700 flex flex-col gap-6 sticky top-4">
-                
-                {/* Header */}
-                <div className="flex justify-between items-center border-b border-slate-700 pb-2">
-                    <span className="text-sm font-bold text-slate-400 uppercase">Admin Panel</span>
-                    <div className="flex gap-2">
-                      <button 
-                          onClick={handleSilenceClick}
-                          className="text-[10px] bg-red-900 hover:bg-red-800 text-white py-1 px-2 rounded font-bold uppercase tracking-wider"
-                      >
-                          Silence
-                      </button>
-                      <button 
-                          onClick={handleResetClick}
-                          className="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 py-1 px-2 rounded font-bold uppercase tracking-wider"
-                      >
-                          Reset
-                      </button>
-                    </div>
-                </div>
-
-                {/* --- СЕКЦИЯ ВОЛЧКА --- */}
-                <div className="flex flex-col gap-3 border border-slate-700 p-3 rounded bg-slate-900/30">
-                   <div className="text-xs text-yellow-600 uppercase font-bold tracking-widest text-center">Управление Волчком</div>
-                   
-                   {/* Большая кнопка Случайно */}
-                   <button 
-                      onClick={handleSpinRandom}
-                      disabled={gameState?.is_spinning || !isPreRound}
-                      className="w-full bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-black py-3 rounded-lg text-lg shadow active:scale-[0.98] transition-all uppercase tracking-wider"
-                   >
-                      {gameState?.is_spinning ? 'Вращаем...' : '🎲 Случайный выбор'}
-                   </button>
-
-                   <div className="text-[10px] text-slate-500 text-center uppercase font-bold mt-1">Или выбрать сектор</div>
-                   
-                   {/* Сетка секторов */}
-                   <div className="grid grid-cols-7 gap-1">
-                      {Array.from({ length: 13 }, (_, i) => i + 1).map(sectorId => {
-                          const isUsed = usedQuestions.includes(sectorId);
-                          return (
-                              <button
-                                  key={sectorId}
-                                  onClick={() => handleSpinForced(sectorId)}
-                                  disabled={gameState?.is_spinning || isUsed || !isPreRound}
-                                  className={`
-                                      text-xs font-bold py-2 rounded transition-all
-                                      ${isUsed 
-                                          ? 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700' 
-                                          : 'bg-slate-700 hover:bg-slate-600 text-white shadow active:scale-95 hover:ring-1 ring-yellow-500/50'}
-                                  `}
-                              >
-                                  {sectorId}
-                              </button>
-                          )
-                      })}
-                   </div>
-                </div>
-
-                {/* --- СЕКЦИЯ ИГРЫ --- */}
-                <div className="border border-slate-700 p-3 rounded bg-slate-900/30">
-                   {/* Кнопка перехода фазы */}
-                   <div className="w-full">
-                      {isQuestionReading && (
-                        <button
-                          onClick={handleStartDiscussion}
-                          className="w-full bg-blue-700 hover:bg-blue-600 text-white py-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-xs"
-                        >
-                          Начать обсуждение
-                        </button>
-                      )}
-                      {isDiscussion && (
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center justify-between px-2 py-2 rounded bg-slate-950/40 border border-slate-800">
-                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Обсуждение</span>
-                            <span className={`text-lg font-black tabular-nums ${typeof discussionRemaining === 'number' && discussionRemaining <= 10 ? 'text-yellow-400' : 'text-white'}`}>
-                              {typeof discussionRemaining === 'number' ? discussionRemaining : '—'}
-                            </span>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={handleTenSeconds}
-                              className="flex-1 bg-yellow-600 hover:bg-yellow-500 text-black py-2 rounded shadow active:scale-95 transition-all font-black uppercase tracking-wider text-[10px]"
-                            >
-                              10 секунд (сигнал)
-                            </button>
-                            <button
-                              onClick={handleTeamAnswer}
-                              className="flex-1 bg-purple-700 hover:bg-purple-600 text-white py-2 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
-                            >
-                              Ответ команды
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                      {isTeamAnswer && (
-                        <div className="flex gap-2">
-                          <button 
-                              onClick={handleScoreZnatoki}
-                              className="flex-1 bg-green-800 hover:bg-green-700 text-white py-2 rounded shadow active:scale-95 transition-all flex flex-col items-center"
-                          >
-                              <span className="text-[10px] uppercase opacity-70 font-bold">
-                                {isBlitzRound && partIndex !== null && partIndex < 2 ? `Верно (${partLabel})` : 'Знатоки'}
-                              </span>
-                              <span className="text-xl font-bold leading-none">
-                                {isBlitzRound && partIndex !== null && partIndex < 2 ? '→' : '+1'}
-                              </span>
-                          </button>
-                          
-                          <button 
-                              onClick={handleScoreTV}
-                              className="flex-1 bg-red-800 hover:bg-red-700 text-white py-2 rounded shadow active:scale-95 transition-all flex flex-col items-center"
-                          >
-                              <span className="text-[10px] uppercase opacity-70 font-bold">
-                                {isBlitzRound ? 'Неверно (ТВ +1)' : 'Телезрители'}
-                              </span>
-                              <span className="text-xl font-bold leading-none">+1</span>
-                          </button>
-                        </div>
-                      )}
-                      {isPostRound && (
-                        <button
-                          onClick={handleEndRound}
-                          className="w-full bg-emerald-700 hover:bg-emerald-600 text-white py-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-xs"
-                        >
-                          {blitzHasNextPart ? 'Следующая часть' : 'Завершить раунд'}
-                        </button>
-                      )}
-                      {isPreRound && (
-                        <div className="text-xs text-slate-500 font-bold uppercase tracking-widest">
-                          Фаза: ожидание вращения
-                        </div>
-                      )}
-                   </div>
-
-                </div>
-
-                {/* Звук */}
-                <div className="bg-slate-900/50 p-3 rounded-lg flex items-center gap-3">
-                   <span className="text-xs text-slate-500 uppercase font-bold">Vol</span>
-                   <input 
-                      type="range" 
-                      min="0" max="1" step="0.05"
-                      value={gameSettings?.volume ?? 1.0}
-                      onChange={handleVolumeChange}
-                      className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
-                  />
-                  <span className="text-xs text-slate-400 w-8 text-right">{Math.round((gameSettings?.volume ?? 1.0) * 100)}%</span>
-                </div>
-
-                {/* Список игроков */}
-                <div className="border border-slate-700 p-3 rounded bg-slate-900/30">
-                   <div className="text-xs text-slate-500 uppercase font-bold tracking-widest mb-2">
-                     Игроки ({players.filter(p => p.role !== 'admin' && !p.pending).length})
-                     {players.filter(p => p.pending).length > 0 && (
-                       <span className="text-yellow-500 ml-2">
-                         + {players.filter(p => p.pending).length} ожидают
-                       </span>
-                     )}
-                   </div>
-                   <div className="space-y-1 max-h-40 overflow-y-auto">
-                      {players.filter(p => p.role !== 'admin').length === 0 ? (
-                          <div className="text-xs text-slate-600 italic">Нет игроков</div>
-                      ) : (
-                          players.filter(p => p.role !== 'admin').map((player, idx) => (
-                              <div 
-                                key={idx} 
-                                className={`flex items-center justify-between px-2 py-1.5 rounded ${
-                                  player.pending 
-                                    ? 'bg-yellow-900/30 border border-yellow-700/50' 
-                                    : 'bg-slate-800'
-                                }`}
-                              >
-                                  <div className="flex items-center gap-2">
-                                      <span className={`w-2 h-2 rounded-full ${
-                                        player.pending ? 'bg-yellow-500 animate-pulse' :
-                                        player.online ? 'bg-green-500' : 'bg-slate-600'
-                                      }`} />
-                                      <span className={`text-sm ${
-                                        player.pending ? 'text-yellow-300' :
-                                        player.online ? 'text-white' : 'text-slate-500'
-                                      }`}>
-                                          {player.name}
-                                          {player.pending && <span className="text-xs ml-1">(ждёт)</span>}
-                                      </span>
-                                  </div>
-                                  <div className="flex gap-1">
-                                    {player.pending && (
-                                      <button
-                                          onClick={() => handleApprovePlayer(player.name)}
-                                          className="text-[10px] bg-green-700 hover:bg-green-600 text-white px-2 py-0.5 rounded font-bold uppercase transition-colors"
-                                      >
-                                          Пустить
-                                      </button>
-                                    )}
-                                    <button
-                                        onClick={() => handleKickPlayer(player.name)}
-                                        className="text-[10px] bg-red-900/50 hover:bg-red-800 text-red-300 hover:text-white px-2 py-0.5 rounded font-bold uppercase transition-colors"
-                                    >
-                                        Kick
-                                    </button>
-                                  </div>
-                              </div>
-                          ))
-                      )}
-                   </div>
-                </div>
-
-                {/* Логи */}
-                <div className="pt-2 border-t border-slate-700">
-                    <GameLog logs={gameState?.logs} />
-                </div>
-            </div>
-
-        </div>
+      {isAdmin && (
+        <AdminControls
+          gameState={gameState}
+          gameSettings={gameSettings}
+          players={players}
+          discussionRemaining={discussionRemaining}
+          onTenSeconds={markTenSecondsNotified}
+          stopAllSounds={stopAllSounds}
+        />
       )}
-
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
