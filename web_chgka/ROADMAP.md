@@ -23,11 +23,6 @@
    - Разнести на hooks/components: socket session, admin question panel, admin controls, shared media renderer.
    - Это сильно упростит мобильную версию и тестирование.
 
-3. Build/CI — `В работе`, branch: `task/build-ci`, task: `docs/tasks/0003-build-ci.md`
-   - Определиться с `package-lock.json`: либо коммитить и использовать `npm ci`, либо игнорировать.
-   - Добавить простой CI: backend pytest, frontend build.
-   - Для Docker добавить production mode или явно документировать dev-only compose.
-
 4. Pack tooling
    - Добавить CLI/endpoint `validate-pack`, чтобы проверять пак до старта игры.
    - Документировать формат `question.md`, media folder, blitz/superblitz и ограничения.

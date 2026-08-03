@@ -1,8 +1,8 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-04
-- Completed task: `docs/tasks/0002-game-transitions.md`
-- Accepted task head before closure documentation: `5d1d71e` (`Record media smoke acceptance`)
+- Completed task: `docs/tasks/0003-build-ci.md`
+- Accepted task head before closure documentation: `de9ac94` (`Add reproducible web CI`)
 
 ## Product decisions
 
@@ -25,11 +25,11 @@
 - `docker compose config --quiet` succeeds without warnings.
 - The game-transitions history includes the development media-origin fix found during manual smoke testing.
 
-The task branch also has clean-install and container checks. The GitHub Actions workflow now exists, but its first remote run is pending the branch push.
+The branch has clean-install and container checks, and all three GitHub Actions jobs pass remotely.
 
-## Active task: Build and CI
+## Completed task: Build and CI
 
-The task is documented in `docs/tasks/0003-build-ci.md` on branch `task/build-ci`. Local implementation and verification are complete; the first remote GitHub Actions run is still required before acceptance and merge.
+The task is documented in `docs/tasks/0003-build-ci.md` on branch `task/build-ci`. Local clean-environment checks, container checks, and the remote backend/frontend/Compose CI jobs all pass.
 
 Implemented:
 
@@ -100,7 +100,7 @@ Additional known gaps:
 - raw Markdown HTML is unsafe for untrusted question packs;
 - frontend development uses `localhost:8000`, so it does not yet support browsers running on other machines;
 - media sharing is image-only even though the parser recognizes audio and video;
-- there are no frontend tests, Socket.IO integration tests, or lint/typecheck; the new CI workflow still needs its first remote run.
+- there are no frontend tests, Socket.IO integration tests, or lint/typecheck.
 
 ## Repository artifacts
 
@@ -112,9 +112,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Push `task/build-ci` and verify all three GitHub Actions jobs on the first remote run.
-2. If CI is green, close task 0003, merge it into `web`, and take frontend decomposition next.
-3. Before expanding media or public deployment, schedule the dependency/toolchain refresh and the dedicated deployment/security task.
+1. Take frontend decomposition next, splitting socket session, admin question panel, admin controls, and shared media rendering out of `App.jsx`.
+2. Before expanding media, take the dependency/toolchain refresh recorded in the roadmap.
+3. Before public deployment, take the dedicated deployment/security task.
 
 ## Resume checklist
 
@@ -127,7 +127,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. `docs/tasks/0003-build-ci.md` for the active task and `docs/tasks/0002-game-transitions.md` for the latest completed game-state work;
+4. `docs/tasks/0003-build-ci.md` for the latest completed infrastructure work and `docs/tasks/0002-game-transitions.md` for the latest completed game-state work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:

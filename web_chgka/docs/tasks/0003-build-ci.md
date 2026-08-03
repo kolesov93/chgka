@@ -1,7 +1,7 @@
 # 0003: Build and CI
 
 Branch: `task/build-ci`
-Status: In progress
+Status: Completed
 
 ## Goal
 
@@ -55,7 +55,7 @@ Make the current web application reproducible to install and verify in a clean e
 - A clean temporary Python environment installs `requirements-dev.txt`; all 71 backend tests pass.
 - Both Docker images build. The frontend build passes inside the Node.js 24 image; all 71 backend tests pass inside the Python 3.14 image with repository fixtures mounted read-only.
 - `docker compose config --quiet` passes without the previous obsolete-version warning.
-- Remote GitHub Actions execution is pending the first branch push.
+- The first remote GitHub Actions run passes all three jobs: backend, frontend, and Compose.
 
 ## Follow-up discovered
 
