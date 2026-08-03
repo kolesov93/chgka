@@ -1,8 +1,8 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-04
-- Branch at snapshot: `task/game-transitions`
-- Last completed task commit before this snapshot: `3c547a8` (`Fix development media URLs`)
+- Completed task: `docs/tasks/0002-game-transitions.md`
+- Accepted task head before closure documentation: `5d1d71e` (`Record media smoke acceptance`)
 
 ## Product decisions
 
@@ -10,7 +10,7 @@
 - The parent Pyglet/VLC application is legacy and does not need continued support.
 - The target environment is the public internet.
 - Keeping the current localhost connection during development is acceptable. Production connectivity, HTTPS, origins, and secret management belong to a dedicated deployment task.
-- `web` tracks `origin/web`. The current task branch contains local documentation and implementation commits to push after review/manual acceptance.
+- Completed task branches are integrated into `web` only after automated checks and manual browser acceptance.
 
 ## Verified baseline
 
@@ -38,9 +38,9 @@ The checks use the local installed environments. There is no clean-environment C
 - Admin question card and image preview/share through temporary media tokens.
 - Internal state split into `game`, `wheel`, `timer`, `presentation`, `pack`, and `logs`, while retaining the current flat frontend payload.
 
-## Active task: game transitions
+## Completed task: game transitions
 
-The current task is documented in `docs/tasks/0002-game-transitions.md`. Implementation and automated verification are complete. Manual browser acceptance has passed through media point 5; the remaining checks and branch integration remain.
+The task is documented in `docs/tasks/0002-game-transitions.md`. Implementation, automated verification, and the complete two-browser smoke test have passed.
 
 Completed:
 
@@ -87,10 +87,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Finish the remaining two-browser acceptance checks after the now-passing media point 5, including sounds and reset during spin.
-2. If accepted, push the branch commits, finish the task document, remove the completed roadmap item, and merge into `web`.
-3. Take Build/CI next: commit and consistently use the lockfile, add clean backend/frontend jobs, and add `.dockerignore` files.
-4. Before any public deployment, take a dedicated deployment/security task covering URL routing, HTTPS, allowed origins, required secrets, token lifecycle, and persistence expectations.
+1. Take Build/CI next: commit and consistently use the lockfile, add clean backend/frontend jobs, and add `.dockerignore` files.
+2. Then decompose `App.jsx` before expanding the media UI or building the player-only mobile view.
+3. Before any public deployment, take a dedicated deployment/security task covering URL routing, HTTPS, allowed origins, required secrets, token lifecycle, and persistence expectations.
 
 ## Resume checklist
 
@@ -102,8 +101,8 @@ Then read, in order:
 
 1. `AGENTS.md`;
 2. this file;
-3. the active item in `ROADMAP.md`;
-4. `docs/tasks/0002-game-transitions.md`;
+3. the next item in `ROADMAP.md`;
+4. `docs/tasks/0002-game-transitions.md` for the latest completed game-state work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:

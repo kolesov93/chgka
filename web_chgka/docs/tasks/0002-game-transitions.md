@@ -1,6 +1,7 @@
 # 0002: Game Transitions
 
 Branch: `task/game-transitions`
+Status: Completed
 
 ## Goal
 
@@ -55,7 +56,7 @@ The previous task added `backend/state.py`, so there is now an explicit typed st
 - Manual two-browser acceptance reached point 5, where image preview/share exposed a development URL bug: relative `/media/...` requests went to Vite on port 5173 instead of the backend on port 8000.
 - Both admin preview and player rendering now build media URLs from the backend origin. The frontend build, all 71 backend tests, and a focused `painting1.jpg` media-token/file response check pass after the fix.
 - The repeated point 5 passes: the image appears in both the admin preview and the player shared-media view.
-- Finish the remaining manual checks before merging the task.
+- The complete two-browser smoke test passes, including login/reconnect, normal and blitz rounds, sounds, media, and reset during spin.
 
 ## Decisions
 
