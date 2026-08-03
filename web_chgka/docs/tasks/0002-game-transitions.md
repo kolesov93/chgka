@@ -36,22 +36,23 @@ The previous task added `backend/state.py`, so there is now an explicit typed st
 
 `GAME_OVER` remains roadmap task 12. This task must leave an extension point for it but does not add the new phase or final-screen behavior.
 
-## Decisions To Make
+## Implementation
 
-- What exact sections should internal state have: `game`, `wheel`, `timer`, `presentation`, `pack`, `logs`?
-- Should the internal root type be called `AppState`, `ServerState`, or something else?
-- How far should `main.py` be migrated in this task versus using compatibility accessors?
-- Should transitions mutate the internal state in place or return a new state?
-- What should a transition return besides state mutation: logs, sounds, notifications, admin question refresh flags?
-- Which transition should be extracted first: scoring, round end, reset, spin result, or discussion timer transitions?
-- How much side-effect description belongs in transition results versus remaining in handlers?
+- Added `backend/transitions.py` with synchronous transitions for game start, spin start/completion, discussion, team answer, ten-second warning, scoring, blitz progression, round end, and reset.
+- Transitions mutate the existing `AppState` in place before the handler performs any network await.
+- `TransitionEffects` describes transport work: logs, sounds, media-token cleanup, state broadcast, and admin-question refresh.
+- `TransitionError` rejects invalid phases/actions without partial mutation.
+- Added internal `wheel.spin_id`. Start increments it; reset invalidates it; completion must present the current ID.
+- Socket.IO handlers now authorize, prepare nondeterministic inputs such as time/random sound, invoke a transition, and deliver effects.
+- Pending-player session restore now emits `join_pending` rather than bypassing approval.
 
-## Current Direction
+## Verification
 
-- First reshape state into domain sections.
-- Keep `public_game_state()` returning the existing flat frontend payload.
-- Do not change Socket.IO event names or frontend behavior.
-- Only start extracting transition functions after this state split is in place.
+- 71 backend tests pass, including pure transition and handler concurrency/session tests.
+- Frontend production build passes.
+- Backend startup loads all 13 sample questions.
+- Docker Compose configuration validates; its existing obsolete `version` warning remains.
+- Manual two-browser acceptance is still required before merging the task.
 
 ## Decisions
 
@@ -59,4 +60,6 @@ The previous task added `backend/state.py`, so there is now an explicit typed st
 - Split state into `game`, `wheel`, `timer`, `presentation`, `pack`, and `logs`.
 - Keep `PublicGameState` as the flat `state_update` payload for the current frontend.
 - Rename the global backend variable from `game_state` to `app_state` to match the new meaning.
-- Do not add transition functions until the state split is complete and tested.
+- Keep transitions synchronous and use in-place mutation so phase validation and mutation are atomic within the asyncio event loop.
+- Keep actual Socket.IO emits in `main.py`; transitions return explicit effects instead.
+- Keep `GAME_OVER` as roadmap task 12 while ensuring it can be added through this transition layer.

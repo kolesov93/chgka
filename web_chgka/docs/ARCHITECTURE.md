@@ -15,6 +15,7 @@ React clients
     v
 FastAPI + python-socketio (backend/main.py)
     |-- AppState in memory
+    |-- synchronous game transitions (backend/transitions.py)
     |-- players and session tokens in memory
     |-- question pack loaded from the filesystem
     `-- temporary media tokens -> GET /media/{media_id}
@@ -33,6 +34,7 @@ The frontend receives the shared game snapshot through `state_update`. Admin-onl
 
 - `backend/main.py` creates the FastAPI/Socket.IO application and currently contains authentication, player lifecycle, phase handlers, scoring, spin orchestration, media access, logging, and emits.
 - `backend/state.py` defines the typed internal `AppState` and serializes it to the flat public payload expected by the frontend.
+- `backend/transitions.py` owns synchronous phase, spin, scoring, blitz, round-end, and reset rules. It mutates `AppState` before network awaits and returns transport effects such as logs, sounds, media-token cleanup, and admin-question refresh.
 - `backend/questions.py` parses and validates filesystem question packs and converts Markdown sections to HTML.
 
 The backend is authoritative. Clients request actions; they do not calculate scores or advance phases locally.
@@ -49,6 +51,8 @@ Internal state is split by responsibility:
 - `logs`: recent game log entries.
 
 `public_game_state()` flattens these sections into the existing `state_update` contract. This compatibility layer allows the backend internals to evolve without combining a state refactor with a frontend protocol migration.
+
+`wheel.spin_id` is internal and is not sent to clients. Reset increments it, so a sleeping async spin handler cannot apply an obsolete completion to the reset game.
 
 Current phases are:
 
@@ -85,7 +89,7 @@ Audio/video playback state, server timestamps, pause/resume, and synchronization
 
 All mutable runtime data is process-local. A backend restart loses the game, players, sessions, logs, and media tokens.
 
-Socket.IO handlers are asynchronous and can overlap. UI button disabling is not a concurrency boundary. The transition layer must make repeated scoring, reset during spin, stale spin completion, and reconnect behavior deterministic.
+Socket.IO handlers are asynchronous and can overlap. UI button disabling is not a concurrency boundary. Core game handlers therefore call synchronous transitions before their first network await. Repeated scoring is rejected by the changed phase, and spin completion is accepted only for the current `spin_id`.
 
 ## Deployment status
 

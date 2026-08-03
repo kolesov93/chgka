@@ -2,7 +2,7 @@
 
 Snapshot date: 2026-08-03  
 Branch at snapshot: `task/game-transitions`  
-Commit at snapshot: `efa65e2` (`Split app state into domains`)
+Commit at snapshot: `7e19ab9` (`Extract atomic game transitions`)
 
 ## Product decisions
 
@@ -10,14 +10,16 @@ Commit at snapshot: `efa65e2` (`Split app state into domains`)
 - The parent Pyglet/VLC application is legacy and does not need continued support.
 - The target environment is the public internet.
 - Keeping the current localhost connection during development is acceptable. Production connectivity, HTTPS, origins, and secret management belong to a dedicated deployment task.
-- `web` and `task/game-transitions` were pushed and track their corresponding remote branches at this snapshot.
+- `web` tracks `origin/web`. The current task branch contains local documentation and implementation commits to push after review/manual acceptance.
 
 ## Verified baseline
 
-- Backend: 53 tests pass.
+- Backend: 71 tests pass.
   - 47 question parser tests;
   - 4 state helper tests;
-  - 2 wheel-sector geometry tests.
+  - 3 wheel-sector/spin-selection tests;
+  - 14 pure transition tests;
+  - 3 handler concurrency/session tests.
 - Frontend: `npm run build` succeeds.
 - Backend startup loads the sample pack with all 13 questions and reaches application startup completion.
 - `docker compose config --quiet` succeeds, with only a warning that the top-level Compose `version` field is obsolete.
@@ -38,7 +40,7 @@ The checks use the local installed environments. There is no clean-environment C
 
 ## Active task: game transitions
 
-The current task is documented in `docs/tasks/0002-game-transitions.md` and remains incomplete.
+The current task is documented in `docs/tasks/0002-game-transitions.md`. Implementation and automated verification are complete; manual browser acceptance and branch integration remain.
 
 Completed:
 
@@ -46,24 +48,22 @@ Completed:
 - migrated `backend/main.py` to the new state shape;
 - retained frontend wire compatibility;
 - covered state construction, reset, and serialization helpers.
-
-Still required:
-
-- define the transition API and how it reports side effects;
-- extract spin, scoring, blitz progression, phase changes, round end, and reset from Socket.IO handlers;
-- make handlers thin authorization/validation/emit adapters;
-- add focused transition and invalid-phase tests;
-- define cancellation or generation semantics for stale spin completion.
+- added synchronous transitions for start, spin start/completion, discussion, answer, scoring, blitz progression, round end, and reset;
+- added explicit transport effects for logs, sounds, media-token cleanup, state broadcasts, and admin-question refresh;
+- added internal `spin_id` generation so reset invalidates sleeping spin completion;
+- made scoring phase mutation happen before any network await;
+- fixed pending-player reconnect to remain pending;
+- added pure transition and handler-level concurrency/session tests.
 
 Scope decision: task 0002 builds a reliable transition layer while preserving the current product behavior. The new `GAME_OVER` phase remains roadmap task 12. The transition API must be extensible so that task 12 can add the phase without moving game rules back into Socket.IO handlers.
 
-## Reproduced defects
+## Resolved defects
 
-These scenarios were reproduced against the current handlers, not inferred only from code:
+These scenarios were reproduced against the old handlers and now have regression tests:
 
-1. Two concurrent `admin_score` calls can both observe `TEAM_ANSWER` and award two points.
-2. Reset during an active spin does not invalidate the sleeping spin handler. When it resumes, it moves the reset game to `QUESTION_READING`.
-3. A pending player who reconnects with a valid player token receives `join_success` instead of remaining pending.
+1. Concurrent `admin_score` calls now award one point; the later transition is rejected after the first moves the phase to `POST_ROUND`.
+2. Reset increments `spin_id`; obsolete spin completion is ignored and the game remains reset.
+3. A pending player who reconnects receives `join_pending` and keeps the pending flag.
 
 Additional known gaps:
 
@@ -86,11 +86,10 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Finish the pure transition layer, starting with scoring and spin completion/reset because they already have reproduced race failures.
-2. Fix pending reconnect behavior and add session lifecycle tests.
-3. Complete the task with backend tests and frontend build, then merge it into `web` according to `ROADMAP.md`.
-4. Take Build/CI next: commit and consistently use the lockfile, add clean backend/frontend jobs, and add `.dockerignore` files.
-5. Before any public deployment, take a dedicated deployment/security task covering URL routing, HTTPS, allowed origins, required secrets, token lifecycle, and persistence expectations.
+1. Run the short two-browser manual acceptance for login/reconnect, normal round, blitz, sounds/media, and reset during spin.
+2. If accepted, push the two commits, finish the task document, remove the completed roadmap item, and merge into `web`.
+3. Take Build/CI next: commit and consistently use the lockfile, add clean backend/frontend jobs, and add `.dockerignore` files.
+4. Before any public deployment, take a dedicated deployment/security task covering URL routing, HTTPS, allowed origins, required secrets, token lifecycle, and persistence expectations.
 
 ## Resume checklist
 
