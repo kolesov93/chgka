@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 
@@ -7,7 +7,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Запускаем uvicorn на 8000 порту
+# Development-only image: Compose bind-mounts the source and enables reload.
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
-
 

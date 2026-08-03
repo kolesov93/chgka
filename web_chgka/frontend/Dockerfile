@@ -1,14 +1,13 @@
-FROM node:18-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
-# Копируем package.json и устанавливаем зависимости
-COPY package.json .
-RUN npm install
+# Install the exact dependency graph recorded in the lockfile.
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY . .
 
-# Запускаем Vite в режиме разработки
+# Development-only image: Compose bind-mounts the source and starts Vite.
 CMD ["npm", "run", "dev", "--", "--host"]
-
 

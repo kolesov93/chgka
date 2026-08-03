@@ -7,7 +7,7 @@
 - [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) — актуальная точка продолжения, проверки и известные проблемы.
 - [`ROADMAP.md`](ROADMAP.md) — приоритетный backlog и workflow задач.
 
-## Запуск через Docker
+## Запуск через Docker (только разработка)
 
 Из каталога `web_chgka`:
 
@@ -24,6 +24,9 @@ docker compose up --build
 
 - backend получает `QUESTIONS_PACK_PATH=/fixtures/sample_questions`
 - папка `./fixtures` примонтирована в контейнер как `/fixtures`
+- исходники примонтированы в контейнеры, backend работает с `--reload`, frontend запускает Vite dev server
+
+Compose и Dockerfile пока не являются production-конфигурацией: в них нет reverse proxy, TLS и production frontend server.
 
 ## Локальный запуск
 
@@ -32,9 +35,15 @@ docker compose up --build
 Из каталога `web_chgka/backend`:
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 export QUESTIONS_PACK_PATH="/home/kolesov93/Programming/chgka2/web_chgka/fixtures/sample_questions"
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Проверка backend:
+
+```bash
+python -m pytest -q
 ```
 
 ### Frontend
@@ -42,8 +51,14 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 Из каталога `web_chgka/frontend`:
 
 ```bash
-npm install
+npm ci
 npm run dev
+```
+
+Проверка frontend:
+
+```bash
+npm run build
 ```
 
 После запуска:
