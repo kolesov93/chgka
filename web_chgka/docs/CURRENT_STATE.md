@@ -1,8 +1,8 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-04
-- Completed task: `docs/tasks/0002-game-transitions.md`
-- Accepted task head before closure documentation: `5d1d71e` (`Record media smoke acceptance`)
+- Completed task: `docs/tasks/0003-build-ci.md`
+- Accepted task head before closure documentation: `de9ac94` (`Add reproducible web CI`)
 
 ## Product decisions
 
@@ -22,10 +22,35 @@
   - 3 handler concurrency/session tests.
 - Frontend: `npm run build` succeeds.
 - Backend startup loads the sample pack with all 13 questions and reaches application startup completion.
-- `docker compose config --quiet` succeeds, with only a warning that the top-level Compose `version` field is obsolete.
-- The branch also contains the development media-origin fix found during manual smoke testing. `frontend/package-lock.json` remains untracked pending the Build/CI roadmap decision.
+- `docker compose config --quiet` succeeds without warnings.
+- The game-transitions history includes the development media-origin fix found during manual smoke testing.
 
-The checks use the local installed environments. There is no clean-environment CI yet, so they prove the current checkout works locally, not full reproducibility.
+The branch has clean-install and container checks, and all three GitHub Actions jobs pass remotely.
+
+## Completed task: Build and CI
+
+The task is documented in `docs/tasks/0003-build-ci.md` on branch `task/build-ci`. Local clean-environment checks, container checks, and the remote backend/frontend/Compose CI jobs all pass.
+
+Implemented:
+
+- committed `frontend/package-lock.json` and standardized clean frontend installs on `npm ci`;
+- refreshed dependencies within existing semver ranges, removing all production `npm audit` findings;
+- declared backend test dependencies in `backend/requirements-dev.txt`;
+- added path-filtered GitHub Actions jobs for backend tests, frontend build, and Compose validation;
+- moved development images to Node.js 24 and Python 3.14;
+- added backend/frontend `.dockerignore` files and removed the obsolete Compose `version` field;
+- kept Docker/Compose explicitly development-only.
+
+Local verification:
+
+- clean frontend install and production build pass;
+- clean backend install and all 71 tests pass;
+- both Docker images build;
+- frontend build passes in the Node.js 24 image;
+- all 71 backend tests pass in the Python 3.14 image with fixtures mounted read-only;
+- Compose validation passes without warnings.
+
+Known follow-up: a full npm audit still reports two dev-only findings rooted in Vite 4 / `esbuild`, requiring a breaking Vite upgrade. Python 3.14 also shows dependency warnings from the old FastAPI/Starlette/AnyIO stack. A separate dependency/toolchain refresh is now in the roadmap.
 
 ## Implemented
 
@@ -75,7 +100,7 @@ Additional known gaps:
 - raw Markdown HTML is unsafe for untrusted question packs;
 - frontend development uses `localhost:8000`, so it does not yet support browsers running on other machines;
 - media sharing is image-only even though the parser recognizes audio and video;
-- there are no frontend tests, Socket.IO integration tests, lint/typecheck, or CI.
+- there are no frontend tests, Socket.IO integration tests, or lint/typecheck.
 
 ## Repository artifacts
 
@@ -83,13 +108,13 @@ No Cursor-specific files remain. The useful continuity artifacts are `ROADMAP.md
 
 Untracked files outside `web_chgka` belong to the legacy workspace. In particular, `questions/` contains about 88 MB of media and must not be treated as disposable. `intro_2024/` and the three root gong files duplicate tracked frontend assets, but should still be left untouched unless repository cleanup is explicitly requested.
 
-Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python/pytest caches are local build artifacts. `frontend/package-lock.json` is a real dependency lockfile but is intentionally undecided rather than ignored.
+Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python/pytest caches are local build artifacts. `frontend/package-lock.json` is now the committed source of truth for reproducible frontend installs.
 
 ## Recommended continuation
 
-1. Take Build/CI next: commit and consistently use the lockfile, add clean backend/frontend jobs, and add `.dockerignore` files.
-2. Then decompose `App.jsx` before expanding the media UI or building the player-only mobile view.
-3. Before any public deployment, take a dedicated deployment/security task covering URL routing, HTTPS, allowed origins, required secrets, token lifecycle, and persistence expectations.
+1. Take frontend decomposition next, splitting socket session, admin question panel, admin controls, and shared media rendering out of `App.jsx`.
+2. Before expanding media, take the dependency/toolchain refresh recorded in the roadmap.
+3. Before public deployment, take the dedicated deployment/security task.
 
 ## Resume checklist
 
@@ -102,12 +127,12 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. `docs/tasks/0002-game-transitions.md` for the latest completed game-state work;
+4. `docs/tasks/0003-build-ci.md` for the latest completed infrastructure work and `docs/tasks/0002-game-transitions.md` for the latest completed game-state work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:
 
 ```bash
 cd backend && python3 -m pytest -q
-cd ../frontend && npm run build
+cd ../frontend && npm ci && npm run build
 ```

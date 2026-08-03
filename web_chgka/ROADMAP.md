@@ -23,11 +23,6 @@
    - Разнести на hooks/components: socket session, admin question panel, admin controls, shared media renderer.
    - Это сильно упростит мобильную версию и тестирование.
 
-3. Build/CI
-   - Определиться с `package-lock.json`: либо коммитить и использовать `npm ci`, либо игнорировать.
-   - Добавить простой CI: backend pytest, frontend build.
-   - Для Docker добавить production mode или явно документировать dev-only compose.
-
 4. Pack tooling
    - Добавить CLI/endpoint `validate-pack`, чтобы проверять пак до старта игры.
    - Документировать формат `question.md`, media folder, blitz/superblitz и ограничения.
@@ -42,6 +37,11 @@
    - Сейчас всё состояние in-memory. При рестарте backend игра теряется.
    - Минимальный вариант: snapshot state в JSON.
    - Более чистый вариант: Redis/SQLite для state, players, tokens и media tokens.
+
+15. Обновление dependency/toolchain
+   - Обновить Vite 4 до поддерживаемой major-версии и устранить оставшиеся dev-only `npm audit` advisories вокруг старого `esbuild`.
+   - Обновить FastAPI/Starlette/AnyIO/Uvicorn/Socket.IO после отдельной проверки совместимости; текущие версии работают на Python 3.14, но дают deprecation/syntax warnings из зависимостей.
+   - После обновления повторить backend/frontend checks, Docker builds и двухбраузерный smoke.
 
 ### P1: критичные фичи для live-игры
 
