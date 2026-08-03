@@ -26,7 +26,7 @@ FastAPI + python-socketio (backend/main.py)
 - `frontend/src/App.jsx` owns the socket connection, session restore, shared state, discussion timer, media preview, notifications, and most admin UI.
 - `frontend/src/components/` contains the table, login, waiting room, score, and log views.
 - `frontend/src/hooks/useGameSound.js` manages the wheel loop, fade-out, and effect sounds.
-- Development connects directly to `http://localhost:8000`. A production build uses the current origin (`/`).
+- Development connects Socket.IO and media requests directly to `http://localhost:8000`. A production build uses the current origin (`/`).
 
 The frontend receives the shared game snapshot through `state_update`. Admin-only data uses separate events such as `players_update`, `pack_info`, and `admin_question`.
 
@@ -81,7 +81,7 @@ The parser recognizes images, audio, and video. The share flow currently support
 2. The backend resolves the relative path against media allowed for the current round.
 3. The backend creates a temporary `media_id` bound to the round context.
 4. The admin shares that ID through `admin_share_media`.
-5. All clients render `/media/{media_id}` from shared presentation state.
+5. All clients request `/media/{media_id}` from the backend origin and render it from shared presentation state.
 
 Audio/video playback state, server timestamps, pause/resume, and synchronization remain unimplemented.
 

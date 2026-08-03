@@ -1,8 +1,8 @@
 # CHGKA Web Current State
 
-Snapshot date: 2026-08-03  
-Branch at snapshot: `task/game-transitions`  
-Commit at snapshot: `7e19ab9` (`Extract atomic game transitions`)
+- Snapshot date: 2026-08-04
+- Branch at snapshot: `task/game-transitions`
+- Last completed task commit before this snapshot: `1cf5320` (`Update transition task handoff`)
 
 ## Product decisions
 
@@ -23,7 +23,7 @@ Commit at snapshot: `7e19ab9` (`Extract atomic game transitions`)
 - Frontend: `npm run build` succeeds.
 - Backend startup loads the sample pack with all 13 questions and reaches application startup completion.
 - `docker compose config --quiet` succeeds, with only a warning that the top-level Compose `version` field is obsolete.
-- There are no tracked working-tree changes at the snapshot. `frontend/package-lock.json` remains untracked pending the Build/CI roadmap decision.
+- The branch also contains the development media-origin fix found during manual smoke testing. `frontend/package-lock.json` remains untracked pending the Build/CI roadmap decision.
 
 The checks use the local installed environments. There is no clean-environment CI yet, so they prove the current checkout works locally, not full reproducibility.
 
@@ -40,7 +40,7 @@ The checks use the local installed environments. There is no clean-environment C
 
 ## Active task: game transitions
 
-The current task is documented in `docs/tasks/0002-game-transitions.md`. Implementation and automated verification are complete; manual browser acceptance and branch integration remain.
+The current task is documented in `docs/tasks/0002-game-transitions.md`. Implementation and automated verification are complete; manual browser acceptance is in progress and branch integration remains.
 
 Completed:
 
@@ -59,11 +59,12 @@ Scope decision: task 0002 builds a reliable transition layer while preserving th
 
 ## Resolved defects
 
-These scenarios were reproduced against the old handlers and now have regression tests:
+The first three scenarios were reproduced against the old handlers and now have regression tests. The fourth was found during manual browser acceptance:
 
 1. Concurrent `admin_score` calls now award one point; the later transition is rejected after the first moves the phase to `POST_ROUND`.
 2. Reset increments `spin_id`; obsolete spin completion is ignored and the game remains reset.
 3. A pending player who reconnects receives `join_pending` and keeps the pending flag.
+4. Admin media previews and shared player images now use the backend origin in development; previously relative `/media/...` URLs were incorrectly requested from Vite on port 5173.
 
 Additional known gaps:
 
@@ -86,8 +87,8 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Run the short two-browser manual acceptance for login/reconnect, normal round, blitz, sounds/media, and reset during spin.
-2. If accepted, push the two commits, finish the task document, remove the completed roadmap item, and merge into `web`.
+1. Repeat media point 5 of the two-browser smoke test, then finish the remaining acceptance checks for sounds and reset during spin.
+2. If accepted, push the branch commits, finish the task document, remove the completed roadmap item, and merge into `web`.
 3. Take Build/CI next: commit and consistently use the lockfile, add clean backend/frontend jobs, and add `.dockerignore` files.
 4. Before any public deployment, take a dedicated deployment/security task covering URL routing, HTTPS, allowed origins, required secrets, token lifecycle, and persistence expectations.
 
