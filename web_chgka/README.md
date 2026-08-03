@@ -1,5 +1,12 @@
 # CHGKA Web
 
+## Документация
+
+- [`AGENTS.md`](AGENTS.md) — правила и технические границы для coding agents.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — устройство приложения и runtime-контракты.
+- [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) — актуальная точка продолжения, проверки и известные проблемы.
+- [`ROADMAP.md`](ROADMAP.md) — приоритетный backlog и workflow задач.
+
 ## Запуск через Docker
 
 Из каталога `web_chgka`:

@@ -20,7 +20,8 @@
 
 1. Тестируемая модель переходов — `В работе`, branch: `task/game-transitions`, task: `docs/tasks/0002-game-transitions.md`
    - Вынести ключевую game-логику из Socket.IO handlers в чистые функции/сервис.
-   - Покрыть spin, scoring, blitz progression, reset, game over и bad-phase actions тестами.
+   - Покрыть spin, scoring, blitz progression, reset и bad-phase actions тестами.
+   - Оставить новую фазу `GAME_OVER` отдельной задачей 12, но сделать transition-слой расширяемым для неё.
    - Оставить Socket.IO handlers тонким слоем авторизации и emit-ов.
    - Явно описать допустимые переходы фаз и побочные эффекты: score, used_questions, round, media, sounds, logs.
    - Делать следующие игровые фичи через этот слой, а не напрямую в socket handlers.

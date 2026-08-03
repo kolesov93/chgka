@@ -34,6 +34,8 @@ The previous task added `backend/state.py`, so there is now an explicit typed st
 - Persistence/recovery.
 - Frontend refactor.
 
+`GAME_OVER` remains roadmap task 12. This task must leave an extension point for it but does not add the new phase or final-screen behavior.
+
 ## Decisions To Make
 
 - What exact sections should internal state have: `game`, `wheel`, `timer`, `presentation`, `pack`, `logs`?
