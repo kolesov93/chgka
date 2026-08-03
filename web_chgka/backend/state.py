@@ -102,6 +102,10 @@ class WheelState(TypedDict):
     # True while the backend is waiting for the spin animation duration to pass.
     is_spinning: bool
 
+    # Monotonically increasing generation used to reject stale async spin
+    # completion after reset or a later spin.
+    spin_id: int
+
 
 class TimerState(TypedDict):
     """Discussion timer state."""
@@ -175,6 +179,7 @@ def create_initial_app_state(
             "playing_sector": None,
             "spin_duration": 0,
             "is_spinning": False,
+            "spin_id": 0,
         },
         "timer": {
             "discussion_deadline_ms": None,
@@ -203,6 +208,7 @@ def reset_app_state(
     """
 
     question_types = state["pack"]["question_types"]
+    next_spin_id = state["wheel"].get("spin_id", 0) + 1
     state.clear()
     state.update(
         create_initial_app_state(
@@ -210,6 +216,9 @@ def reset_app_state(
             question_types=question_types,
         )
     )
+    # Invalidate completion callbacks belonging to the pre-reset state. This
+    # field is internal and intentionally absent from PublicGameState.
+    state["wheel"]["spin_id"] = next_spin_id
 
 
 def public_game_state(state: AppState) -> PublicGameState:

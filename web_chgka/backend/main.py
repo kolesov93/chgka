@@ -17,14 +17,26 @@ from fastapi.responses import FileResponse
 from questions import parse_question_pack, QuestionParseError, QuestionPack
 from state import (
     PHASE_LOGIN,
-    PHASE_PRE_ROUND,
     PHASE_QUESTION_READING,
     PHASE_DISCUSSION,
     PHASE_TEAM_ANSWER,
     PHASE_POST_ROUND,
     create_initial_app_state,
     public_game_state,
-    reset_app_state,
+)
+from transitions import (
+    TransitionEffects,
+    TransitionError,
+    transition_complete_spin,
+    transition_end_round,
+    transition_reset,
+    transition_score,
+    transition_start_discussion,
+    transition_start_game,
+    transition_start_spin,
+    transition_team_answer,
+    transition_ten_seconds,
+    validate_spin_start,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -36,7 +48,6 @@ MAX_SPIN_DURATION = 10.0 if DEBUG else 20.0
 SECTORS_COUNT = 13
 ANGLE_STEP = 360 / SECTORS_COUNT
 ADMIN_NAME = 'Господин Ведущий'
-BLITZ_PARTS = 3
 NORMAL_DISCUSSION_SECONDS = 60
 BLITZ_DISCUSSION_SECONDS = 20
 TEN_SECONDS = 10
@@ -344,6 +355,28 @@ async def emit_state_update(to: Optional[str] = None) -> None:
     else:
         await sio.emit("state_update", payload, to=to)
 
+
+async def _emit_transition_error(sid: str, error: TransitionError) -> None:
+    logger.warning("Rejected transition %s for %s: %s", error.code, sid, error.message)
+    await sio.emit(
+        "admin_notification",
+        {"type": "warning", "message": error.message},
+        to=sid,
+    )
+
+
+async def _apply_transition_effects(effects: TransitionEffects) -> None:
+    """Deliver side effects after a transition has atomically mutated state."""
+    if effects.clear_media_tokens:
+        _clear_all_media_tokens()
+    for message in effects.logs:
+        add_log(message)
+    for sound in effects.sounds:
+        await sio.emit("play_sound", {"sound": sound})
+    await emit_state_update()
+    if effects.refresh_admin_question:
+        await _emit_current_question_to_admins()
+
 def get_sector_from_angle(angle):
     # В GameTable: angleDeg = 90 + (i * angleStep)
     best_sector = 1
@@ -361,13 +394,14 @@ def get_sector_from_angle(angle):
     return best_sector
 
 # --- ЛОГИКА ВЫБОРА УГЛА ---
-def calculate_spin_result(force_sector=None, used_questions = []):
+def calculate_spin_result(force_sector=None, used_questions=None):
+    used_questions = used_questions or []
     if force_sector:
-        good_sectors = [force_sector] 
-        current_sector = (force_sector + SECTORS_COUNT - 1) % SECTORS_COUNT
+        good_sectors = [force_sector]
+        current_sector = SECTORS_COUNT if force_sector == 1 else force_sector - 1
         while current_sector in used_questions and current_sector != force_sector:
             good_sectors.append(current_sector)
-            current_sector = (current_sector - 1 + SECTORS_COUNT) % SECTORS_COUNT
+            current_sector = SECTORS_COUNT if current_sector == 1 else current_sector - 1
         
         logging.info(f"Good sectors: {good_sectors}")
         chosen_sector = random.choice(good_sectors)
@@ -486,8 +520,10 @@ async def restore_session(sid, data):
 
             await sio.emit('role_update', {'role': 'player'}, to=sid)
             await emit_state_update(to=sid)
-            # Отправляем join_success, чтобы фронт понял, что он в игре
-            await sio.emit('join_success', {'name': player_record['name']}, to=sid)
+            if player_record.get('pending', False):
+                await sio.emit('join_pending', {'name': player_record['name']}, to=sid)
+            else:
+                await sio.emit('join_success', {'name': player_record['name']}, to=sid)
             # Уведомляем админов об изменении статуса
             await broadcast_players()
             return
@@ -618,13 +654,12 @@ async def start_game(sid):
     if not await require_admin(sid):
         return
     
-    if app_state["game"]["phase"] != PHASE_LOGIN:
-        logger.warning(f"Attempt to start game in wrong phase: {app_state['game']['phase']}")
+    try:
+        effects = transition_start_game(app_state)
+    except TransitionError as error:
+        await _emit_transition_error(sid, error)
         return
-    
-    app_state["game"]["phase"] = PHASE_PRE_ROUND
-    add_log("Игра началась!")
-    await emit_state_update()
+    await _apply_transition_effects(effects)
 
 @sio.event
 async def leave_game(sid):
@@ -666,167 +701,64 @@ async def disconnect(sid):
 async def admin_spin(sid, data=None):
     if not await require_admin(sid):
         return
-    
+
     force_sector = data.get('force_sector') if data else None
+    try:
+        validate_spin_start(app_state)
+        if force_sector is not None:
+            if (
+                not isinstance(force_sector, int)
+                or isinstance(force_sector, bool)
+                or not 1 <= force_sector <= SECTORS_COUNT
+            ):
+                raise TransitionError("invalid_sector", f"Некорректный сектор: {force_sector}")
+            if force_sector in app_state["game"]["used_questions"]:
+                raise TransitionError("sector_used", f"Сектор {force_sector} уже сыгран")
 
-    if app_state["wheel"]["is_spinning"]:
-        return
-
-    if app_state["game"]["phase"] != PHASE_PRE_ROUND:
-        await sio.emit(
-            "admin_notification",
-            {
-                "type": "warning",
-                "message": f"Нельзя крутить волчок в фазе {app_state['game']['phase']}",
-            },
-            to=sid,
+        raw_angle, raw_sector = calculate_spin_result(
+            force_sector,
+            app_state["game"]["used_questions"],
         )
+        duration = random.uniform(MIN_SPIN_DURATION, MAX_SPIN_DURATION)
+        effects = transition_start_spin(
+            app_state,
+            raw_angle=raw_angle,
+            raw_sector=raw_sector,
+            duration=duration,
+            forced=force_sector is not None,
+        )
+    except TransitionError as error:
+        await _emit_transition_error(sid, error)
         return
 
-    # Ensure any previously shared media is hidden when we start a new spin.
-    app_state["presentation"]["shared_media"] = None
-    _clear_all_media_tokens()
-    
-    if app_state["game"]["score"]["znatoki"] >= 6 or app_state["game"]["score"]["tv"] >= 6:
-        return
-
-    # 1. Генерируем результат
-    raw_angle, raw_sector = calculate_spin_result(force_sector, app_state["game"]["used_questions"])
-    
-    # 2. Определяем играющий сектор (Скачка)
-    playing_sector = raw_sector
-    
-    # Защита от бесконечного цикла (если все сыграны)
-    loop_check = 0
-    while playing_sector in app_state["game"]["used_questions"] and loop_check < SECTORS_COUNT + 1:
-        playing_sector += 1
-        if playing_sector > 13:
-            playing_sector = 1
-        loop_check += 1
-            
-    duration = random.uniform(MIN_SPIN_DURATION, MAX_SPIN_DURATION)
-
-    log_msg = f"Вращение! Угол: {raw_angle:.1f}° (Сектор {raw_sector})"
-    if force_sector:
-        log_msg += " [FORCED]"
-    log_msg += f" -> Играет: {playing_sector}"
-    add_log(log_msg)
-
-    app_state["wheel"]["target_angle"] = raw_angle
-    app_state["wheel"]["playing_sector"] = playing_sector
-    app_state["wheel"]["spin_duration"] = duration
-    app_state["wheel"]["is_spinning"] = True
-    
-    if playing_sector == SECTORS_COUNT:
-        add_log("Внимание! 13-й сектор!")
-    
-    await emit_state_update()
-
+    spin_id = effects.spin_id
+    await _apply_transition_effects(effects)
     await asyncio.sleep(duration)
 
-    app_state["wheel"]["is_spinning"] = False
-    app_state["wheel"]["current_sector"] = playing_sector
-    app_state["wheel"]["spin_duration"] = 0
-    app_state["game"]["used_questions"].append(playing_sector)
-
-    app_state["game"]["phase"] = PHASE_QUESTION_READING
-    add_log("Фаза: зачитывание вопроса")
-
-    # Initialize round context based on question type
-    qtypes = app_state["pack"]["question_types"] or []
-    qtype = qtypes[playing_sector - 1] if len(qtypes) >= playing_sector else "normal"
-    if qtype in ("blitz", "superblitz"):
-        app_state["game"]["round"] = {"kind": qtype, "sector": playing_sector, "part_index": 0}
-    else:
-        app_state["game"]["round"] = {"kind": "normal", "sector": playing_sector}
-    app_state["timer"]["discussion_deadline_ms"] = None
-    
-    if playing_sector == 13:
-        await sio.emit('play_sound', {'sound': 'sector13'})
-
-    await emit_state_update()
-    await _emit_current_question_to_admins()
+    try:
+        effects = transition_complete_spin(app_state, spin_id=spin_id)
+    except TransitionError as error:
+        if error.code != "stale_spin":
+            await _emit_transition_error(sid, error)
+        return
+    await _apply_transition_effects(effects)
 
 @sio.event
 async def admin_score(sid, data):
     if not await require_admin(sid):
         return
-    
-    # Начисление очков / подтверждение ответа разрешаем только в фазе ответа команды
-    if app_state["game"]["phase"] != PHASE_TEAM_ANSWER:
-        await sio.emit(
-            "admin_notification",
-            {"type": "warning", "message": f"Нельзя нажимать верно/очки в фазе {app_state['game']['phase']}"},
-            to=sid,
-        )
-        return
-
-    round_ctx = app_state["game"]["round"] or {"kind": "normal"}
-    kind = round_ctx.get("kind", "normal")
     winner = data.get('winner')
-
-    # Blitz / superblitz:
-    # - any wrong answer ends the round immediately (TV +1)
-    # - correct answers in part 1/2 advance to next part WITHOUT sounds/scores
-    # - correct answer in part 3 gives Znatoki +1 (normal scoring)
-    if kind in ("blitz", "superblitz"):
-        part_index = int(round_ctx.get("part_index", 0))
-
-        if winner == "tv":
-            app_state["game"]["score"]["tv"] += 1
-            add_log("Неверно. Очко Телезрителям!")
-            await sio.emit("play_sound", {"sound": random.choice(["no1", "no2"])})
-            app_state["timer"]["discussion_deadline_ms"] = None
-            app_state["game"]["phase"] = PHASE_POST_ROUND
-            add_log("Фаза: послераунд (обсуждение ответа)")
-            await emit_state_update()
-            await _emit_current_question_to_admins()
-            return
-
-        if winner != "znatoki":
-            return
-
-        # Parts 1/2: go to POST_ROUND, then advance to the next part on explicit admin action.
-        if part_index < BLITZ_PARTS - 1:
-            # We need an explicit flag here; we cannot infer it later from part_index alone
-            # (wrong answers in parts 1/2 must NOT advance).
-            round_ctx["advance_next_part"] = True
-            app_state["game"]["round"] = round_ctx
-            app_state["timer"]["discussion_deadline_ms"] = None
-            app_state["game"]["phase"] = PHASE_POST_ROUND
-            add_log(f"Верно (часть {part_index + 1}/{BLITZ_PARTS}). Фаза: послераунд")
-            await emit_state_update()
-            await _emit_current_question_to_admins()
-            return
-
-        # Last part correct -> Znatoki +1
-        app_state["game"]["score"]["znatoki"] += 1
-        add_log("Все ответы верны. Очко Знатокам!")
-        await sio.emit("play_sound", {"sound": random.choice(["yes1", "yes2"])})
-        app_state["timer"]["discussion_deadline_ms"] = None
-        app_state["game"]["phase"] = PHASE_POST_ROUND
-        add_log("Фаза: послераунд (обсуждение ответа)")
-        await emit_state_update()
-        await _emit_current_question_to_admins()
+    try:
+        effects = transition_score(
+            app_state,
+            winner=winner,
+            correct_sound=random.choice(["yes1", "yes2"]),
+            incorrect_sound=random.choice(["no1", "no2"]),
+        )
+    except TransitionError as error:
+        await _emit_transition_error(sid, error)
         return
-
-    # Normal scoring
-    if winner == 'znatoki':
-        app_state["game"]["score"]["znatoki"] += 1
-        add_log("Очко Знатокам!")
-        await sio.emit("play_sound", {"sound": random.choice(["yes1", "yes2"])})
-    elif winner == 'tv':
-        app_state["game"]["score"]["tv"] += 1
-        add_log("Очко Телезрителям!")
-        await sio.emit("play_sound", {"sound": random.choice(["no1", "no2"])})
-    else:
-        return
-
-    app_state["timer"]["discussion_deadline_ms"] = None
-    app_state["game"]["phase"] = PHASE_POST_ROUND
-    add_log("Фаза: послераунд (обсуждение ответа)")
-    await emit_state_update()
-    await _emit_current_question_to_admins()
+    await _apply_transition_effects(effects)
 
 
 @sio.event
@@ -839,50 +771,15 @@ async def admin_end_round(sid, data=None):
     """
     if not await require_admin(sid):
         return
-    if app_state["game"]["phase"] != PHASE_POST_ROUND:
-        await sio.emit(
-            "admin_notification",
-            {"type": "warning", "message": f"Нельзя завершить раунд в фазе {app_state['game']['phase']}"},
-            to=sid,
+    try:
+        effects = transition_end_round(
+            app_state,
+            gong_sound=random.choice(["gong1", "gong2", "gong3"]),
         )
+    except TransitionError as error:
+        await _emit_transition_error(sid, error)
         return
-
-    # Blitz intermediate part: advance to next part instead of ending the round.
-    round_ctx = app_state["game"]["round"] or {}
-    kind = round_ctx.get("kind", "normal")
-    if kind in ("blitz", "superblitz") and round_ctx.get("advance_next_part") is True:
-        part_index = int(round_ctx.get("part_index", 0))
-        next_part_index = part_index + 1
-        # Hide shared media and drop media tokens (bound to current part).
-        app_state["presentation"]["shared_media"] = None
-        _clear_all_media_tokens()
-        app_state["timer"]["discussion_deadline_ms"] = None
-
-        round_ctx["part_index"] = next_part_index
-        round_ctx.pop("advance_next_part", None)
-        app_state["game"]["round"] = round_ctx
-        app_state["game"]["phase"] = PHASE_QUESTION_READING
-        add_log(f"Переходим к части {next_part_index + 1}/{BLITZ_PARTS}. Фаза: зачитывание вопроса")
-        await emit_state_update()
-        await _emit_current_question_to_admins()
-        return
-
-    # Hide shared media and drop media tokens (they are tied to the round context).
-    app_state["presentation"]["shared_media"] = None
-    _clear_all_media_tokens()
-
-    # Clear timers and round context.
-    app_state["timer"]["discussion_deadline_ms"] = None
-    app_state["game"]["round"] = None
-
-    # Phase transition.
-    app_state["game"]["phase"] = PHASE_PRE_ROUND
-    add_log("Раунд завершён. Фаза: ожидание следующего вращения")
-
-    # Gong at the end of post-round (same for all clients).
-    await sio.emit("play_sound", {"sound": random.choice(["gong1", "gong2", "gong3"])})
-
-    await emit_state_update()
+    await _apply_transition_effects(effects)
 
 
 @sio.event
@@ -980,15 +877,16 @@ async def admin_start_discussion(sid, data=None):
     """Переход QUESTION_READING -> DISCUSSION."""
     if not await require_admin(sid):
         return
-    if app_state["game"]["phase"] != PHASE_QUESTION_READING:
-        return
-    app_state["game"]["phase"] = PHASE_DISCUSSION
     round_ctx = app_state["game"]["round"] or {}
     kind = round_ctx.get("kind", "normal")
     seconds = BLITZ_DISCUSSION_SECONDS if kind in ("blitz", "superblitz") else NORMAL_DISCUSSION_SECONDS
-    app_state["timer"]["discussion_deadline_ms"] = int(time.time() * 1000) + seconds * 1000
-    add_log("Фаза: обсуждение")
-    await emit_state_update()
+    deadline_ms = int(time.time() * 1000) + seconds * 1000
+    try:
+        effects = transition_start_discussion(app_state, deadline_ms=deadline_ms)
+    except TransitionError as error:
+        await _emit_transition_error(sid, error)
+        return
+    await _apply_transition_effects(effects)
 
 
 @sio.event
@@ -996,14 +894,12 @@ async def admin_team_answer(sid, data=None):
     """Переход DISCUSSION -> TEAM_ANSWER."""
     if not await require_admin(sid):
         return
-    if app_state["game"]["phase"] != PHASE_DISCUSSION:
+    try:
+        effects = transition_team_answer(app_state)
+    except TransitionError as error:
+        await _emit_transition_error(sid, error)
         return
-    # Stop discussion timer and play signal for everyone
-    app_state["timer"]["discussion_deadline_ms"] = None
-    await sio.emit("play_sound", {"sound": "sig1"})
-    app_state["game"]["phase"] = PHASE_TEAM_ANSWER
-    add_log("Фаза: ответ команды")
-    await emit_state_update()
+    await _apply_transition_effects(effects)
 
 
 @sio.event
@@ -1014,17 +910,13 @@ async def admin_ten_seconds(sid, data=None):
     """
     if not await require_admin(sid):
         return
-    if app_state["game"]["phase"] != PHASE_DISCUSSION:
-        await sio.emit(
-            "admin_notification",
-            {"type": "warning", "message": f"Эта команда доступна только в фазе {PHASE_DISCUSSION}"},
-            to=sid,
-        )
+    deadline_ms = int(time.time() * 1000) + TEN_SECONDS * 1000
+    try:
+        effects = transition_ten_seconds(app_state, deadline_ms=deadline_ms)
+    except TransitionError as error:
+        await _emit_transition_error(sid, error)
         return
-    app_state["timer"]["discussion_deadline_ms"] = int(time.time() * 1000) + TEN_SECONDS * 1000
-    await sio.emit("play_sound", {"sound": "sig2"})
-    add_log("Сигнал: 10 секунд (таймер сброшен на 10)")
-    await emit_state_update()
+    await _apply_transition_effects(effects)
 
 @sio.event
 async def admin_sound(sid, data):
@@ -1101,7 +993,5 @@ async def admin_reset(sid):
     if not await require_admin(sid):
         return
 
-    reset_app_state(app_state)
-    _clear_all_media_tokens()
-    add_log("Игра сброшена")
-    await emit_state_update()
+    effects = transition_reset(app_state)
+    await _apply_transition_effects(effects)

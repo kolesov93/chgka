@@ -19,6 +19,7 @@ def test_create_initial_app_state_defaults():
     assert state["wheel"]["playing_sector"] is None
     assert state["wheel"]["spin_duration"] == 0
     assert state["wheel"]["is_spinning"] is False
+    assert state["wheel"]["spin_id"] == 0
     assert state["timer"]["discussion_deadline_ms"] is None
     assert state["presentation"]["shared_media"] is None
     assert state["pack"]["question_types"] is None
@@ -46,6 +47,7 @@ def test_reset_app_state_clears_runtime_fields_and_preserves_question_types():
     state["wheel"]["playing_sector"] = 9
     state["wheel"]["spin_duration"] = 7.2
     state["wheel"]["is_spinning"] = True
+    state["wheel"]["spin_id"] = 7
     state["timer"]["discussion_deadline_ms"] = 12345
     state["presentation"]["shared_media"] = {"type": "image", "media_id": "abc"}
     state["logs"] = ["old log"]
@@ -61,6 +63,7 @@ def test_reset_app_state_clears_runtime_fields_and_preserves_question_types():
     assert state["wheel"]["playing_sector"] is None
     assert state["wheel"]["spin_duration"] == 0
     assert state["wheel"]["is_spinning"] is False
+    assert state["wheel"]["spin_id"] == 8
     assert state["timer"]["discussion_deadline_ms"] is None
     assert state["presentation"]["shared_media"] is None
     assert state["pack"]["question_types"] == ["normal", "blitz"]
