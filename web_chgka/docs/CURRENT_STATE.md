@@ -2,7 +2,7 @@
 
 - Snapshot date: 2026-08-04
 - Branch at snapshot: `task/game-transitions`
-- Last completed task commit before this snapshot: `1cf5320` (`Update transition task handoff`)
+- Last completed task commit before this snapshot: `3c547a8` (`Fix development media URLs`)
 
 ## Product decisions
 
@@ -40,7 +40,7 @@ The checks use the local installed environments. There is no clean-environment C
 
 ## Active task: game transitions
 
-The current task is documented in `docs/tasks/0002-game-transitions.md`. Implementation and automated verification are complete; manual browser acceptance is in progress and branch integration remains.
+The current task is documented in `docs/tasks/0002-game-transitions.md`. Implementation and automated verification are complete. Manual browser acceptance has passed through media point 5; the remaining checks and branch integration remain.
 
 Completed:
 
@@ -87,7 +87,7 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Repeat media point 5 of the two-browser smoke test, then finish the remaining acceptance checks for sounds and reset during spin.
+1. Finish the remaining two-browser acceptance checks after the now-passing media point 5, including sounds and reset during spin.
 2. If accepted, push the branch commits, finish the task document, remove the completed roadmap item, and merge into `web`.
 3. Take Build/CI next: commit and consistently use the lockfile, add clean backend/frontend jobs, and add `.dockerignore` files.
 4. Before any public deployment, take a dedicated deployment/security task covering URL routing, HTTPS, allowed origins, required secrets, token lifecycle, and persistence expectations.

@@ -54,7 +54,8 @@ The previous task added `backend/state.py`, so there is now an explicit typed st
 - Docker Compose configuration validates; its existing obsolete `version` warning remains.
 - Manual two-browser acceptance reached point 5, where image preview/share exposed a development URL bug: relative `/media/...` requests went to Vite on port 5173 instead of the backend on port 8000.
 - Both admin preview and player rendering now build media URLs from the backend origin. The frontend build, all 71 backend tests, and a focused `painting1.jpg` media-token/file response check pass after the fix.
-- Repeat point 5 and finish the remaining manual checks before merging the task.
+- The repeated point 5 passes: the image appears in both the admin preview and the player shared-media view.
+- Finish the remaining manual checks before merging the task.
 
 ## Decisions
 
