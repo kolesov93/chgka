@@ -7,7 +7,10 @@ import { LoginScreen } from './components/LoginScreen'
 import { WaitingRoom } from './components/WaitingRoom'
 import { useGameSound } from './hooks/useGameSound'
 
-const socket = io(import.meta.env.DEV ? 'http://localhost:8000' : '/', {
+const backendOrigin = import.meta.env.DEV ? 'http://localhost:8000' : '';
+const mediaUrl = (mediaId) => `${backendOrigin}/media/${encodeURIComponent(mediaId)}`;
+
+const socket = io(backendOrigin || '/', {
   transports: ['websocket']
 })
 
@@ -419,7 +422,7 @@ function App() {
           setAdminMediaPreview({
             media_id: resp.media_id,
             type: resp.type,
-            url: `/media/${resp.media_id}`,
+            url: mediaUrl(resp.media_id),
             section,
             path: media_path,
           });
@@ -651,7 +654,7 @@ function App() {
               {sharedMedia && sharedMedia.type === 'image' ? (
                 <div className="w-full bg-slate-800/40 border border-slate-700 rounded-xl p-4 flex justify-center">
                   <img
-                    src={`/media/${sharedMedia.media_id}`}
+                    src={mediaUrl(sharedMedia.media_id)}
                     alt="Shared media"
                     className="max-h-[520px] w-auto object-contain"
                   />
