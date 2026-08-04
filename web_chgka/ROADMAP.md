@@ -33,11 +33,6 @@
    - Минимальный вариант: snapshot state в JSON.
    - Более чистый вариант: Redis/SQLite для state, players, tokens и media tokens.
 
-15. Обновление dependency/toolchain
-   - Обновить Vite 4 до поддерживаемой major-версии и устранить оставшиеся dev-only `npm audit` advisories вокруг старого `esbuild`.
-   - Обновить FastAPI/Starlette/AnyIO/Uvicorn/Socket.IO после отдельной проверки совместимости; текущие версии работают на Python 3.14, но дают deprecation/syntax warnings из зависимостей.
-   - После обновления повторить backend/frontend checks, Docker builds и двухбраузерный smoke.
-
 ### P1: критичные фичи для live-игры
 
 7. Режим бога: минимальный live-ops набор
