@@ -39,7 +39,8 @@ UI components may emit existing user actions through the shared socket, but they
 - `backend/main.py` creates the FastAPI/Socket.IO application and currently contains authentication, player lifecycle, phase handlers, scoring, spin orchestration, media access, logging, and emits.
 - `backend/state.py` defines the typed internal `AppState` and serializes it to the flat public payload expected by the frontend.
 - `backend/transitions.py` owns synchronous phase, spin, scoring, blitz, round-end, and reset rules. It mutates `AppState` before network awaits and returns transport effects such as logs, sounds, media-token cleanup, and admin-question refresh.
-- `backend/questions.py` parses and validates filesystem question packs and converts Markdown sections to HTML.
+- `backend/questions.py` parses and validates filesystem question packs, assigns section-aware opaque media references, and converts Markdown sections to HTML.
+- `backend/media.py` builds the media catalog for the exact current round/blitz part, creates and validates media-token context, and owns synchronous playback-state transitions.
 - `backend/validate_pack.py` exposes that same parser as the pre-start `python -m validate_pack` CLI; it does not define separate validation rules.
 
 The backend is authoritative. Clients request actions; they do not calculate scores or advance phases locally.
@@ -80,15 +81,18 @@ Markdown is converted to HTML on the backend. Media references become placeholde
 
 ## Media flow
 
-The parser recognizes images, audio, and video. The share flow currently supports images only:
+The parser recognizes images, audio, and video. Each Markdown occurrence receives an opaque `media_ref`, source section, and order. A file referenced in both question and answer therefore has two different references. Question HTML contains only the opaque reference; paths and inferred types are not trusted from the browser.
 
-1. The admin clicks a media placeholder.
-2. The backend resolves the relative path against media allowed for the current round.
-3. The backend creates a temporary `media_id` bound to the round context.
-4. The admin shares that ID through `admin_share_media`.
-5. All clients request `/media/{media_id}` from the backend origin and render it from shared presentation state.
+The managed image/audio flow is:
 
-Audio/video playback state, server timestamps, pause/resume, and synchronization remain unimplemented.
+1. `admin_question` sends the admin the current round/part HTML and admin-only media descriptors.
+2. The admin clicks a placeholder and resolves its `media_ref` through `admin_resolve_media`.
+3. The backend looks the reference up in the current catalog and creates a temporary `media_id` token.
+4. The token is bound to its expiry, spin generation, sector/kind/part, round/part scope, section, exact reference, type, name, and file. The same validation runs on share, playback commands, and `GET /media/{media_id}`.
+5. `admin_share_media` puts an image or stopped audio item into shared presentation state. The public serializer removes the internal reference, section, and filename; clients receive only the type/token/playback fields and fetch the file from the backend origin.
+6. Audio play/pause/stop actions mutate server-authoritative playback state. `state_update` includes the stored position, playback start timestamp, and serialization time so current and reconnecting clients align their local audio elements.
+
+Players receive no native playback controls. Browser autoplay restrictions are handled by a local permission button, which does not change server playback state. Stop resets audio to the beginning while keeping it visible; hide removes it. Video, queue/next, fade, duration extraction, and automatic server-side end detection remain roadmap work. Image preview stays in the separate media block; inline image previews are a separate task.
 
 ## Persistence and concurrency
 

@@ -68,6 +68,17 @@ class TestValidQuestions:
         assert q.media[4].type == MediaType.IMAGE
         assert q.media[5].type == MediaType.AUDIO
         assert q.media[6].type == MediaType.VIDEO
+        assert [item.section for item in q.media] == [
+            "question",
+            "question",
+            "question",
+            "question",
+            "answer",
+            "answer",
+            "answer",
+        ]
+        assert [item.order for item in q.media] == [0, 1, 2, 3, 0, 1, 2]
+        assert len({item.ref for item in q.media}) == 7
         
         # Check that paths are absolute and exist
         for media in q.media:
@@ -83,11 +94,15 @@ class TestValidQuestions:
         q = parse_question(VALID_DIR / "valid_shared_media")
 
         assert q.type == QuestionType.NORMAL
-        assert len(q.media) == 1
-        assert q.media[0].type == MediaType.IMAGE
-        assert q.media[0].path.name == "shared.jpg"
-        assert "media-placeholder" in q.question_html
-        assert "media-placeholder" in q.answer_html
+        assert len(q.media) == 2
+        assert all(item.type == MediaType.IMAGE for item in q.media)
+        assert all(item.path.name == "shared.jpg" for item in q.media)
+        assert [item.section for item in q.media] == ["question", "answer"]
+        assert q.media[0].ref != q.media[1].ref
+        assert f'data-media-ref="{q.media[0].ref}"' in q.question_html
+        assert f'data-media-ref="{q.media[1].ref}"' in q.answer_html
+        assert "data-media-path" not in q.question_html
+        assert "data-media-type" not in q.question_html
     
     def test_blitz(self):
         """Blitz question with 3 sub-questions."""
@@ -377,4 +392,3 @@ class TestInvalidBlitz:
         """Normal question with sub-question folders."""
         with pytest.raises(QuestionParseError, match="01|02|03|подпапк|subfolder"):
             parse_question(INVALID_DIR / "normal_with_parts")
-

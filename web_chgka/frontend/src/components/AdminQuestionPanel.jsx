@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { mediaUrl, socket } from '../socket';
+import { SynchronizedAudio } from './SynchronizedAudio';
 
 function QuestionSection({ title, children, highlight = false, accentClass = '' }) {
   return (
@@ -16,10 +17,20 @@ function QuestionSection({ title, children, highlight = false, accentClass = '' 
   );
 }
 
-export function AdminQuestionPanel({ adminQuestion, phase, sharedMedia, addNotification }) {
+export function AdminQuestionPanel({
+  adminQuestion,
+  phase,
+  sharedMedia,
+  volume,
+  addNotification,
+}) {
   const [mediaPreview, setMediaPreview] = useState(null);
 
   if (!adminQuestion) return null;
+
+  const mediaByRef = Object.fromEntries(
+    (adminQuestion.media || []).map((media) => [media.media_ref, media]),
+  );
 
   const isBlitz = adminQuestion.kind === 'blitz' || adminQuestion.kind === 'superblitz';
   const header = isBlitz
@@ -30,24 +41,27 @@ export function AdminQuestionPanel({ adminQuestion, phase, sharedMedia, addNotif
     if (!html) return null;
 
     const handleClick = (event) => {
-      const element = event.target?.closest?.('.media-placeholder[data-media-type][data-media-path]');
+      const element = event.target?.closest?.('.media-placeholder[data-media-ref]');
       if (!element) return;
 
-      const mediaType = element.getAttribute('data-media-type');
-      const mediaPath = element.getAttribute('data-media-path');
-      if (!mediaType || !mediaPath) return;
+      const mediaRef = element.getAttribute('data-media-ref');
+      const descriptor = mediaByRef[mediaRef];
+      if (!descriptor) {
+        addNotification({ type: 'warning', message: 'Медиа не найдено в текущей секции' });
+        return;
+      }
 
-      if (mediaType !== 'image') {
+      if (descriptor.type === 'video') {
         addNotification({
           type: 'warning',
-          message: `Пока поддерживаем только картинки (media_type=${mediaType})`,
+          message: 'Видео будет поддержано на следующем этапе media flow',
         });
         return;
       }
 
       socket.emit(
         'admin_resolve_media',
-        { media_type: mediaType, media_path: mediaPath },
+        { media_ref: mediaRef },
         (response) => {
           if (!response?.ok) {
             addNotification({
@@ -61,8 +75,9 @@ export function AdminQuestionPanel({ adminQuestion, phase, sharedMedia, addNotif
             media_id: response.media_id,
             type: response.type,
             url: mediaUrl(response.media_id),
-            section,
-            path: mediaPath,
+            section: response.section || section,
+            name: response.name,
+            media_ref: response.media_ref,
           });
         },
       );
@@ -91,6 +106,7 @@ export function AdminQuestionPanel({ adminQuestion, phase, sharedMedia, addNotif
 
   const highlightQuestion = phase === 'QUESTION_READING' || phase === 'DISCUSSION';
   const highlightAnswer = phase === 'TEAM_ANSWER' || phase === 'POST_ROUND';
+  const previewIsShared = mediaPreview?.media_id === sharedMedia?.media_id;
 
   return (
     <div className="w-full bg-slate-800/70 border border-slate-700 rounded-xl p-4 mb-4">
@@ -144,7 +160,7 @@ export function AdminQuestionPanel({ adminQuestion, phase, sharedMedia, addNotif
         {mediaPreview ? (
           <div className="flex flex-col gap-3">
             <div className="text-[11px] text-slate-400">
-              Preview: <span className="text-slate-200">{mediaPreview.path}</span>
+              Preview: <span className="text-slate-200">{mediaPreview.name}</span>
               <span className="text-slate-600"> • </span>
               <span className="text-slate-500">секция:</span>{' '}
               <span className="text-slate-200">{mediaPreview.section}</span>
@@ -153,18 +169,55 @@ export function AdminQuestionPanel({ adminQuestion, phase, sharedMedia, addNotif
               <div className="rounded border border-slate-700 bg-slate-900/40 p-2 flex justify-center">
                 <img
                   src={mediaPreview.url}
-                  alt={mediaPreview.path}
+                  alt={mediaPreview.name}
                   className="max-h-[320px] w-auto object-contain"
                 />
               </div>
             )}
-            <div className="flex gap-2">
+            {mediaPreview.type === 'audio' && (
+              <div className="rounded border border-slate-700 bg-slate-900/40 p-3">
+                {previewIsShared ? (
+                  <SynchronizedAudio media={sharedMedia} volume={volume} />
+                ) : (
+                  <audio
+                    src={mediaPreview.url}
+                    controls
+                    preload="metadata"
+                    className="w-full"
+                  />
+                )}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={sharePreview}
+                disabled={previewIsShared}
                 className="flex-1 bg-blue-700 hover:bg-blue-600 text-white py-2 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
               >
-                Показать игрокам
+                {previewIsShared ? 'Показано игрокам' : 'Показать игрокам'}
               </button>
+              {mediaPreview.type === 'audio' && previewIsShared && (
+                <>
+                  <button
+                    onClick={() => socket.emit('admin_play_media')}
+                    className="bg-green-700 hover:bg-green-600 text-white py-2 px-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
+                  >
+                    Play
+                  </button>
+                  <button
+                    onClick={() => socket.emit('admin_pause_media')}
+                    className="bg-yellow-700 hover:bg-yellow-600 text-white py-2 px-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
+                  >
+                    Pause
+                  </button>
+                  <button
+                    onClick={() => socket.emit('admin_stop_media')}
+                    className="bg-red-900 hover:bg-red-800 text-white py-2 px-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
+                  >
+                    Stop
+                  </button>
+                </>
+              )}
               <button
                 onClick={() => socket.emit('admin_hide_media')}
                 className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 py-2 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"

@@ -32,6 +32,7 @@ Frontend checks, from `frontend/`:
 
 ```bash
 npm ci
+npm test
 npm run build
 ```
 

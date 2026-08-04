@@ -7,6 +7,19 @@ from state import (
 )
 
 
+def _shared_image():
+    return {
+        "type": "image",
+        "media_id": "abc",
+        "media_ref": "image-ref",
+        "section": "question",
+        "name": "image.jpg",
+        "playback_state": "stopped",
+        "position_ms": 0,
+        "started_at_ms": None,
+    }
+
+
 def test_create_initial_app_state_defaults():
     state = create_initial_app_state()
 
@@ -49,7 +62,7 @@ def test_reset_app_state_clears_runtime_fields_and_preserves_question_types():
     state["wheel"]["is_spinning"] = True
     state["wheel"]["spin_id"] = 7
     state["timer"]["discussion_deadline_ms"] = 12345
-    state["presentation"]["shared_media"] = {"type": "image", "media_id": "abc"}
+    state["presentation"]["shared_media"] = _shared_image()
     state["logs"] = ["old log"]
 
     reset_app_state(state)
@@ -81,10 +94,10 @@ def test_public_game_state_flattens_app_state_for_current_frontend():
     state["wheel"]["spin_duration"] = 5.5
     state["wheel"]["is_spinning"] = True
     state["timer"]["discussion_deadline_ms"] = 12345
-    state["presentation"]["shared_media"] = {"type": "image", "media_id": "abc"}
+    state["presentation"]["shared_media"] = _shared_image()
     state["logs"].append("hello")
 
-    payload = public_game_state(state)
+    payload = public_game_state(state, now_ms=999_000)
 
     assert payload == {
         "phase": PHASE_LOGIN,
@@ -99,11 +112,22 @@ def test_public_game_state_flattens_app_state_for_current_frontend():
         "question_types": ["normal"],
         "discussion_deadline_ms": 12345,
         "round": {"kind": "normal", "sector": 3},
-        "shared_media": {"type": "image", "media_id": "abc"},
+        "shared_media": {
+            "type": "image",
+            "media_id": "abc",
+            "playback_state": "stopped",
+            "position_ms": 0,
+            "started_at_ms": None,
+            "server_now_ms": 999_000,
+        },
     }
     assert payload["score"] is not state["game"]["score"]
     assert payload["used_questions"] is not state["game"]["used_questions"]
     assert payload["round"] is not state["game"]["round"]
+    assert "server_now_ms" not in state["presentation"]["shared_media"]
+    assert "media_ref" not in payload["shared_media"]
+    assert "section" not in payload["shared_media"]
+    assert "name" not in payload["shared_media"]
 
     payload["score"]["znatoki"] = 6
     payload["used_questions"].append(4)
@@ -112,3 +136,23 @@ def test_public_game_state_flattens_app_state_for_current_frontend():
     assert state["game"]["score"]["znatoki"] == 1
     assert state["game"]["used_questions"] == [3]
     assert state["game"]["round"]["sector"] == 3
+
+
+def test_public_game_state_serializes_server_time_for_audio_reconnect():
+    state = create_initial_app_state()
+    state["presentation"]["shared_media"] = {
+        "type": "audio",
+        "media_id": "audio-token",
+        "media_ref": "audio-ref",
+        "section": "question",
+        "name": "melody.mp3",
+        "playback_state": "playing",
+        "position_ms": 0,
+        "started_at_ms": 10_000,
+    }
+
+    payload = public_game_state(state, now_ms=13_750)
+
+    assert payload["shared_media"]["server_now_ms"] == 13_750
+    assert payload["shared_media"]["started_at_ms"] == 10_000
+    assert "server_now_ms" not in state["presentation"]["shared_media"]

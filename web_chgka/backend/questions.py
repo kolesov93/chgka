@@ -5,11 +5,13 @@ Question format: Markdown files with YAML frontmatter.
 See fixtures/sample_questions for examples.
 """
 
+import hashlib
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Optional
-import re
+
 import markdown
 
 
@@ -27,9 +29,13 @@ class MediaType(Enum):
 
 @dataclass
 class Media:
-    """Media attachment (image, audio, or video)."""
+    """One ordered media reference from a specific Markdown section."""
+
     type: MediaType
     path: Path  # absolute path to file
+    section: str
+    order: int
+    ref: str
 
 
 @dataclass
@@ -195,7 +201,23 @@ def _infer_media_type(alt: str, path: str) -> MediaType:
     raise QuestionParseError(f"Unsupported media format: {path}")
 
 
-def _extract_media_and_replace(md: str, base_folder: Path) -> tuple[str, list[Media], set[Path]]:
+def _media_ref(base_folder: Path, section: str, order: int, rel_path: Path) -> str:
+    identity = "\0".join(
+        (
+            base_folder.resolve().as_posix(),
+            section,
+            str(order),
+            rel_path.as_posix(),
+        )
+    )
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+
+def _extract_media_and_replace(
+    md: str,
+    base_folder: Path,
+    section: str,
+) -> tuple[str, list[Media], set[Path]]:
     media_list: list[Media] = []
     used_rel: set[Path] = set()
 
@@ -225,36 +247,41 @@ def _extract_media_and_replace(md: str, base_folder: Path) -> tuple[str, list[Me
             raise QuestionParseError(f"Media path escapes the question folder: {rel}")
         if not full.is_file():
             raise QuestionParseError(f"Media file not found: {rel}")
-        media_list.append(Media(type=mtype, path=full))
+        order = len(media_list)
+        media_ref = _media_ref(base_folder, section, order, rel_path)
+        media_list.append(
+            Media(
+                type=mtype,
+                path=full,
+                section=section,
+                order=order,
+                ref=media_ref,
+            )
+        )
         used_rel.add(rel_path)
         # Placeholder for later rendering by admin UI
-        return (
-            f'<span class="media-placeholder" data-media-type="{mtype.value}" '
-            f'data-media-path="{rel}"></span>'
-        )
+        return f'<span class="media-placeholder" data-media-ref="{media_ref}"></span>'
 
     new_md = _MEDIA_RE.sub(repl, md)
     return new_md, media_list, used_rel
 
 
-def _dedupe_media(media: list[Media]) -> list[Media]:
+def _validate_media_reference_types(media: list[Media]) -> list[Media]:
     """
-    Deduplicate media entries by absolute path, preserving first-seen order.
+    Preserve every ordered section reference while validating file type identity.
     If the same file is referenced with conflicting inferred types, fail fast.
     """
     seen: dict[Path, MediaType] = {}
-    out: list[Media] = []
     for m in media:
         prev = seen.get(m.path)
         if prev is None:
             seen[m.path] = m.type
-            out.append(m)
             continue
         if prev != m.type:
             raise QuestionParseError(
                 f"Media file referenced with conflicting types: {m.path.name}"
             )
-    return out
+    return media
 
 
 def _validate_media_usage(base_folder: Path, media_links_from_md: set[Path]) -> None:
@@ -312,26 +339,30 @@ def _parse_one_question_folder(folder: Path) -> Question:
     media_links_from_md: set[Path] = set()
     media_all: list[Media] = []
 
-    def _render_section(section_md: Optional[str]) -> Optional[str]:
+    def _render_section(section_md: Optional[str], section: str) -> Optional[str]:
         if section_md is None:
             return None
-        md_with_ph, media, used_rel = _extract_media_and_replace(section_md, folder)
+        md_with_ph, media, used_rel = _extract_media_and_replace(
+            section_md,
+            folder,
+            section,
+        )
         media_links_from_md.update(used_rel)
         media_all.extend(media)
         # Full-featured Markdown -> HTML converter.
         # NOTE: admin-only content; raw HTML is allowed by default in Python-Markdown.
         return markdown.markdown(md_with_ph, extensions=["extra", "sane_lists"])
 
-    question_html = _render_section(sections.get("Вопрос"))
+    question_html = _render_section(sections.get("Вопрос"), "question")
     if question_html is None:
         # Should be unreachable because we validate "Вопрос" presence above.
         raise QuestionParseError("Missing section: Вопрос")
 
-    answer_html = _render_section(sections.get("Ответ"))
+    answer_html = _render_section(sections.get("Ответ"), "answer")
 
-    comment_html = _render_section(sections.get("Комментарий"))
+    comment_html = _render_section(sections.get("Комментарий"), "comment")
 
-    sources_html = _render_section(sections.get("Источник"))
+    sources_html = _render_section(sections.get("Источник"), "sources")
 
     # Validate media folder contents vs references
     _validate_media_usage(folder, media_links_from_md)
@@ -343,7 +374,7 @@ def _parse_one_question_folder(folder: Path) -> Question:
         author=author,
         comment_html=comment_html,
         sources_html=sources_html,
-        media=_dedupe_media(media_all),
+        media=_validate_media_reference_types(media_all),
         type=qtype,
         parts=[],
     )
