@@ -76,6 +76,7 @@ _MEDIA_RE = re.compile(r"!\[(?P<alt>[^\]]*)\]\((?P<path>[^)]+)\)")
 _IMAGE_EXTS = {".jpg", ".jpeg", ".png"}
 _AUDIO_EXTS = {".mp3", ".wav", ".ogg"}
 _VIDEO_EXTS = {".mp4", ".webm"}
+_SECTOR_DIR_RE = re.compile(r"^\d{2}$")
 
 
 def _read_text_file(path: Path) -> str:
@@ -205,9 +206,24 @@ def _extract_media_and_replace(md: str, base_folder: Path) -> tuple[str, list[Me
         # Only treat local paths
         if "://" in rel:
             return match.group(0)
+        if (
+            rel_path.is_absolute()
+            or not rel_path.parts
+            or rel_path.parts[0] != "media"
+        ):
+            raise QuestionParseError(
+                f"Media path must be relative and stay under media/: {rel}"
+            )
         mtype = _infer_media_type(alt, rel)
-        full = (base_folder / rel_path).resolve()
-        if not full.exists():
+        base_resolved = base_folder.resolve()
+        media_root = (base_resolved / "media").resolve()
+        full = (base_resolved / rel_path).resolve()
+        if (
+            not full.is_relative_to(base_resolved)
+            or not full.is_relative_to(media_root)
+        ):
+            raise QuestionParseError(f"Media path escapes the question folder: {rel}")
+        if not full.is_file():
             raise QuestionParseError(f"Media file not found: {rel}")
         media_list.append(Media(type=mtype, path=full))
         used_rel.add(rel_path)
@@ -430,6 +446,20 @@ def parse_question_pack(pack_folder: Path) -> QuestionPack:
     if not pack_folder.exists() or not pack_folder.is_dir():
         raise QuestionParseError(f"Pack folder does not exist: {pack_folder}")
 
+    expected_sector_dirs = {f"{sector:02d}" for sector in range(1, 14)}
+    unexpected_sector_dirs = sorted(
+        entry.name
+        for entry in pack_folder.iterdir()
+        if entry.is_dir()
+        and _SECTOR_DIR_RE.fullmatch(entry.name)
+        and entry.name not in expected_sector_dirs
+    )
+    if unexpected_sector_dirs:
+        names = ", ".join(unexpected_sector_dirs)
+        raise QuestionParseError(
+            f"Unexpected question sector folder(s): {names} (expected only 01..13)"
+        )
+
     questions: list[Question] = []
     for sector in range(1, 14):
         qdir = pack_folder / f"{sector:02d}"
@@ -441,4 +471,3 @@ def parse_question_pack(pack_folder: Path) -> QuestionPack:
             raise QuestionParseError(f"Failed to parse sector {sector} ({qdir}): {e}") from e
 
     return QuestionPack(questions=questions, path=pack_folder.resolve())
-

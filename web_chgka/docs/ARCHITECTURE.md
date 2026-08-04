@@ -40,6 +40,7 @@ UI components may emit existing user actions through the shared socket, but they
 - `backend/state.py` defines the typed internal `AppState` and serializes it to the flat public payload expected by the frontend.
 - `backend/transitions.py` owns synchronous phase, spin, scoring, blitz, round-end, and reset rules. It mutates `AppState` before network awaits and returns transport effects such as logs, sounds, media-token cleanup, and admin-question refresh.
 - `backend/questions.py` parses and validates filesystem question packs and converts Markdown sections to HTML.
+- `backend/validate_pack.py` exposes that same parser as the pre-start `python -m validate_pack` CLI; it does not define separate validation rules.
 
 The backend is authoritative. Clients request actions; they do not calculate scores or advance phases locally.
 
@@ -69,11 +70,11 @@ Blitz and superblitz use the same phases plus `round.part_index` and the tempora
 
 ## Question packs
 
-A pack is a directory with exactly 13 directories named `01` through `13`. Each sector contains `question.md`; media live under a local `media/` directory.
+A pack contains 13 required sector directories named `01` through `13`. Each sector contains `question.md`; media live under a local `media/` directory.
 
 Supported question kinds are `normal`, `blitz`, and `superblitz`. Blitz variants contain three nested parts, also named `01` through `03`.
 
-The parser validates required sections, section order, media existence and usage, supported extensions, and blitz structure. It intentionally supports only simple `key: value` frontmatter rather than the full YAML language.
+The parser validates required sectors and sections, section order, media existence and usage, supported extensions, local media-path containment, and blitz structure. Extra two-digit numeric sector directories are rejected; named root-level auxiliary directories are ignored. It intentionally supports only simple `key: value` frontmatter rather than the full YAML language. The authoring contract and validator usage are documented in `docs/QUESTION_PACKS.md`.
 
 Markdown is converted to HTML on the backend. Media references become placeholders for the admin UI. Raw HTML is currently possible and therefore assumes a trusted pack.
 

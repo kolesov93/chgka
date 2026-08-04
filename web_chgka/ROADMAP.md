@@ -18,10 +18,6 @@
 
 ### P0: техническая прочность
 
-4. Pack tooling
-   - Добавить CLI/endpoint `validate-pack`, чтобы проверять пак до старта игры.
-   - Документировать формат `question.md`, media folder, blitz/superblitz и ограничения.
-
 5. Авторизация и безопасность
    - Убрать dev default password из production-сценария или падать без `ADMIN_PASSWORD`.
    - Ограничить CORS в production.
