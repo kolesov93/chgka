@@ -1,8 +1,8 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-04
-- Completed task: `docs/tasks/0004-frontend-decomposition.md`
-- Accepted implementation head before closure documentation: `b5467d6` (`Decompose frontend application shell`)
+- Active task: `docs/tasks/0005-dependency-toolchain-refresh.md`
+- Task base: `550c6ba` (`Merge frontend decomposition task`)
 
 ## Product decisions
 
@@ -26,6 +26,28 @@
 - The game-transitions history includes the development media-origin fix found during manual smoke testing.
 
 The branch has clean-install and container checks, and all three GitHub Actions jobs pass remotely.
+
+## Active task: dependency and toolchain refresh
+
+The task is documented in `docs/tasks/0005-dependency-toolchain-refresh.md` on branch `task/dependency-toolchain-refresh`. Local implementation and automated verification are complete; remote CI and focused browser regression acceptance remain.
+
+Implemented:
+
+- upgraded Vite/plugin-react to 8.2.0/6.0.5 while keeping React 18 and Tailwind CSS 3;
+- upgraded FastAPI/Uvicorn/Python Socket.IO to 0.141.1/0.52.1/5.16.3 while leaving Starlette and AnyIO transitively managed by FastAPI;
+- added full npm audit, pip dependency checks, and Python warnings-as-errors to CI.
+
+Local verification:
+
+- clean npm install, full audit, and production build pass with zero vulnerabilities;
+- clean Python install, `pip check`, and all 71 warnings-as-errors tests pass;
+- both Docker images build;
+- the frontend build passes in Node.js 24;
+- backend dependency checks, all tests, and sample-pack startup pass in Python 3.14;
+- an isolated cross-container Socket.IO websocket handshake succeeds;
+- Compose configuration validates without warnings.
+
+Acceptance still required: all three remote GitHub Actions jobs plus a two-browser smoke focused on Socket.IO connection/reconnect, admin/player login, normal and blitz flow, shared sound, and image media.
 
 ## Completed task: frontend decomposition
 
@@ -70,7 +92,7 @@ Local verification:
 - all 71 backend tests pass in the Python 3.14 image with fixtures mounted read-only;
 - Compose validation passes without warnings.
 
-Known follow-up: a full npm audit still reports two dev-only findings rooted in Vite 4 / `esbuild`, requiring a breaking Vite upgrade. Python 3.14 also shows dependency warnings from the old FastAPI/Starlette/AnyIO stack. A separate dependency/toolchain refresh is now in the roadmap.
+The Vite/esbuild audit findings and Python 3.14 dependency warnings discovered in this task are addressed on the active dependency/toolchain branch; remote acceptance is still pending.
 
 ## Implemented
 
@@ -134,9 +156,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Push the task-closing documentation commit and the merge commit to the remote repository.
-2. Take the dependency/toolchain refresh in a separate branch before expanding the media flow.
-3. Preserve sample question 03 as the required audio regression case when roadmap item 8 starts.
+1. Push `task/dependency-toolchain-refresh` and require all three GitHub Actions jobs to pass.
+2. Recreate the development Compose services when it is safe to discard their in-memory game state.
+3. Run the focused two-browser regression smoke from task 0005; if accepted, close and merge the task.
 
 ## Resume checklist
 
@@ -149,7 +171,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. the task file for the next active roadmap item, then tasks 0004, 0003, and 0002 for the latest completed frontend, infrastructure, and game-state work;
+4. `docs/tasks/0005-dependency-toolchain-refresh.md` for the active task, then tasks 0004, 0003, and 0002 for the latest completed work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:
