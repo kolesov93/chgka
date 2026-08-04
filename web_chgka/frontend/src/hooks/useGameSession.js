@@ -1,0 +1,197 @@
+import { useCallback, useEffect, useState } from 'react';
+import { socket } from '../socket';
+
+const ADMIN_TOKEN_KEY = 'chgka_admin_token';
+const PLAYER_TOKEN_KEY = 'chgka_player_token';
+
+export function useGameSession() {
+  const [gameState, setGameState] = useState(null);
+  const [gameSettings, setGameSettings] = useState({ volume: 1.0 });
+  const [players, setPlayers] = useState([]);
+  const [myRole, setMyRole] = useState('player');
+  const [myName, setMyName] = useState('');
+  const [packInfo, setPackInfo] = useState(null);
+  const [adminQuestion, setAdminQuestion] = useState(null);
+  const [isConnected, setIsConnected] = useState(socket.connected);
+  const [hasJoined, setHasJoined] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+
+  const addNotification = useCallback((notification) => {
+    const id = Date.now();
+    setNotifications((current) => [...current, { id, ...notification }]);
+    setTimeout(() => {
+      setNotifications((current) => current.filter((item) => item.id !== id));
+    }, 5000);
+  }, []);
+
+  const dismissNotification = useCallback((id) => {
+    setNotifications((current) => current.filter((item) => item.id !== id));
+  }, []);
+
+  useEffect(() => {
+    window.authenticateAdmin = (password) => {
+      socket.emit('authenticate_admin', { password });
+    };
+    return () => {
+      delete window.authenticateAdmin;
+    };
+  }, []);
+
+  useEffect(() => {
+    function onConnect() {
+      setIsConnected(true);
+
+      const savedAdminToken = localStorage.getItem(ADMIN_TOKEN_KEY);
+      if (savedAdminToken) {
+        socket.emit('restore_session', { token: savedAdminToken });
+      }
+
+      const savedPlayerToken = localStorage.getItem(PLAYER_TOKEN_KEY);
+      if (savedPlayerToken) {
+        socket.emit('restore_session', { player_token: savedPlayerToken });
+      }
+    }
+
+    function onDisconnect() {
+      setIsConnected(false);
+      setMyRole('player');
+      setMyName('');
+    }
+
+    function onStateUpdate(newState) {
+      setGameState(newState);
+    }
+
+    function onRoleUpdate(data) {
+      if (data?.role) setMyRole(data.role);
+    }
+
+    function onSettingsUpdate(newSettings) {
+      if (newSettings) {
+        setGameSettings((current) => ({ ...current, ...newSettings }));
+      }
+    }
+
+    function onPlayersUpdate(data) {
+      if (data?.players) setPlayers(data.players);
+    }
+
+    function onAuthSuccess(data) {
+      localStorage.setItem(ADMIN_TOKEN_KEY, data.token);
+    }
+
+    function onAuthFailed(data) {
+      console.error('[Auth] Failed:', data.message || 'Неверный пароль');
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+    }
+
+    function onAuthRestored() {
+      console.log('[Auth] Session restored successfully');
+    }
+
+    function onJoinSuccess(data) {
+      if (data.token) localStorage.setItem(PLAYER_TOKEN_KEY, data.token);
+      if (data.name) setMyName(data.name);
+      setIsPending(false);
+      setHasJoined(true);
+    }
+
+    function onJoinPending(data) {
+      if (data.token) localStorage.setItem(PLAYER_TOKEN_KEY, data.token);
+      if (data.name) setMyName(data.name);
+      setIsPending(true);
+      setHasJoined(true);
+    }
+
+    function onKicked(data) {
+      localStorage.removeItem(PLAYER_TOKEN_KEY);
+      setGameState(null);
+      setMyRole('player');
+      setMyName('');
+      setHasJoined(false);
+      setIsPending(false);
+
+      alert(data.message || 'Вы были отключены');
+      socket.disconnect();
+      socket.connect();
+    }
+
+    function onPackInfo(data) {
+      if (data?.pack) setPackInfo(data.pack);
+    }
+
+    function onAdminQuestion(data) {
+      setAdminQuestion(data || null);
+    }
+
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    socket.on('state_update', onStateUpdate);
+    socket.on('role_update', onRoleUpdate);
+    socket.on('settings_update', onSettingsUpdate);
+    socket.on('players_update', onPlayersUpdate);
+    socket.on('auth_success', onAuthSuccess);
+    socket.on('auth_failed', onAuthFailed);
+    socket.on('auth_restored', onAuthRestored);
+    socket.on('join_success', onJoinSuccess);
+    socket.on('join_pending', onJoinPending);
+    socket.on('kicked', onKicked);
+    socket.on('admin_notification', addNotification);
+    socket.on('pack_info', onPackInfo);
+    socket.on('admin_question', onAdminQuestion);
+
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+      socket.off('state_update', onStateUpdate);
+      socket.off('role_update', onRoleUpdate);
+      socket.off('settings_update', onSettingsUpdate);
+      socket.off('players_update', onPlayersUpdate);
+      socket.off('auth_success', onAuthSuccess);
+      socket.off('auth_failed', onAuthFailed);
+      socket.off('auth_restored', onAuthRestored);
+      socket.off('join_success', onJoinSuccess);
+      socket.off('join_pending', onJoinPending);
+      socket.off('kicked', onKicked);
+      socket.off('admin_notification', addNotification);
+      socket.off('pack_info', onPackInfo);
+      socket.off('admin_question', onAdminQuestion);
+    };
+  }, [addNotification]);
+
+  const logout = useCallback(() => {
+    if (!confirm('Вы действительно хотите выйти?')) return;
+
+    socket.emit('leave_game');
+    localStorage.removeItem(ADMIN_TOKEN_KEY);
+    localStorage.removeItem(PLAYER_TOKEN_KEY);
+    socket.disconnect();
+
+    setGameState(null);
+    setMyRole('player');
+    setMyName('');
+    setHasJoined(false);
+    setPlayers([]);
+    setIsConnected(false);
+
+    socket.connect();
+  }, []);
+
+  return {
+    gameState,
+    gameSettings,
+    players,
+    myRole,
+    myName,
+    packInfo,
+    adminQuestion,
+    isConnected,
+    hasJoined,
+    isPending,
+    notifications,
+    addNotification,
+    dismissNotification,
+    logout,
+  };
+}
