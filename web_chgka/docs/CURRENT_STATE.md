@@ -3,7 +3,16 @@
 - Snapshot date: 2026-08-04
 - Completed task: `docs/tasks/0007-media-audio-flow.md`
 - Accepted implementation head: `8781f88` (`Add managed audio media flow`)
-- Status: implementation, local/remote verification, browser acceptance, and integration into `web` are complete.
+- Status: implementation, local/remote task verification, browser acceptance, and local integration into `web` are complete. Publication of the updated `web` was still pending at this snapshot.
+
+## Repository checkpoint
+
+- Active branch: `web`.
+- Media/audio merge commit: `ae484f9` (`Merge managed audio media task`).
+- The task closure commit `64963f8` and implementation commit `8781f88` are both reachable from local `web`.
+- At snapshot time local `web` was ahead of `origin/web`; push from this environment failed because no usable SSH key or GitHub CLI authentication was available.
+- Before starting another task, run `git status --short --branch`. If `web` is still ahead, publish it with `git push origin web` from an authenticated shell.
+- Pushing the closure commit to the task branch is optional because it is already in `web`; after `web` is published, the merged task branch may be deleted locally and remotely.
 
 ## Product decisions
 
@@ -194,10 +203,11 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Start the next task from the updated `web`; there is no active task branch or unfinished implementation.
-2. Recommended next product slice: roadmap item 7, the minimal live-ops («режим бога») set. Before implementation, decide whether `Fade 3s` must affect shared question audio, ordinary effects, and the wheel loop together.
-3. Alternative self-contained slice: roadmap item 8 (video plus «следующее медиа») on top of the completed image/audio foundation.
-4. Keep authorization/security and persistence as mandatory gates before public deployment.
+1. Ensure the updated local `web` has been pushed to `origin/web`; there is no unfinished implementation, only this publication checkpoint.
+2. Start the next task from the updated `web` on a new task branch.
+3. Recommended next product slice: roadmap item 7, the minimal live-ops («режим бога») set. Before implementation, decide whether `Fade 3s` must affect shared question audio, ordinary effects, and the wheel loop together.
+4. Alternative self-contained slice: roadmap item 8 (video plus «следующее медиа») on top of the completed image/audio foundation.
+5. Keep authorization/security and persistence as mandatory gates before public deployment.
 
 ## Resume checklist
 
