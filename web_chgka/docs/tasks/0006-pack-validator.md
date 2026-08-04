@@ -1,7 +1,7 @@
 # 0006: Pack Validator
 
 Branch: `task/pack-validator`
-Status: In progress
+Status: Completed
 
 ## Goal
 
@@ -45,4 +45,5 @@ Give pack authors a deterministic pre-start command that applies the same valida
 - Clean `npm ci`, full `npm audit`, and the Vite production build pass with zero vulnerabilities.
 - The backend Docker image builds; the CLI, `pip check`, all tests, and sample-pack startup pass in Python 3.14.
 - `docker compose config --quiet` passes.
-- Remote CI and the minimal admin/player sample-pack smoke are pending.
+- All three remote GitHub Actions jobs pass.
+- The minimal admin/player sample-pack smoke passes.

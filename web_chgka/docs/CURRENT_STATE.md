@@ -1,8 +1,8 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-04
-- Active task: `docs/tasks/0006-pack-validator.md`
-- Task base: `036fb3d` (`Merge dependency toolchain task`)
+- Completed task: `docs/tasks/0006-pack-validator.md`
+- Accepted implementation head before closure documentation: `8084850` (`Add question pack validator`)
 
 ## Product decisions
 
@@ -26,11 +26,11 @@
 - `docker compose config --quiet` succeeds without warnings.
 - The game-transitions history includes the development media-origin fix found during manual smoke testing.
 
-The accepted dependency/toolchain baseline has clean-install and container checks, and all three GitHub Actions jobs pass remotely. Pack-validator remote acceptance is pending.
+The dependency/toolchain and pack-validator branches have clean-install and container checks, and all three GitHub Actions jobs pass remotely.
 
-## Active task: pack validator
+## Completed task: pack validator
 
-The task is documented in `docs/tasks/0006-pack-validator.md` on branch `task/pack-validator`. Local implementation and automated verification are complete; remote CI and minimal browser acceptance remain.
+The task is documented in `docs/tasks/0006-pack-validator.md` on branch `task/pack-validator`. Implementation, automated verification, remote CI, and minimal browser acceptance are complete.
 
 Implemented:
 
@@ -47,7 +47,7 @@ Local verification:
 - backend image build, CLI, dependency check, all tests, and sample-pack startup pass in Python 3.14;
 - Compose configuration validates without warnings.
 
-Acceptance still required: all three GitHub Actions jobs and a minimal two-browser smoke covering admin/player login, pack info, and game start with the sample pack.
+Acceptance: all three GitHub Actions jobs and the minimal two-browser sample-pack smoke pass.
 
 ## Completed task: dependency and toolchain refresh
 
@@ -178,9 +178,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Push the task 0005 closing commit and merge commit, then push `task/pack-validator`.
-2. Require all three GitHub Actions jobs to pass on the pack-validator branch.
-3. Run the minimal two-browser sample-pack smoke; if accepted, close task 0006 and merge it into `web`.
+1. Close and merge task 0006 into `web`.
+2. Decide the delivery slice for the managed media-flow roadmap item before creating its task branch.
+3. Keep public-internet security and persistence as mandatory gates before production deployment.
 
 ## Resume checklist
 
@@ -193,7 +193,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. `docs/tasks/0006-pack-validator.md` for the active task, then tasks 0005, 0004, 0003, and 0002 for the latest completed work;
+4. the task file for the next active roadmap item, then tasks 0006, 0005, 0004, 0003, and 0002 for the latest completed work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:
