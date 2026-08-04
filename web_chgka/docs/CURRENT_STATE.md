@@ -1,9 +1,9 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-04
-- Active task: `docs/tasks/0007-media-audio-flow.md`
-- Branch: `task/media-audio-flow`
-- Status: implementation and local verification complete; remote CI and focused browser acceptance pending.
+- Completed task: `docs/tasks/0007-media-audio-flow.md`
+- Accepted implementation head: `8781f88` (`Add managed audio media flow`)
+- Status: implementation, local/remote verification, browser acceptance, and integration into `web` are complete.
 
 ## Product decisions
 
@@ -13,7 +13,7 @@
 - Keeping the current localhost connection during development is acceptable. Production connectivity, HTTPS, origins, and secret management belong to a dedicated deployment task.
 - Completed task branches are integrated into `web` only after automated checks and manual browser acceptance.
 
-## Current local verification
+## Verified baseline
 
 - Backend: 88 tests pass with warnings treated as errors.
   - 47 question parser tests;
@@ -28,11 +28,11 @@
 - `docker compose config --quiet` succeeds without warnings.
 - Both development images build. Python 3.14 passes `pip check` and all 88 backend tests; Node 24 passes all 4 frontend tests and the production build.
 
-The dependency/toolchain and pack-validator branches have clean-install and container checks, and all three GitHub Actions jobs passed remotely. Task 0007 has not yet been pushed/accepted.
+All three GitHub Actions jobs and the focused admin/player browser smoke passed for task 0007.
 
-## Active task: managed media flow — audio
+## Completed task: managed media flow — audio
 
-Implemented locally:
+Implemented:
 
 - section-aware opaque `media_ref` values replace client-supplied media paths/types;
 - current-round catalogs isolate normal questions and current blitz parts;
@@ -42,11 +42,7 @@ Implemented locally:
 - current and reconnecting clients align playback using server timestamps; players have no native playback controls;
 - inline image preview remains deliberately separate as roadmap item 16.
 
-Still required before integration into `web`:
-
-- push `task/media-audio-flow` and confirm all GitHub Actions jobs;
-- run the focused two-browser smoke from task 0007, including audio question 03 and image question 02;
-- record acceptance, close the task, and only then merge it into `web`.
+Acceptance: all GitHub Actions jobs and the focused two-browser smoke passed, including sample question 03 audio and the existing question 02 image flow.
 
 ## Completed task: pack validator
 
@@ -144,7 +140,8 @@ The Vite/esbuild audit findings and Python 3.14 dependency warnings discovered i
 - Normal, blitz, and superblitz rounds.
 - Scoring, discussion deadline, shared sounds, and admin logs.
 - Strict parsing of 13-question packs with Markdown sections and media validation.
-- Admin question card and image preview/share through temporary media tokens.
+- Admin question card and managed image/audio preview/share through context-bound temporary media tokens.
+- Server-authoritative audio play/pause/stop state with reconnect synchronization and no player controls.
 - Internal state split into `game`, `wheel`, `timer`, `presentation`, `pack`, and `logs`, while retaining the current flat frontend payload.
 
 ## Completed task: game transitions
@@ -197,10 +194,10 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Push `task/media-audio-flow` and wait for all GitHub Actions jobs.
-2. Run the focused two-browser smoke for sample audio and image media.
-3. Close and merge task 0007 into `web` only after acceptance.
-4. Keep public-internet security and persistence as mandatory gates before production deployment.
+1. Start the next task from the updated `web`; there is no active task branch or unfinished implementation.
+2. Recommended next product slice: roadmap item 7, the minimal live-ops («режим бога») set. Before implementation, decide whether `Fade 3s` must affect shared question audio, ordinary effects, and the wheel loop together.
+3. Alternative self-contained slice: roadmap item 8 (video plus «следующее медиа») on top of the completed image/audio foundation.
+4. Keep authorization/security and persistence as mandatory gates before public deployment.
 
 ## Resume checklist
 
@@ -213,7 +210,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. active task 0007, then tasks 0006, 0005, 0004, 0003, and 0002 for the latest completed work;
+4. completed tasks 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:

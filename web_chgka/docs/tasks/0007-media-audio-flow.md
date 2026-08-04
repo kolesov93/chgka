@@ -1,7 +1,7 @@
 # 0007: Managed Media Flow — Audio
 
 Branch: `task/media-audio-flow`
-Status: In progress
+Status: Completed
 
 ## Goal
 
@@ -23,14 +23,6 @@ Introduce the final section-aware media identity and token foundation, then use 
 - Video rendering, media queue/next, fade, waveform, duration extraction, or automatic server-side ended transitions.
 - Product security, persistence, or production deployment changes outside media-token context validation.
 
-## Verification plan
-
-- Add parser tests for section/order/ref identity, including the same file referenced from multiple sections.
-- Add backend tests for opaque-ref resolution, section and blitz-part isolation, token expiry/context checks on HTTP access, and playback transitions.
-- Add frontend unit tests for pure playback synchronization math using Node's built-in test runner; do not introduce a browser test framework in this stage.
-- Preserve image preview/share/hide behavior and cover sample question 03 audio end to end.
-- Run all backend tests, frontend tests/build/audit, Compose validation, Python 3.14 container checks, remote CI, and a focused two-browser smoke.
-
 ## Implementation
 
 - Parser media entries now carry section, per-section order, and an opaque reference; placeholders expose only that reference.
@@ -41,7 +33,7 @@ Introduce the final section-aware media identity and token foundation, then use 
 - Image resolution and sharing use the same reference/token contract while retaining the existing separate preview block.
 - CI now runs the pure frontend playback synchronization tests before the production build.
 
-## Verification status
+## Verification and acceptance
 
 Passed locally:
 
@@ -53,7 +45,7 @@ Passed locally:
 - Python 3.14 container: `pip check` and 88 tests;
 - Node 24 container: 4 tests and production build.
 
-Pending acceptance:
+Acceptance passed:
 
-- GitHub Actions on the pushed task branch;
-- focused admin/player browser smoke for sample question 03 audio and existing question 02 image behavior.
+- all GitHub Actions jobs on `task/media-audio-flow` are green;
+- the admin/player browser smoke passed, including sample question 03 audio and the existing question 02 image flow.
