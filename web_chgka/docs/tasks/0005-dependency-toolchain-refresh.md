@@ -1,7 +1,7 @@
 # 0005: Dependency and Toolchain Refresh
 
 Branch: `task/dependency-toolchain-refresh`
-Status: In progress
+Status: Completed
 
 ## Goal
 
@@ -45,4 +45,5 @@ Remove the known Vite/esbuild audit findings and refresh the Python web stack fo
 - `pip check`, all 71 warnings-as-errors tests, and sample-pack startup pass inside the Python 3.14 image.
 - A real websocket-only Socket.IO handshake succeeds between isolated frontend and backend containers.
 - `docker compose config --quiet` passes.
-- Remote CI and the focused two-browser Socket.IO smoke are pending.
+- All three remote GitHub Actions jobs pass.
+- The focused two-browser Socket.IO smoke passes.

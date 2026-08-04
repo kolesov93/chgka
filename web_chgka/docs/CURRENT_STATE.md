@@ -1,8 +1,8 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-04
-- Active task: `docs/tasks/0005-dependency-toolchain-refresh.md`
-- Task base: `550c6ba` (`Merge frontend decomposition task`)
+- Completed task: `docs/tasks/0005-dependency-toolchain-refresh.md`
+- Accepted implementation head before closure documentation: `6da766c` (`Refresh web dependency toolchain`)
 
 ## Product decisions
 
@@ -27,9 +27,9 @@
 
 The branch has clean-install and container checks, and all three GitHub Actions jobs pass remotely.
 
-## Active task: dependency and toolchain refresh
+## Completed task: dependency and toolchain refresh
 
-The task is documented in `docs/tasks/0005-dependency-toolchain-refresh.md` on branch `task/dependency-toolchain-refresh`. Local implementation and automated verification are complete; remote CI and focused browser regression acceptance remain.
+The task is documented in `docs/tasks/0005-dependency-toolchain-refresh.md` on branch `task/dependency-toolchain-refresh`. Implementation, automated verification, remote CI, and focused browser regression acceptance are complete.
 
 Implemented:
 
@@ -47,7 +47,7 @@ Local verification:
 - an isolated cross-container Socket.IO websocket handshake succeeds;
 - Compose configuration validates without warnings.
 
-Acceptance still required: all three remote GitHub Actions jobs plus a two-browser smoke focused on Socket.IO connection/reconnect, admin/player login, normal and blitz flow, shared sound, and image media.
+Acceptance: all three remote GitHub Actions jobs and the focused two-browser smoke pass.
 
 ## Completed task: frontend decomposition
 
@@ -92,7 +92,7 @@ Local verification:
 - all 71 backend tests pass in the Python 3.14 image with fixtures mounted read-only;
 - Compose validation passes without warnings.
 
-The Vite/esbuild audit findings and Python 3.14 dependency warnings discovered in this task are addressed on the active dependency/toolchain branch; remote acceptance is still pending.
+The Vite/esbuild audit findings and Python 3.14 dependency warnings discovered in this task are resolved by the completed dependency/toolchain refresh.
 
 ## Implemented
 
@@ -156,9 +156,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Push `task/dependency-toolchain-refresh` and require all three GitHub Actions jobs to pass.
-2. Recreate the development Compose services when it is safe to discard their in-memory game state.
-3. Run the focused two-browser regression smoke from task 0005; if accepted, close and merge the task.
+1. Close and merge task 0005 into `web`.
+2. Take the pack-validator roadmap item in a separate task branch.
+3. Keep the CLI as the canonical pre-start pack check; do not expose validation over HTTP in its first version.
 
 ## Resume checklist
 
@@ -171,7 +171,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. `docs/tasks/0005-dependency-toolchain-refresh.md` for the active task, then tasks 0004, 0003, and 0002 for the latest completed work;
+4. the task file for the next active roadmap item, then tasks 0005, 0004, 0003, and 0002 for the latest completed work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:
