@@ -18,7 +18,7 @@
 
 ### P0: техническая прочность
 
-4. Pack tooling
+4. Pack tooling — `В работе`, branch: `task/pack-validator`, task: `docs/tasks/0006-pack-validator.md`
    - Добавить CLI/endpoint `validate-pack`, чтобы проверять пак до старта игры.
    - Документировать формат `question.md`, media folder, blitz/superblitz и ограничения.
 

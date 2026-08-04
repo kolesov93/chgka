@@ -1,8 +1,8 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-04
-- Completed task: `docs/tasks/0005-dependency-toolchain-refresh.md`
-- Accepted implementation head before closure documentation: `6da766c` (`Refresh web dependency toolchain`)
+- Active task: `docs/tasks/0006-pack-validator.md`
+- Task base: `036fb3d` (`Merge dependency toolchain task`)
 
 ## Product decisions
 
@@ -14,18 +14,40 @@
 
 ## Verified baseline
 
-- Backend: 71 tests pass.
+- Backend: 80 tests pass.
   - 47 question parser tests;
   - 4 state helper tests;
   - 3 wheel-sector/spin-selection tests;
   - 14 pure transition tests;
-  - 3 handler concurrency/session tests.
+  - 3 handler concurrency/session tests;
+  - 9 pack-validator CLI, sector-directory, and media-path tests.
 - Frontend: `npm run build` succeeds.
 - Backend startup loads the sample pack with all 13 questions and reaches application startup completion.
 - `docker compose config --quiet` succeeds without warnings.
 - The game-transitions history includes the development media-origin fix found during manual smoke testing.
 
-The branch has clean-install and container checks, and all three GitHub Actions jobs pass remotely.
+The accepted dependency/toolchain baseline has clean-install and container checks, and all three GitHub Actions jobs pass remotely. Pack-validator remote acceptance is pending.
+
+## Active task: pack validator
+
+The task is documented in `docs/tasks/0006-pack-validator.md` on branch `task/pack-validator`. Local implementation and automated verification are complete; remote CI and minimal browser acceptance remain.
+
+Implemented:
+
+- added `python -m validate_pack /path/to/pack` with stable human-readable output and exit codes 0/1/2;
+- reused the backend startup parser instead of creating a second validation path;
+- rejected extra two-digit numeric sectors, absolute media paths, traversal, and symlinks escaping a question folder;
+- documented pack structure, frontmatter, sections, blitz/superblitz, media rules, CLI usage, and raw-HTML trust limitations.
+
+Local verification:
+
+- all 80 backend tests pass with warnings treated as errors;
+- sample-pack CLI output reports the expected question, part, and media counts;
+- clean frontend install, full npm audit, and production build pass with zero vulnerabilities;
+- backend image build, CLI, dependency check, all tests, and sample-pack startup pass in Python 3.14;
+- Compose configuration validates without warnings.
+
+Acceptance still required: all three GitHub Actions jobs and a minimal two-browser smoke covering admin/player login, pack info, and game start with the sample pack.
 
 ## Completed task: dependency and toolchain refresh
 
@@ -156,9 +178,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Close and merge task 0005 into `web`.
-2. Take the pack-validator roadmap item in a separate task branch.
-3. Keep the CLI as the canonical pre-start pack check; do not expose validation over HTTP in its first version.
+1. Push the task 0005 closing commit and merge commit, then push `task/pack-validator`.
+2. Require all three GitHub Actions jobs to pass on the pack-validator branch.
+3. Run the minimal two-browser sample-pack smoke; if accepted, close task 0006 and merge it into `web`.
 
 ## Resume checklist
 
@@ -171,7 +193,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. the task file for the next active roadmap item, then tasks 0005, 0004, 0003, and 0002 for the latest completed work;
+4. `docs/tasks/0006-pack-validator.md` for the active task, then tasks 0005, 0004, 0003, and 0002 for the latest completed work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:

@@ -5,6 +5,7 @@
 - [`AGENTS.md`](AGENTS.md) — правила и технические границы для coding agents.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — устройство приложения и runtime-контракты.
 - [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) — актуальная точка продолжения, проверки и известные проблемы.
+- [`docs/QUESTION_PACKS.md`](docs/QUESTION_PACKS.md) — формат пака вопросов, медиа и команда валидации.
 - [`ROADMAP.md`](ROADMAP.md) — приоритетный backlog и workflow задач.
 
 ## Запуск через Docker (только разработка)
@@ -44,6 +45,12 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 ```bash
 python -m pytest -q
+```
+
+Проверка пака вопросов до запуска backend:
+
+```bash
+python -m validate_pack /path/to/pack
 ```
 
 ### Frontend
