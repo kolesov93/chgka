@@ -23,6 +23,19 @@ from transitions import (
 )
 
 
+def _shared_image():
+    return {
+        "type": "image",
+        "media_id": "abc",
+        "media_ref": "image-ref",
+        "section": "question",
+        "name": "image.jpg",
+        "playback_state": "stopped",
+        "position_ms": 0,
+        "started_at_ms": None,
+    }
+
+
 def test_start_game_changes_login_to_pre_round_once():
     state = create_initial_app_state()
 
@@ -260,7 +273,7 @@ def test_last_blitz_answer_awards_znatoki():
 def test_normal_end_round_clears_round_media_and_timer():
     state = create_initial_app_state(phase=PHASE_POST_ROUND)
     state["game"]["round"] = {"kind": "normal", "sector": 3}
-    state["presentation"]["shared_media"] = {"type": "image", "media_id": "abc"}
+    state["presentation"]["shared_media"] = _shared_image()
     state["timer"]["discussion_deadline_ms"] = 123
 
     effects = transition_end_round(state, gong_sound="gong3")
@@ -281,7 +294,7 @@ def test_invalid_blitz_advance_does_not_partially_mutate_state():
         "part_index": 2,
         "advance_next_part": True,
     }
-    state["presentation"]["shared_media"] = {"type": "image", "media_id": "abc"}
+    state["presentation"]["shared_media"] = _shared_image()
     state["timer"]["discussion_deadline_ms"] = 123
 
     with pytest.raises(TransitionError) as exc_info:
@@ -289,5 +302,5 @@ def test_invalid_blitz_advance_does_not_partially_mutate_state():
 
     assert exc_info.value.code == "invalid_round"
     assert state["game"]["phase"] == PHASE_POST_ROUND
-    assert state["presentation"]["shared_media"] == {"type": "image", "media_id": "abc"}
+    assert state["presentation"]["shared_media"] == _shared_image()
     assert state["timer"]["discussion_deadline_ms"] == 123

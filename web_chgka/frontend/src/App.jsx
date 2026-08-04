@@ -122,13 +122,14 @@ function App() {
                 adminQuestion={adminQuestion}
                 phase={phase}
                 sharedMedia={sharedMedia}
+                volume={gameSettings?.volume}
                 addNotification={addNotification}
               />
             </div>
           </div>
         ) : (
           <div className="w-full flex justify-center mb-4">
-            <SharedMediaRenderer media={sharedMedia}>
+            <SharedMediaRenderer media={sharedMedia} volume={gameSettings?.volume}>
               <GameTable
                 gameState={gameState}
                 isAdmin={isAdmin}

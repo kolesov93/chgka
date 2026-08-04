@@ -14,6 +14,16 @@ from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from media import (
+    MediaPlaybackError,
+    create_media_token_info,
+    create_shared_media,
+    current_media_catalog as build_current_media_catalog,
+    media_token_is_current,
+    pause_shared_media,
+    play_shared_media,
+    stop_shared_media,
+)
 from questions import parse_question_pack, QuestionParseError, QuestionPack
 from state import (
     PHASE_LOGIN,
@@ -162,80 +172,17 @@ def _clear_all_media_tokens() -> None:
     media_tokens.clear()
 
 
-def _current_round_key() -> Optional[tuple[int, str, int]]:
-    """
-    Return a stable key for the current round context:
-      (sector, kind, part_index)
-    For normal questions part_index is always 0.
-    """
-    res = _get_round_ctx_and_sector()
-    if not res:
-        return None
-    round_ctx, sector = res
-    kind, part_index = _get_round_kind_and_part_index(round_ctx)
-    return (sector, kind, part_index)
+def _get_current_media_catalog() -> dict:
+    return build_current_media_catalog(loaded_pack, app_state)
 
 
-def _get_current_questions_for_media() -> list:
-    """
-    Return a list of Question objects whose media are allowed to be shown
-    for the current round context.
-    For blitz: includes both intro (top-level) and the current part.
-    """
-    res = _get_round_ctx_and_sector()
-    if not res:
-        return []
-    round_ctx, sector = res
-    try:
-        q = loaded_pack.get_by_sector(sector)
-    except Exception:
-        return []
-    kind, _part_index = _get_round_kind_and_part_index(round_ctx)
-    if kind in ("blitz", "superblitz"):
-        part_index = int(round_ctx.get("part_index", 0))
-        part = q.parts[part_index] if 0 <= part_index < len(q.parts) else None
-        out = [q]
-        if part is not None:
-            out.append(part)
-        return out
-    return [q]
-
-
-def _resolve_media_path_to_abs(rel_path: str) -> Optional[Path]:
-    """
-    Given a relative media path from markdown (e.g. 'media/img.png'),
-    resolve it to an absolute Path within the *current round* question folder.
-    Returns None if not allowed / not found.
-    """
-    res = _get_round_ctx_and_sector()
-    if not res:
-        return None
-    round_ctx, sector = res
-
-    # Allowed absolute media paths from parsed pack for current question context
-    allowed_abs: set[Path] = set()
-    for qq in _get_current_questions_for_media():
-        for m in getattr(qq, "media", []) or []:
-            allowed_abs.add(Path(m.path))
-
-    rel = Path(rel_path)
-    if rel.is_absolute() or ".." in rel.parts:
-        return None
-
-    kind, part_index_norm = _get_round_kind_and_part_index(round_ctx)
-    base_candidates: list[Path] = []
-    base_candidates.append(Path(loaded_pack.path) / f"{sector:02d}")
-    if kind in ("blitz", "superblitz"):
-        base_candidates.append(Path(loaded_pack.path) / f"{sector:02d}" / f"{part_index_norm + 1:02d}")
-
-    for base in base_candidates:
-        try:
-            cand = (base / rel).resolve()
-        except Exception:
-            continue
-        if cand in allowed_abs and cand.exists() and cand.is_file():
-            return cand
-    return None
+def _media_token_is_current(info: dict, now_ts: Optional[float] = None) -> bool:
+    return media_token_is_current(
+        info,
+        loaded_pack,
+        app_state,
+        now_ts=now_ts if now_ts is not None else time.time(),
+    )
 
 def _load_question_pack_on_startup() -> None:
     """
@@ -332,6 +279,11 @@ async def _emit_current_question_to_admins() -> None:
                 "sources_html": q.sources_html,
             }
         )
+
+    payload["media"] = [
+        media.public_descriptor()
+        for media in _get_current_media_catalog().values()
+    ]
 
     for p in players_list:
         if p.get("role") == "admin" and p.get("online", False):
@@ -446,7 +398,8 @@ async def root():
 async def get_media(media_id: str):
     _cleanup_expired_media_tokens()
     info = media_tokens.get(media_id)
-    if not info:
+    if not info or not _media_token_is_current(info):
+        media_tokens.pop(media_id, None)
         raise HTTPException(status_code=404, detail="Media not found")
     path = info.get("path")
     if not path:
@@ -785,11 +738,12 @@ async def admin_end_round(sid, data=None):
 @sio.event
 async def admin_resolve_media(sid, data):
     """
-    Resolve a markdown media path to a secure media_id for preview/share.
+    Resolve an admin-only opaque media_ref to a secure media_id.
     Returns acknowledgement payload to the caller (admin).
     """
     if not await require_admin(sid):
         return {"ok": False, "error": "not_admin"}
+    data = data if isinstance(data, dict) else {}
 
     phase = app_state["game"]["phase"]
     if phase not in (PHASE_QUESTION_READING, PHASE_DISCUSSION, PHASE_TEAM_ANSWER, PHASE_POST_ROUND):
@@ -799,27 +753,30 @@ async def admin_resolve_media(sid, data):
     if not app_state["game"]["round"]:
         return {"ok": False, "error": "no_round"}
 
-    media_type = (data.get("media_type") or "").strip().lower()
-    media_path = (data.get("media_path") or "").strip()
-    if media_type != "image":
-        return {"ok": False, "error": "unsupported_media_type"}
-    if not media_path:
-        return {"ok": False, "error": "missing_media_path"}
+    media_ref = (data.get("media_ref") or "").strip()
+    if not media_ref:
+        return {"ok": False, "error": "missing_media_ref"}
 
-    abs_path = _resolve_media_path_to_abs(media_path)
-    if abs_path is None:
+    media = _get_current_media_catalog().get(media_ref)
+    if media is None:
         return {"ok": False, "error": "media_not_allowed"}
+    if media.type not in ("image", "audio"):
+        return {"ok": False, "error": "unsupported_media_type"}
 
     # Create token bound to the current round context.
     _cleanup_expired_media_tokens()
     media_id = secrets.token_urlsafe(16)
-    media_tokens[media_id] = {
-        "path": str(abs_path),
-        "type": media_type,
-        "round_key": _current_round_key(),
-        "expires_at": time.time() + MEDIA_TOKEN_TTL_SECONDS,
+    info = create_media_token_info(
+        media,
+        app_state,
+        expires_at=time.time() + MEDIA_TOKEN_TTL_SECONDS,
+    )
+    media_tokens[media_id] = info
+    return {
+        "ok": True,
+        "media_id": media_id,
+        **media.public_descriptor(),
     }
-    return {"ok": True, "media_id": media_id, "type": media_type}
 
 
 @sio.event
@@ -827,6 +784,7 @@ async def admin_share_media(sid, data):
     """Share resolved media_id to all clients (rendered instead of the table)."""
     if not await require_admin(sid):
         return
+    data = data if isinstance(data, dict) else {}
     phase = app_state["game"]["phase"]
     if phase not in (PHASE_QUESTION_READING, PHASE_DISCUSSION, PHASE_TEAM_ANSWER, PHASE_POST_ROUND):
         return
@@ -849,17 +807,91 @@ async def admin_share_media(sid, data):
         )
         return
 
-    if info.get("round_key") != _current_round_key():
+    if not _media_token_is_current(info):
+        media_tokens.pop(media_id, None)
         await sio.emit(
             "admin_notification",
-            {"type": "warning", "message": "Это медиа относится к другому раунду."},
+            {"type": "warning", "message": "Медиа больше не относится к текущему вопросу."},
             to=sid,
         )
         return
 
-    app_state["presentation"]["shared_media"] = {"type": info.get("type", "image"), "media_id": media_id}
-    add_log("Медиа показано игрокам")
+    app_state["presentation"]["shared_media"] = create_shared_media(media_id, info)
+    add_log(f"Медиа показано игрокам: {info.get('name', info.get('type'))}")
     await emit_state_update()
+
+
+def _get_current_shared_media_token_info() -> Optional[dict]:
+    shared_media = app_state["presentation"].get("shared_media")
+    if not shared_media:
+        return None
+    media_id = shared_media.get("media_id")
+    info = media_tokens.get(media_id)
+    if not info or not _media_token_is_current(info):
+        return None
+    if info.get("media_ref") != shared_media.get("media_ref"):
+        return None
+    return info
+
+
+async def _admin_media_playback_action(sid: str, action: str) -> None:
+    if not await require_admin(sid):
+        return
+
+    shared_media = app_state["presentation"].get("shared_media")
+    info = _get_current_shared_media_token_info()
+    if shared_media is None or info is None:
+        app_state["presentation"]["shared_media"] = None
+        await sio.emit(
+            "admin_notification",
+            {"type": "warning", "message": "Сначала покажи актуальное аудио игрокам."},
+            to=sid,
+        )
+        await emit_state_update()
+        return
+
+    try:
+        if action == "play":
+            changed = play_shared_media(
+                shared_media,
+                now_ms=int(time.time() * 1000),
+            )
+        elif action == "pause":
+            changed = pause_shared_media(
+                shared_media,
+                now_ms=int(time.time() * 1000),
+            )
+        elif action == "stop":
+            changed = stop_shared_media(shared_media)
+        else:
+            raise ValueError(f"Unknown media playback action: {action}")
+    except MediaPlaybackError:
+        await sio.emit(
+            "admin_notification",
+            {"type": "warning", "message": "Это медиа нельзя воспроизводить."},
+            to=sid,
+        )
+        return
+
+    if changed:
+        labels = {"play": "запущено", "pause": "на паузе", "stop": "остановлено"}
+        add_log(f"Аудио {labels[action]}: {info.get('name', 'media')}")
+        await emit_state_update()
+
+
+@sio.event
+async def admin_play_media(sid, data=None):
+    await _admin_media_playback_action(sid, "play")
+
+
+@sio.event
+async def admin_pause_media(sid, data=None):
+    await _admin_media_playback_action(sid, "pause")
+
+
+@sio.event
+async def admin_stop_media(sid, data=None):
+    await _admin_media_playback_action(sid, "stop")
 
 
 @sio.event
@@ -943,9 +975,19 @@ async def admin_volume(sid, data):
 async def admin_stop_sounds(sid):
     if not await require_admin(sid):
         return
-    
+
+    media_stopped = False
+    try:
+        media_stopped = stop_shared_media(
+            app_state["presentation"].get("shared_media")
+        )
+    except MediaPlaybackError:
+        pass
+
     add_log("Звук остановлен")
     await sio.emit('stop_sound')
+    if media_stopped:
+        await emit_state_update()
 
 @sio.event
 async def admin_kick(sid, data):

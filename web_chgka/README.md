@@ -44,13 +44,13 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 Проверка backend:
 
 ```bash
-python -m pytest -q
+python3 -m pytest -q
 ```
 
 Проверка пака вопросов до запуска backend:
 
 ```bash
-python -m validate_pack /path/to/pack
+python3 -m validate_pack /path/to/pack
 ```
 
 ### Frontend
@@ -65,6 +65,7 @@ npm run dev
 Проверка frontend:
 
 ```bash
+npm test
 npm run build
 ```
 

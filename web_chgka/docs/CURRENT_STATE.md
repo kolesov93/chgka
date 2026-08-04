@@ -1,8 +1,9 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-04
-- Completed task: `docs/tasks/0006-pack-validator.md`
-- Accepted implementation head before closure documentation: `8084850` (`Add question pack validator`)
+- Active task: `docs/tasks/0007-media-audio-flow.md`
+- Branch: `task/media-audio-flow`
+- Status: implementation and local verification complete; remote CI and focused browser acceptance pending.
 
 ## Product decisions
 
@@ -12,21 +13,40 @@
 - Keeping the current localhost connection during development is acceptable. Production connectivity, HTTPS, origins, and secret management belong to a dedicated deployment task.
 - Completed task branches are integrated into `web` only after automated checks and manual browser acceptance.
 
-## Verified baseline
+## Current local verification
 
-- Backend: 80 tests pass.
+- Backend: 88 tests pass with warnings treated as errors.
   - 47 question parser tests;
-  - 4 state helper tests;
+  - 5 media identity/playback tests;
+  - 5 state helper tests;
   - 3 wheel-sector/spin-selection tests;
   - 14 pure transition tests;
-  - 3 handler concurrency/session tests;
+  - 5 handler concurrency/session/media tests;
   - 9 pack-validator CLI, sector-directory, and media-path tests.
-- Frontend: `npm run build` succeeds.
+- Frontend: clean install, full audit, 4 playback-math tests, and production build succeed; audit reports zero vulnerabilities.
 - Backend startup loads the sample pack with all 13 questions and reaches application startup completion.
 - `docker compose config --quiet` succeeds without warnings.
-- The game-transitions history includes the development media-origin fix found during manual smoke testing.
+- Both development images build. Python 3.14 passes `pip check` and all 88 backend tests; Node 24 passes all 4 frontend tests and the production build.
 
-The dependency/toolchain and pack-validator branches have clean-install and container checks, and all three GitHub Actions jobs pass remotely.
+The dependency/toolchain and pack-validator branches have clean-install and container checks, and all three GitHub Actions jobs passed remotely. Task 0007 has not yet been pushed/accepted.
+
+## Active task: managed media flow — audio
+
+Implemented locally:
+
+- section-aware opaque `media_ref` values replace client-supplied media paths/types;
+- current-round catalogs isolate normal questions and current blitz parts;
+- temporary tokens are bound to expiry, spin generation, round/part, scope, section, exact reference, type, name, and file;
+- image sharing is migrated to the same contract;
+- sample question 03 audio can be privately previewed, shown, and controlled by the admin through server-authoritative play/pause/stop state;
+- current and reconnecting clients align playback using server timestamps; players have no native playback controls;
+- inline image preview remains deliberately separate as roadmap item 16.
+
+Still required before integration into `web`:
+
+- push `task/media-audio-flow` and confirm all GitHub Actions jobs;
+- run the focused two-browser smoke from task 0007, including audio question 03 and image question 02;
+- record acceptance, close the task, and only then merge it into `web`.
 
 ## Completed task: pack validator
 
@@ -163,10 +183,9 @@ Additional known gaps:
 - wildcard CORS and the default admin password are development-only security;
 - raw Markdown HTML is unsafe for untrusted question packs;
 - frontend development uses `localhost:8000`, so it does not yet support browsers running on other machines;
-- media sharing is image-only even though the parser recognizes audio and video;
-- sample question 03 provides the concrete audio regression case for the managed media-flow task;
+- video sharing/playback, media queue/next, duration extraction, automatic ended state, and inline image previews remain unimplemented;
 - live ops has no server-synchronized three-second fade action next to `Silence`;
-- there are no frontend tests, Socket.IO integration tests, or lint/typecheck.
+- frontend coverage is limited to pure playback math; there are no browser/component tests, Socket.IO integration tests, or lint/typecheck.
 
 ## Repository artifacts
 
@@ -178,9 +197,10 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Close and merge task 0006 into `web`.
-2. Decide the delivery slice for the managed media-flow roadmap item before creating its task branch.
-3. Keep public-internet security and persistence as mandatory gates before production deployment.
+1. Push `task/media-audio-flow` and wait for all GitHub Actions jobs.
+2. Run the focused two-browser smoke for sample audio and image media.
+3. Close and merge task 0007 into `web` only after acceptance.
+4. Keep public-internet security and persistence as mandatory gates before production deployment.
 
 ## Resume checklist
 
@@ -193,12 +213,12 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. the task file for the next active roadmap item, then tasks 0006, 0005, 0004, 0003, and 0002 for the latest completed work;
+4. active task 0007, then tasks 0006, 0005, 0004, 0003, and 0002 for the latest completed work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:
 
 ```bash
 cd backend && python3 -m pytest -q
-cd ../frontend && npm ci && npm run build
+cd ../frontend && npm ci && npm test && npm run build
 ```

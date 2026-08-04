@@ -1,7 +1,19 @@
 import asyncio
+from pathlib import Path
+
+import pytest
 
 import main
-from state import PHASE_PRE_ROUND, PHASE_TEAM_ANSWER, create_initial_app_state
+from questions import parse_question_pack
+from state import (
+    PHASE_PRE_ROUND,
+    PHASE_QUESTION_READING,
+    PHASE_TEAM_ANSWER,
+    create_initial_app_state,
+)
+
+
+SAMPLE_PACK = Path(__file__).parent.parent.parent / "fixtures" / "sample_questions"
 
 
 class FakeSio:
@@ -95,3 +107,111 @@ def test_pending_player_stays_pending_after_restore(monkeypatch):
     assert restored_events == ["join_pending"]
     assert player["sid"] == "new"
     assert player["pending"] is True
+
+
+def test_audio_resolve_share_play_pause_stop_and_http_context(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "normal", "sector": 3}
+    state["wheel"]["spin_id"] = 7
+    pack = parse_question_pack(SAMPLE_PACK)
+    now = [100.0]
+
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", pack)
+    monkeypatch.setattr(main, "media_tokens", {})
+    monkeypatch.setattr(
+        main,
+        "players_list",
+        [{"sid": "admin", "role": "admin", "online": True}],
+    )
+    monkeypatch.setattr(main.time, "time", lambda: now[0])
+
+    descriptor = next(iter(main._get_current_media_catalog().values()))
+
+    async def run_flow():
+        await main._emit_current_question_to_admins()
+        question_payload = next(
+            data
+            for event, data, _kwargs in fake_sio.events
+            if event == "admin_question"
+        )
+        assert question_payload["media"] == [descriptor.public_descriptor()]
+        assert "path" not in question_payload["media"][0]
+
+        legacy = await main.admin_resolve_media(
+            "admin",
+            {"media_type": "audio", "media_path": "media/melody.mp3"},
+        )
+        assert legacy == {"ok": False, "error": "missing_media_ref"}
+
+        resolved = await main.admin_resolve_media(
+            "admin",
+            {"media_ref": descriptor.media_ref},
+        )
+        assert resolved["ok"] is True
+        assert resolved["type"] == "audio"
+        assert resolved["section"] == "question"
+        assert resolved["name"] == "melody.mp3"
+
+        media_id = resolved["media_id"]
+        response = await main.get_media(media_id)
+        assert Path(response.path).name == "melody.mp3"
+
+        await main.admin_share_media("admin", {"media_id": media_id})
+        shared = state["presentation"]["shared_media"]
+        assert shared["playback_state"] == "stopped"
+
+        await main.admin_play_media("admin")
+        assert shared["playback_state"] == "playing"
+        assert shared["started_at_ms"] == 100_000
+
+        now[0] = 102.5
+        await main.admin_pause_media("admin")
+        assert shared["playback_state"] == "paused"
+        assert shared["position_ms"] == 2_500
+
+        await main.admin_stop_media("admin")
+        assert shared["playback_state"] == "stopped"
+        assert shared["position_ms"] == 0
+
+        state["wheel"]["spin_id"] = 8
+        with pytest.raises(main.HTTPException) as error:
+            await main.get_media(media_id)
+        assert error.value.status_code == 404
+        assert media_id not in main.media_tokens
+
+    asyncio.run(run_flow())
+
+
+def test_image_resolves_by_ref_and_preserves_share_behavior(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "normal", "sector": 2}
+    state["wheel"]["spin_id"] = 3
+    pack = parse_question_pack(SAMPLE_PACK)
+
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", pack)
+    monkeypatch.setattr(main, "media_tokens", {})
+    monkeypatch.setattr(main, "players_list", [])
+
+    descriptor = next(iter(main._get_current_media_catalog().values()))
+
+    async def run_flow():
+        resolved = await main.admin_resolve_media(
+            "admin",
+            {"media_ref": descriptor.media_ref},
+        )
+        assert resolved["type"] == "image"
+
+        await main.admin_share_media("admin", {"media_id": resolved["media_id"]})
+
+    asyncio.run(run_flow())
+
+    assert state["presentation"]["shared_media"]["type"] == "image"
+    assert state["presentation"]["shared_media"]["media_ref"] == descriptor.media_ref

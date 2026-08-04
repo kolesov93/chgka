@@ -9,6 +9,7 @@ payload expected by the current frontend.
 """
 
 from copy import deepcopy
+import time
 from typing import Literal, Optional, TypedDict
 
 GamePhase = Literal[
@@ -33,6 +34,7 @@ PHASE_POST_ROUND: GamePhase = "POST_ROUND"
 QuestionKind = Literal["normal", "blitz", "superblitz"]
 QuestionTypeValue = QuestionKind
 SharedMediaType = Literal["image", "audio", "video"]
+MediaPlaybackState = Literal["stopped", "playing", "paused"]
 
 
 class ScoreState(TypedDict):
@@ -61,6 +63,23 @@ class SharedMediaState(TypedDict):
 
     type: SharedMediaType
     media_id: str
+    media_ref: str
+    section: str
+    name: str
+    playback_state: MediaPlaybackState
+    position_ms: int
+    started_at_ms: Optional[int]
+
+
+class PublicSharedMediaState(TypedDict):
+    """Public shared media without admin-only identity context."""
+
+    type: SharedMediaType
+    media_id: str
+    playback_state: MediaPlaybackState
+    position_ms: int
+    started_at_ms: Optional[int]
+    server_now_ms: int
 
 
 class GameProgressState(TypedDict):
@@ -145,7 +164,7 @@ class PublicGameState(TypedDict):
     question_types: Optional[list[QuestionTypeValue]]
     discussion_deadline_ms: Optional[int]
     round: Optional[RoundState]
-    shared_media: Optional[SharedMediaState]
+    shared_media: Optional[PublicSharedMediaState]
 
 
 class AppState(TypedDict):
@@ -221,7 +240,11 @@ def reset_app_state(
     state["wheel"]["spin_id"] = next_spin_id
 
 
-def public_game_state(state: AppState) -> PublicGameState:
+def public_game_state(
+    state: AppState,
+    *,
+    now_ms: Optional[int] = None,
+) -> PublicGameState:
     """
     Return the current state_update payload.
 
@@ -229,6 +252,20 @@ def public_game_state(state: AppState) -> PublicGameState:
     lets backend internals become cleaner without forcing a frontend protocol
     migration in the same step.
     """
+    internal_media = state["presentation"]["shared_media"]
+    shared_media: Optional[PublicSharedMediaState] = None
+    if internal_media is not None:
+        shared_media = {
+            "type": internal_media["type"],
+            "media_id": internal_media["media_id"],
+            "playback_state": internal_media["playback_state"],
+            "position_ms": internal_media["position_ms"],
+            "started_at_ms": internal_media["started_at_ms"],
+            "server_now_ms": (
+                now_ms if now_ms is not None else int(time.time() * 1000)
+            ),
+        }
+
     return deepcopy(
         {
             "phase": state["game"]["phase"],
@@ -243,6 +280,6 @@ def public_game_state(state: AppState) -> PublicGameState:
             "question_types": state["pack"]["question_types"],
             "discussion_deadline_ms": state["timer"]["discussion_deadline_ms"],
             "round": state["game"]["round"],
-            "shared_media": state["presentation"]["shared_media"],
+            "shared_media": shared_media,
         }
     )
