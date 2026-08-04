@@ -18,11 +18,6 @@
 
 ### P0: техническая прочность
 
-2. Frontend decomposition — `В работе`, branch: `task/frontend-decomposition`, task: `docs/tasks/0004-frontend-decomposition.md`
-   - `App.jsx` слишком большой и содержит socket wiring, state logic, admin UI и rendering.
-   - Разнести на hooks/components: socket session, admin question panel, admin controls, shared media renderer.
-   - Это сильно упростит мобильную версию и тестирование.
-
 4. Pack tooling
    - Добавить CLI/endpoint `validate-pack`, чтобы проверять пак до старта игры.
    - Документировать формат `question.md`, media folder, blitz/superblitz и ограничения.
@@ -53,10 +48,12 @@
    - Принудительный переход в `PRE_ROUND`, `QUESTION_READING`, `DISCUSSION`, `TEAM_ANSWER`, `POST_ROUND`.
    - Скрыть текущее медиа.
    - Остановить все звуки.
+   - Рядом с `Silence` добавить кнопку `Fade 3s`: по серверной команде все клиенты плавно снижают громкость играющей музыки/звуков до нуля за три секунды и затем останавливают их.
    - Все действия логировать в `game_state["logs"]`.
 
 8. Медиа: управляемый media flow для вопроса и ответа
    - Поддержать картинки, аудио и видео как shareable media.
+   - Обязательный regression-кейс: аудио `media/melody.mp3` из секции `question` sample-вопроса 03 должно открываться у ведущего и синхронно воспроизводиться/останавливаться у игроков, а не попадать в `unsupported_media_type`.
    - Медиа могут отличаться между фазой вопроса и фазой ответа.
    - Разделять медиа по секциям/фазам: `question`, `answer`, при необходимости `intro`, `comment`, `sources`.
    - В админском тексте вопроса показывать компактное inline-превью картинки вместо пустого placeholder; клик выбирает это медиа и открывает controls, но не показывает его игрокам автоматически.

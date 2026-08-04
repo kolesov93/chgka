@@ -1,8 +1,8 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-04
-- Completed task: `docs/tasks/0003-build-ci.md`
-- Accepted task head before closure documentation: `de9ac94` (`Add reproducible web CI`)
+- Completed task: `docs/tasks/0004-frontend-decomposition.md`
+- Accepted implementation head before closure documentation: `b5467d6` (`Decompose frontend application shell`)
 
 ## Product decisions
 
@@ -27,9 +27,9 @@
 
 The branch has clean-install and container checks, and all three GitHub Actions jobs pass remotely.
 
-## Active task: frontend decomposition
+## Completed task: frontend decomposition
 
-The task is documented in `docs/tasks/0004-frontend-decomposition.md` on branch `task/frontend-decomposition`. Local implementation and automated checks are complete; remote CI and focused browser regression acceptance remain.
+The task is documented in `docs/tasks/0004-frontend-decomposition.md` on branch `task/frontend-decomposition`. The implementation, automated checks, remote CI, and focused browser regression smoke are complete.
 
 Implemented:
 
@@ -39,13 +39,13 @@ Implemented:
 - extracted admin question/media, admin controls, shared media, header, and notification components;
 - preserved existing Socket.IO event names, payloads, storage keys, confirmations, and state ownership.
 
-Local verification:
+Verification:
 
 - clean frontend install and production build pass;
 - all 71 backend tests pass;
 - Compose validation passes without warnings.
-
-Acceptance still required: remote CI plus a two-browser smoke covering login/session restore, normal and blitz controls, discussion timing/sounds, media preview/share/hide, moderation/logout, and reset during spin.
+- all three GitHub Actions jobs pass;
+- the focused two-browser smoke covering login/session restore, normal and blitz controls, discussion timing/sounds, media preview/share/hide, moderation/logout, and reset during spin passes.
 
 ## Completed task: Build and CI
 
@@ -120,6 +120,8 @@ Additional known gaps:
 - raw Markdown HTML is unsafe for untrusted question packs;
 - frontend development uses `localhost:8000`, so it does not yet support browsers running on other machines;
 - media sharing is image-only even though the parser recognizes audio and video;
+- sample question 03 provides the concrete audio regression case for the managed media-flow task;
+- live ops has no server-synchronized three-second fade action next to `Silence`;
 - there are no frontend tests, Socket.IO integration tests, or lint/typecheck.
 
 ## Repository artifacts
@@ -132,9 +134,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Push `task/frontend-decomposition` and verify all three CI jobs.
-2. Run the focused two-browser regression smoke described in `docs/tasks/0004-frontend-decomposition.md`.
-3. If accepted, close task 0004, merge it into `web`, then take the dependency/toolchain refresh before expanding media.
+1. Push the task-closing documentation commit and the merge commit to the remote repository.
+2. Take the dependency/toolchain refresh in a separate branch before expanding the media flow.
+3. Preserve sample question 03 as the required audio regression case when roadmap item 8 starts.
 
 ## Resume checklist
 
@@ -147,7 +149,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. `docs/tasks/0004-frontend-decomposition.md` for the active task, then tasks 0003 and 0002 for the latest completed infrastructure and game-state work;
+4. the task file for the next active roadmap item, then tasks 0004, 0003, and 0002 for the latest completed frontend, infrastructure, and game-state work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:

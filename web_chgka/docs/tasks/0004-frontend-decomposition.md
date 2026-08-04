@@ -1,7 +1,7 @@
 # 0004: Frontend Decomposition
 
 Branch: `task/frontend-decomposition`
-Status: In progress
+Status: Completed
 
 ## Goal
 
@@ -59,4 +59,10 @@ This makes media work, mobile UI, and future frontend tests risky because unrela
 - All 71 backend tests pass.
 - `docker compose config --quiet` passes.
 - Static review confirms the existing Socket.IO event names and payload shapes remain present after extraction.
-- Remote CI and the focused two-browser regression smoke are pending.
+- All three remote GitHub Actions jobs pass.
+- The focused two-browser regression smoke passes.
+
+## Follow-up work discovered
+
+- Audio in sample question 03 remains unsupported by the current image-only frontend flow; the required regression case is recorded in roadmap item 8.
+- A server-synchronized three-second fade action next to `Silence` is recorded in roadmap item 7.
