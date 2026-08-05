@@ -32,3 +32,20 @@ Replace blank image placeholders in the host's question content with compact pri
 - Frontend unit coverage for turning resolved image refs into safe inline preview markup while preserving unresolved and non-image placeholders.
 - Frontend production build.
 - Focused admin/player browser smoke using sample question 02: the admin sees the thumbnail, clicking it selects the existing control block, and players continue to see the table until `Показать игрокам` is pressed.
+
+## Local verification status
+
+Implemented locally:
+
+- image refs are resolved privately when the current admin question arrives;
+- resolved placeholders render compact lazy-loaded thumbnails with pending/error fallbacks;
+- thumbnail clicks reuse the resolved preview in the existing media block, while failed clicks retry resolution;
+- generation guards ignore callbacks from a previous question/part;
+- audio and unknown placeholders remain unchanged.
+
+Passed locally:
+
+- `npm test`: 17 frontend tests, including 4 inline-media tests;
+- `npm run build`.
+
+Pending: GitHub Actions and the focused two-browser smoke.

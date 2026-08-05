@@ -3,7 +3,7 @@
 - Snapshot date: 2026-08-05
 - Active task: `docs/tasks/0011-inline-image-previews.md`
 - Branch: `task/inline-image-previews`
-- Status: implementation scope and token reuse are defined; code changes have not started.
+- Status: implementation and local frontend verification complete; publication, CI, and browser acceptance pending.
 
 ## Repository checkpoint
 
@@ -21,7 +21,7 @@
 - Director sound controls closure commit: `fd63ff3` (`Close director sound controls task`).
 - Director sound controls merge commit: `1ee7156` (`Merge director sound controls task`).
 - Director sound controls handoff commit: `c64d548` (`Record director sound controls handoff`).
-- Local `web` contains the accepted merge and handoff and is ahead of `origin/web`; push is pending.
+- `origin/web` contains the accepted director sound controls merge and handoff at `c64d548`.
 
 ## Product decisions
 
@@ -43,7 +43,7 @@
   - 14 pure transition tests;
   - 16 handler concurrency/session/media/live-ops/sound-control tests;
   - 9 pack-validator CLI, sector-directory, and media-path tests.
-- Frontend: clean install, 13 pure playback/live-ops/sound-fade helper assertions, full audit with zero vulnerabilities, and the production build pass.
+- Frontend: 17 pure playback/live-ops/sound-fade/inline-media tests and the production build pass; the last clean install and full audit reported zero vulnerabilities.
 - Backend startup loads the sample pack with all 13 questions and reaches application startup completion.
 - `docker compose config --quiet` succeeds without warnings.
 - Both development images build. Python 3.14 passes `pip check` and all 113 backend tests; Node 24 passes all 13 frontend assertions and the production build.
@@ -52,14 +52,15 @@ All three GitHub Actions jobs and the focused admin/player browser smoke passed 
 
 ## Active task: inline image previews
 
-Planned:
+Implemented locally:
 
 - privately resolve current image refs through the existing context-bound admin media-token flow;
-- replace blank image placeholders in host-only question HTML with compact thumbnails;
-- make thumbnail clicks select the existing media control block without changing player presentation;
-- preserve non-image placeholders, token validation, sharing state, and the player UI.
+- replace blank image placeholders in host-only question HTML with compact lazy-loaded thumbnails and visible pending/error fallbacks;
+- make thumbnail clicks reuse the private token in the existing media control block without changing player presentation;
+- retry failed resolution on click and ignore late callbacks after the question/part changes;
+- preserve non-image placeholders, backend token validation, sharing state, and the player UI.
 
-Implementation and verification have not started.
+Verification: all 17 frontend tests and the production build pass locally. GitHub Actions and the focused two-browser smoke are pending.
 
 ## Completed task: director sound controls
 
@@ -250,8 +251,8 @@ Additional known gaps:
 - wildcard CORS and the default admin password are development-only security;
 - raw Markdown HTML is unsafe for untrusted question packs;
 - frontend development uses `localhost:8000`, so it does not yet support browsers running on other machines;
-- video sharing/playback, media queue/next, duration extraction, automatic ended state, and inline image previews remain unimplemented;
-- frontend coverage is limited to pure playback/live-ops/sound-fade helpers; there are no browser/component tests, Socket.IO integration tests, or lint/typecheck.
+- video sharing/playback, media queue/next, duration extraction, and automatic ended state remain unimplemented;
+- frontend coverage is limited to pure playback/live-ops/sound-fade/inline-media helpers; there are no browser/component tests, Socket.IO integration tests, or lint/typecheck.
 
 ## Repository artifacts
 
@@ -263,8 +264,8 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish the updated `web` branch containing the accepted task 0010 merge and handoff.
-2. Implement and verify active task 0011 without changing sharing state or the media-token contract.
+1. Publish `task/inline-image-previews`, confirm GitHub Actions, and run the focused sample-question-02 two-browser smoke.
+2. Close and integrate task 0011 only after acceptance, without changing sharing state or the media-token contract.
 3. Continue with game completion after inline previews; keep authorization/security and persistence as mandatory gates before public deployment.
 
 ## Resume checklist
