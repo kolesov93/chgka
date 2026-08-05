@@ -2,8 +2,8 @@
 
 - Snapshot date: 2026-08-05
 - Latest completed task: `docs/tasks/0012-game-over.md`
-- Branch: `task/game-over`
-- Status: implementation, publication, CI, and browser acceptance complete; integration into `web` is the current handoff point.
+- Branch: `web`
+- Status: task 0012 is accepted and integrated locally; publishing the updated `web` branch is pending.
 
 ## Repository checkpoint
 
@@ -28,6 +28,9 @@
 - Inline image previews handoff commit: `c829311` (`Record inline image preview handoff`).
 - `origin/web` contains the accepted inline image preview merge and handoff at `c829311`.
 - Game-over implementation commit `1e8a2aa` is published, remotely verified, and accepted; the temporary remote branch ref has since been removed.
+- Game-over closure commit: `aef4553` (`Close explicit game over task`).
+- Game-over merge commit: `ea46a55` (`Merge explicit game over task`).
+- Local `web` contains the accepted merge and is ahead of `origin/web`; push is pending.
 
 ## Product decisions
 
@@ -280,7 +283,7 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Integrate accepted task 0012 into `web`.
+1. Publish the updated `web` branch containing the accepted task 0012 merge.
 2. Take roadmap item 9 in a separate branch and define the intro pack/state/UI contract before implementation.
 3. Keep authorization/security and persistence as mandatory gates before public deployment.
 
