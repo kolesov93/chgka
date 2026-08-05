@@ -1,7 +1,7 @@
 # 0008: Live Ops Recovery
 
 Branch: `task/live-ops-recovery`
-Status: In progress
+Status: Completed
 
 ## Goal
 
@@ -38,7 +38,7 @@ Give the admin targeted recovery controls for correcting a live game without res
 - Frontend pure tests for numeric validation and normal/blitz round payloads, plus production build.
 - Two-browser smoke covering every recovery control, invalid actions, reconnect, shared media, and stuck spin cancellation.
 
-## Local verification status
+## Verification and acceptance
 
 Passed:
 
@@ -50,7 +50,7 @@ Passed:
 - Python 3.14 container: `pip check` and 101 tests;
 - Node 24 container: 8 frontend assertions and production build.
 
-Pending acceptance:
+Acceptance passed:
 
-- GitHub Actions on the task branch;
-- focused admin/player browser smoke.
+- all three GitHub Actions jobs (`backend`, `frontend`, and `compose`) are green on implementation commit `7a1ee91`;
+- the focused admin/player browser smoke covering the recovery controls passed.

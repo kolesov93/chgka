@@ -1,13 +1,14 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-05
-- Active task: `docs/tasks/0008-live-ops-recovery.md`
-- Branch: `task/live-ops-recovery`
-- Status: implementation and local verification complete; GitHub Actions and focused browser acceptance pending.
+- Completed task: `docs/tasks/0008-live-ops-recovery.md`
+- Accepted implementation head: `7a1ee91` (`Add live ops recovery controls`)
+- Status: implementation, local/remote verification, and focused browser acceptance are complete; integration into `web` is the final repository step.
 
 ## Repository checkpoint
 
 - Base branch: `web`, synchronized with `origin/web` at `9875380` before task work.
+- Live Ops implementation commit `7a1ee91` is published on `origin/task/live-ops-recovery` and accepted.
 - Media/audio merge commit: `ae484f9` (`Merge managed audio media task`).
 - The task closure commit `64963f8` and implementation commit `8781f88` are both reachable from local `web`.
 - The previous publication checkpoint is resolved: `origin/web` contains the media/audio merge and handoff.
@@ -20,7 +21,7 @@
 - Keeping the current localhost connection during development is acceptable. Production connectivity, HTTPS, origins, and secret management belong to a dedicated deployment task.
 - Completed task branches are integrated into `web` only after automated checks and manual browser acceptance.
 
-## Current local verification
+## Verified baseline
 
 - Backend: 101 tests pass with warnings treated as errors.
   - 47 question parser tests;
@@ -36,11 +37,11 @@
 - `docker compose config --quiet` succeeds without warnings.
 - Both development images build. Python 3.14 passes `pip check` and all 101 backend tests; Node 24 passes all 8 frontend assertions and the production build.
 
-All three GitHub Actions jobs and the focused admin/player browser smoke passed for task 0007.
+All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007 and 0008.
 
-## Active task: live-ops recovery
+## Completed task: live-ops recovery
 
-Implemented locally:
+Implemented:
 
 - exact 0–6 score repair and played/available sector toggles;
 - direct normal/blitz/superblitz opening with selected blitz part and played marking;
@@ -50,7 +51,7 @@ Implemented locally:
 - a separate collapsible danger-styled admin panel reusing Hide media and Silence;
 - acknowledgements, admin notifications, authoritative state updates, and old-to-new logs.
 
-Pending acceptance: task branch publication, GitHub Actions, and the focused two-browser recovery smoke in `docs/tasks/0008-live-ops-recovery.md`.
+Acceptance: all three GitHub Actions jobs and the focused two-browser recovery smoke passed on implementation commit `7a1ee91`.
 
 ## Completed task: managed media flow — audio
 
@@ -216,10 +217,11 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish `task/live-ops-recovery` and confirm all GitHub Actions jobs.
-2. Run the focused two-browser smoke for score, sectors, normal/blitz opening, phases, stuck spin, timer, media, Silence, and reconnect.
-3. Close and merge task 0008 into `web` only after acceptance.
-4. The next agreed sound task is roadmap item 17: `Fade 3s` across shared audio, effects, and the wheel loop.
+1. Integrate the accepted task 0008 into `web` and publish the updated base branch.
+2. Start the next task from the updated `web`; there is no unfinished Live Ops implementation.
+3. The next agreed sound task is roadmap item 17: `Fade 3s` across shared audio, effects, and the wheel loop.
+4. Alternative product slices are roadmap item 8 (video plus media queue) and item 16 (inline image previews).
+5. Keep authorization/security and persistence as mandatory gates before public deployment.
 
 ## Resume checklist
 
@@ -232,7 +234,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. active task 0008, then completed tasks 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
+4. completed tasks 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:
