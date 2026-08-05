@@ -2,8 +2,9 @@
 
 - Snapshot date: 2026-08-05
 - Latest completed task: `docs/tasks/0012-game-over.md`
-- Branch: `web`
-- Status: task 0012 is accepted and integrated locally; publishing the updated `web` branch is pending.
+- Active task: `docs/tasks/0013-intro.md`
+- Branch: `task/intro`
+- Status: task 0012 is accepted and integrated locally; task 0013 contract is defined and implementation is in progress. Publishing the updated `web` branch is still pending.
 
 ## Repository checkpoint
 
