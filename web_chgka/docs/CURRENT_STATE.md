@@ -1,9 +1,9 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-05
-- Active task: `docs/tasks/0011-inline-image-previews.md`
+- Latest completed task: `docs/tasks/0011-inline-image-previews.md`
 - Branch: `task/inline-image-previews`
-- Status: implementation and local frontend verification complete; publication, CI, and browser acceptance pending.
+- Status: implementation, publication, CI, and browser acceptance complete; integration into `web` is the current handoff point.
 
 ## Repository checkpoint
 
@@ -22,6 +22,7 @@
 - Director sound controls merge commit: `1ee7156` (`Merge director sound controls task`).
 - Director sound controls handoff commit: `c64d548` (`Record director sound controls handoff`).
 - `origin/web` contains the accepted director sound controls merge and handoff at `c64d548`.
+- Inline image previews commit `280f930` is published on `origin/task/inline-image-previews` and accepted.
 
 ## Product decisions
 
@@ -48,11 +49,11 @@
 - `docker compose config --quiet` succeeds without warnings.
 - Both development images build. Python 3.14 passes `pip check` and all 113 backend tests; Node 24 passes all 13 frontend assertions and the production build.
 
-All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, 0009, and 0010.
+All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, 0009, 0010, and 0011.
 
-## Active task: inline image previews
+## Completed task: inline image previews
 
-Implemented locally:
+Implemented:
 
 - privately resolve current image refs through the existing context-bound admin media-token flow;
 - replace blank image placeholders in host-only question HTML with compact lazy-loaded thumbnails and visible pending/error fallbacks;
@@ -60,7 +61,7 @@ Implemented locally:
 - retry failed resolution on click and ignore late callbacks after the question/part changes;
 - preserve non-image placeholders, backend token validation, sharing state, and the player UI.
 
-Verification: all 17 frontend tests and the production build pass locally. GitHub Actions and the focused two-browser smoke are pending.
+Verification: all 17 frontend tests and the production build pass locally; all three GitHub Actions jobs and the focused sample-question-02 browser smoke passed on `280f930`.
 
 ## Completed task: director sound controls
 
@@ -264,9 +265,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish `task/inline-image-previews`, confirm GitHub Actions, and run the focused sample-question-02 two-browser smoke.
-2. Close and integrate task 0011 only after acceptance, without changing sharing state or the media-token contract.
-3. Continue with game completion after inline previews; keep authorization/security and persistence as mandatory gates before public deployment.
+1. Integrate accepted task 0011 into `web`.
+2. Take roadmap item 12 in a separate branch and implement the explicit game-over transition and final screen.
+3. Continue with intro after game completion; keep authorization/security and persistence as mandatory gates before public deployment.
 
 ## Resume checklist
 
@@ -279,7 +280,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. active task 0011, then completed tasks 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
+4. completed tasks 0011, 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:

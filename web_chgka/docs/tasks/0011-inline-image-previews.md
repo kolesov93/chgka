@@ -1,7 +1,7 @@
 # 0011: Inline image previews
 
 Branch: `task/inline-image-previews`
-Status: In progress
+Status: Completed
 
 ## Goal
 
@@ -48,4 +48,7 @@ Passed locally:
 - `npm test`: 17 frontend tests, including 4 inline-media tests;
 - `npm run build`.
 
-Pending: GitHub Actions and the focused two-browser smoke.
+Remote verification and acceptance:
+
+- backend, frontend, and Compose GitHub Actions jobs passed on `280f930`;
+- the focused sample-question-02 browser smoke passed and the inline preview behavior was accepted.
