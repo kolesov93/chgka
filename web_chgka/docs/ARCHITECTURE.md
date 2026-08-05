@@ -29,7 +29,8 @@ FastAPI + python-socketio (backend/main.py)
 - `frontend/src/hooks/useGameSession.js` owns session restore, shared server state, players, pack/admin data, notifications, logout, and non-audio socket listeners.
 - `frontend/src/hooks/useDiscussionTimer.js` owns the admin countdown and one-shot local ten-second notification; `useSocketSoundEvents.js` bridges sound events to `useGameSound.js`.
 - `frontend/src/hooks/useSoundFade.js` derives one reconnect-aware emergency fade multiplier from the server sound-control snapshot. Shared media, effects, and the wheel consume that multiplier; the wheel also retains its intrinsic end-of-spin fade.
-- `frontend/src/components/` contains the admin question/media panel, normal admin controls with the always-visible director sound block, the separate danger-styled Live Ops recovery panel, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
+- `frontend/src/components/` contains the admin question/media panel with private inline image thumbnails, normal admin controls with the always-visible director sound block, the separate danger-styled Live Ops recovery panel, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
+- `frontend/src/inlineMedia.js` safely turns resolved image placeholders into host-only thumbnail markup. Non-image and unknown placeholders remain unchanged.
 - Development connects Socket.IO and media requests directly to `http://localhost:8000`. A production build uses the current origin (`/`).
 
 The frontend receives the shared game snapshot through `state_update`. Admin-only data uses separate events such as `players_update`, `pack_info`, and `admin_question`.
@@ -112,13 +113,13 @@ The parser recognizes images, audio, and video. Each Markdown occurrence receive
 The managed image/audio flow is:
 
 1. `admin_question` sends the admin the current round/part HTML and admin-only media descriptors.
-2. The admin clicks a placeholder and resolves its `media_ref` through `admin_resolve_media`.
-3. The backend looks the reference up in the current catalog and creates a temporary `media_id` token.
+2. The admin UI automatically resolves current image refs through `admin_resolve_media` and renders their temporary URLs as compact inline thumbnails. Audio refs remain click-to-resolve placeholders.
+3. The backend looks each requested reference up in the current catalog and creates a temporary `media_id` token.
 4. The token is bound to its expiry, spin generation, sector/kind/part, round/part scope, section, exact reference, type, name, and file. The same validation runs on share, playback commands, and `GET /media/{media_id}`.
-5. `admin_share_media` puts an image or stopped audio item into shared presentation state. The public serializer removes the internal reference, section, and filename; clients receive only the type/token/playback fields and fetch the file from the backend origin.
+5. Clicking an inline thumbnail only selects the same private token in the existing admin media block. `admin_share_media` remains the explicit action that puts an image or stopped audio item into shared presentation state. The public serializer removes the internal reference, section, and filename; clients receive only the type/token/playback fields and fetch the file from the backend origin.
 6. Audio play/pause/stop actions mutate server-authoritative playback state. `state_update` includes the stored position, playback start timestamp, and serialization time so current and reconnecting clients align their local audio elements.
 
-Players receive no native playback controls. Browser autoplay restrictions are handled by a local permission button, which does not change server playback state. Stop resets audio to the beginning while keeping it visible; hide removes it. Shared audio participates in the global server-synchronized sound fade; private preview does not. Video, queue/next, duration extraction, and automatic server-side end detection remain roadmap work. Image preview stays in the separate media block; inline image previews are a separate task.
+Players receive no native playback controls. Browser autoplay restrictions are handled by a local permission button, which does not change server playback state. Stop resets audio to the beginning while keeping it visible; hide removes it. Shared audio participates in the global server-synchronized sound fade; private preview does not. Video, queue/next, duration extraction, and automatic server-side end detection remain roadmap work. Inline image thumbnails and the larger media block reuse one private token and never change player presentation without the explicit share action.
 
 ## Persistence and concurrency
 

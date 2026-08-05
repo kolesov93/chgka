@@ -1,9 +1,9 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-05
-- Latest completed task: `docs/tasks/0010-director-sound-controls.md`
-- Branch: `web`
-- Status: task 0010 is accepted and integrated locally; publishing the updated `web` branch is pending.
+- Latest completed task: `docs/tasks/0011-inline-image-previews.md`
+- Branch: `task/inline-image-previews`
+- Status: implementation, publication, CI, and browser acceptance complete; integration into `web` is the current handoff point.
 
 ## Repository checkpoint
 
@@ -20,7 +20,9 @@
 - Director sound controls commit `2fda870` is published on `origin/task/director-sound-controls` and accepted.
 - Director sound controls closure commit: `fd63ff3` (`Close director sound controls task`).
 - Director sound controls merge commit: `1ee7156` (`Merge director sound controls task`).
-- Local `web` contains the accepted merge and is ahead of `origin/web`; push is pending.
+- Director sound controls handoff commit: `c64d548` (`Record director sound controls handoff`).
+- `origin/web` contains the accepted director sound controls merge and handoff at `c64d548`.
+- Inline image previews commit `280f930` is published on `origin/task/inline-image-previews` and accepted.
 
 ## Product decisions
 
@@ -42,12 +44,24 @@
   - 14 pure transition tests;
   - 16 handler concurrency/session/media/live-ops/sound-control tests;
   - 9 pack-validator CLI, sector-directory, and media-path tests.
-- Frontend: clean install, 13 pure playback/live-ops/sound-fade helper assertions, full audit with zero vulnerabilities, and the production build pass.
+- Frontend: 17 pure playback/live-ops/sound-fade/inline-media tests and the production build pass; the last clean install and full audit reported zero vulnerabilities.
 - Backend startup loads the sample pack with all 13 questions and reaches application startup completion.
 - `docker compose config --quiet` succeeds without warnings.
 - Both development images build. Python 3.14 passes `pip check` and all 113 backend tests; Node 24 passes all 13 frontend assertions and the production build.
 
-All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, 0009, and 0010.
+All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, 0009, 0010, and 0011.
+
+## Completed task: inline image previews
+
+Implemented:
+
+- privately resolve current image refs through the existing context-bound admin media-token flow;
+- replace blank image placeholders in host-only question HTML with compact lazy-loaded thumbnails and visible pending/error fallbacks;
+- make thumbnail clicks reuse the private token in the existing media control block without changing player presentation;
+- retry failed resolution on click and ignore late callbacks after the question/part changes;
+- preserve non-image placeholders, backend token validation, sharing state, and the player UI.
+
+Verification: all 17 frontend tests and the production build pass locally; all three GitHub Actions jobs and the focused sample-question-02 browser smoke passed on `280f930`.
 
 ## Completed task: director sound controls
 
@@ -238,8 +252,8 @@ Additional known gaps:
 - wildcard CORS and the default admin password are development-only security;
 - raw Markdown HTML is unsafe for untrusted question packs;
 - frontend development uses `localhost:8000`, so it does not yet support browsers running on other machines;
-- video sharing/playback, media queue/next, duration extraction, automatic ended state, and inline image previews remain unimplemented;
-- frontend coverage is limited to pure playback/live-ops/sound-fade helpers; there are no browser/component tests, Socket.IO integration tests, or lint/typecheck.
+- video sharing/playback, media queue/next, duration extraction, and automatic ended state remain unimplemented;
+- frontend coverage is limited to pure playback/live-ops/sound-fade/inline-media helpers; there are no browser/component tests, Socket.IO integration tests, or lint/typecheck.
 
 ## Repository artifacts
 
@@ -251,9 +265,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish the updated `web` branch containing the accepted task 0010 merge.
-2. Take roadmap item 16 in a separate branch and add inline image previews to the host's question/answer text without changing sharing state or the media-token contract.
-3. Continue with game completion after inline previews; keep authorization/security and persistence as mandatory gates before public deployment.
+1. Integrate accepted task 0011 into `web`.
+2. Take roadmap item 12 in a separate branch and implement the explicit game-over transition and final screen.
+3. Continue with intro after game completion; keep authorization/security and persistence as mandatory gates before public deployment.
 
 ## Resume checklist
 
@@ -266,7 +280,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. completed tasks 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
+4. completed tasks 0011, 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:

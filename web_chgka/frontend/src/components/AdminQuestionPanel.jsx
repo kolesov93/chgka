@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { inlineImagePreviews } from '../inlineMedia';
 import { mediaUrl, socket } from '../socket';
 import { SynchronizedAudio } from './SynchronizedAudio';
 
@@ -17,6 +18,17 @@ function QuestionSection({ title, children, highlight = false, accentClass = '' 
   );
 }
 
+function previewFromResponse(response, fallbackSection) {
+  return {
+    media_id: response.media_id,
+    type: response.type,
+    url: mediaUrl(response.media_id),
+    section: response.section || fallbackSection,
+    name: response.name,
+    media_ref: response.media_ref,
+  };
+}
+
 export function AdminQuestionPanel({
   adminQuestion,
   phase,
@@ -25,6 +37,55 @@ export function AdminQuestionPanel({
   addNotification,
 }) {
   const [mediaPreview, setMediaPreview] = useState(null);
+  const [resolvedImages, setResolvedImages] = useState({});
+  const resolutionGenerationRef = useRef(0);
+  const sharedMediaIdRef = useRef(sharedMedia?.media_id);
+  sharedMediaIdRef.current = sharedMedia?.media_id;
+
+  useEffect(() => {
+    const generation = resolutionGenerationRef.current + 1;
+    resolutionGenerationRef.current = generation;
+
+    const images = (adminQuestion?.media || []).filter((media) => media.type === 'image');
+    images.forEach((descriptor) => {
+      socket.emit(
+        'admin_resolve_media',
+        { media_ref: descriptor.media_ref },
+        (response) => {
+          if (resolutionGenerationRef.current !== generation) return;
+
+          if (!response?.ok) {
+            setResolvedImages((current) => ({
+              ...current,
+              [descriptor.media_ref]: { status: 'error' },
+            }));
+            return;
+          }
+
+          const preview = previewFromResponse(response, descriptor.section);
+          setResolvedImages((current) => ({
+            ...current,
+            [descriptor.media_ref]: { status: 'ready', preview },
+          }));
+          setMediaPreview((current) => {
+            if (
+              current?.media_ref !== descriptor.media_ref
+              || current.media_id === sharedMediaIdRef.current
+            ) {
+              return current;
+            }
+            return preview;
+          });
+        },
+      );
+    });
+
+    return () => {
+      if (resolutionGenerationRef.current === generation) {
+        resolutionGenerationRef.current += 1;
+      }
+    };
+  }, [adminQuestion]);
 
   if (!adminQuestion) return null;
 
@@ -59,6 +120,43 @@ export function AdminQuestionPanel({
         return;
       }
 
+      if (descriptor.type === 'image') {
+        const resolved = resolvedImages[mediaRef];
+        if (resolved?.status === 'ready') {
+          setMediaPreview(resolved.preview);
+          return;
+        }
+
+        const generation = resolutionGenerationRef.current;
+        socket.emit(
+          'admin_resolve_media',
+          { media_ref: mediaRef },
+          (response) => {
+            if (resolutionGenerationRef.current !== generation) return;
+
+            if (!response?.ok) {
+              setResolvedImages((current) => ({
+                ...current,
+                [mediaRef]: { status: 'error' },
+              }));
+              addNotification({
+                type: 'warning',
+                message: `Не удалось открыть изображение: ${response?.error || 'unknown'}`,
+              });
+              return;
+            }
+
+            const preview = previewFromResponse(response, descriptor.section || section);
+            setResolvedImages((current) => ({
+              ...current,
+              [mediaRef]: { status: 'ready', preview },
+            }));
+            setMediaPreview(preview);
+          },
+        );
+        return;
+      }
+
       socket.emit(
         'admin_resolve_media',
         { media_ref: mediaRef },
@@ -71,23 +169,18 @@ export function AdminQuestionPanel({
             return;
           }
 
-          setMediaPreview({
-            media_id: response.media_id,
-            type: response.type,
-            url: mediaUrl(response.media_id),
-            section: response.section || section,
-            name: response.name,
-            media_ref: response.media_ref,
-          });
+          setMediaPreview(previewFromResponse(response, section));
         },
       );
     };
 
     return (
       <div
-        className="text-sm text-slate-200 [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_.media-placeholder]:inline-block [&_.media-placeholder]:w-10 [&_.media-placeholder]:h-6 [&_.media-placeholder]:rounded [&_.media-placeholder]:bg-slate-700 [&_.media-placeholder]:border [&_.media-placeholder]:border-slate-500 [&_.media-placeholder]:cursor-pointer [&_.media-placeholder]:align-middle [&_.media-placeholder:hover]:bg-slate-600"
+        className="text-sm text-slate-200 [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_span.media-placeholder]:inline-block [&_span.media-placeholder]:w-10 [&_span.media-placeholder]:h-6 [&_span.media-placeholder]:rounded [&_span.media-placeholder]:bg-slate-700 [&_span.media-placeholder]:border [&_span.media-placeholder]:border-slate-500 [&_span.media-placeholder]:cursor-pointer [&_span.media-placeholder]:align-middle [&_span.media-placeholder:hover]:bg-slate-600 [&_.media-inline-preview]:inline-flex [&_.media-inline-preview]:max-w-[12rem] [&_.media-inline-preview]:min-h-12 [&_.media-inline-preview]:items-center [&_.media-inline-preview]:justify-center [&_.media-inline-preview]:overflow-hidden [&_.media-inline-preview]:rounded [&_.media-inline-preview]:border [&_.media-inline-preview]:border-slate-600 [&_.media-inline-preview]:bg-slate-900/70 [&_.media-inline-preview]:p-1 [&_.media-inline-preview]:align-middle [&_.media-inline-preview]:cursor-pointer [&_.media-inline-preview:hover]:border-yellow-500/70 [&_.media-inline-preview:hover]:bg-slate-800 [&_.media-inline-preview-image]:max-h-32 [&_.media-inline-preview-image]:max-w-full [&_.media-inline-preview-image]:object-contain [&_.media-inline-preview-fallback]:px-2 [&_.media-inline-preview-fallback]:py-3 [&_.media-inline-preview-fallback]:text-[10px] [&_.media-inline-preview-fallback]:font-bold [&_.media-inline-preview-fallback]:uppercase [&_.media-inline-preview-fallback]:tracking-wider [&_.media-inline-preview-fallback]:text-slate-400"
         onClick={handleClick}
-        dangerouslySetInnerHTML={{ __html: html }}
+        dangerouslySetInnerHTML={{
+          __html: inlineImagePreviews(html, adminQuestion.media || [], resolvedImages),
+        }}
       />
     );
   };
