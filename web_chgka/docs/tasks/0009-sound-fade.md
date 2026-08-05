@@ -1,7 +1,7 @@
 # 0009: Server-synchronized sound fade
 
 Branch: `task/sound-fade`
-Status: In progress
+Status: Completed
 
 ## Goal
 
@@ -51,4 +51,8 @@ Passed locally:
 - Python 3.14 container: `pip check` and 113 tests;
 - Node 24 container: 13 frontend assertions and production build.
 
-Pending: GitHub Actions and the focused two-browser smoke.
+Remote verification and acceptance:
+
+- all three GitHub Actions jobs passed on `bdd225e`;
+- the focused two-browser smoke passed for shared media, effects, wheel sound, reconnect, repeated Fade, Fade→Play, and Fade→Silence;
+- the perceptual 0 to -60 dB curve was accepted after a browser check with the wheel sound.

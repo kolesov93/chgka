@@ -1,9 +1,9 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-05
-- Active task: `docs/tasks/0009-sound-fade.md`
+- Latest completed task: `docs/tasks/0009-sound-fade.md`
 - Branch: `task/sound-fade`
-- Status: implementation and full local verification complete; publication, CI, and browser acceptance pending.
+- Status: implementation, publication, CI, and browser acceptance complete; integration into `web` is the current handoff point.
 
 ## Repository checkpoint
 
@@ -13,6 +13,7 @@
 - Live Ops implementation commit `7a1ee91` is published on `origin/task/live-ops-recovery` and accepted.
 - Media/audio merge commit: `ae484f9` (`Merge managed audio media task`).
 - The previous publication checkpoint is resolved: `origin/web` contains the Live Ops merge and handoff.
+- Sound fade implementation commits `9c3ba27` and `bdd225e` are published on `origin/task/sound-fade` and accepted.
 
 ## Product decisions
 
@@ -39,11 +40,11 @@
 - `docker compose config --quiet` succeeds without warnings.
 - Both development images build. Python 3.14 passes `pip check` and all 113 backend tests; Node 24 passes all 13 frontend assertions and the production build.
 
-All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007 and 0008. Task 0009 has not yet been published.
+All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, and 0009.
 
-## Active task: synchronized sound fade
+## Completed task: synchronized sound fade
 
-Implemented locally:
+Implemented:
 
 - a reconnect-aware `settings_update.sound_control` snapshot with `normal`, `fading`, and `stopped` modes;
 - generation guards preventing sleeping Fade completion from stopping later effect, Silence, spin, media playback, or repeated Fade commands;
@@ -53,6 +54,8 @@ Implemented locally:
 - a `Fade 3s` button beside Silence in Live Ops and authoritative shared-audio stop at completion.
 
 Verification: clean install/audit, 113 backend tests, 13 frontend assertions, production build, Compose validation, both image builds, Python 3.14 dependency/tests, and Node 24 tests/build pass.
+
+Acceptance: all three GitHub Actions jobs passed on `bdd225e`; the focused two-browser smoke passed, including the perceptual fade of the wheel sound.
 
 ## Completed task: live-ops recovery
 
@@ -231,8 +234,8 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish `task/sound-fade`, confirm GitHub Actions, and run the focused two-browser sound smoke.
-2. Close and integrate task 0009 into `web` only after acceptance.
+1. Integrate accepted task 0009 into `web`.
+2. Take roadmap item 18 in a separate branch and move Fade/Silence into an always-visible director sound block beside master volume.
 3. Keep authorization/security and persistence as mandatory gates before public deployment.
 
 ## Resume checklist
@@ -246,7 +249,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. active task 0009, then completed tasks 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
+4. completed tasks 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:
