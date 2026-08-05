@@ -1,9 +1,9 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-05
-- Latest completed task: `docs/tasks/0009-sound-fade.md`
-- Branch: `web`
-- Status: task 0009 is accepted and integrated locally; publishing the updated `web` branch is pending.
+- Active task: `docs/tasks/0010-director-sound-controls.md`
+- Branch: `task/director-sound-controls`
+- Status: moving routine sound actions into an always-visible director block; implementation and verification in progress.
 
 ## Repository checkpoint
 
@@ -16,7 +16,7 @@
 - Sound fade implementation commits `9c3ba27` and `bdd225e` are published on `origin/task/sound-fade` and accepted.
 - Sound fade closure commit: `8cc7e96` (`Close synchronized sound fade task`).
 - Sound fade merge commit: `3c6cccb` (`Merge synchronized sound fade task`).
-- Local `web` contains the accepted merge and is ahead of `origin/web`; push is pending.
+- Local `web` contains the accepted merge and handoff and is ahead of `origin/web`; push is pending.
 
 ## Product decisions
 
@@ -44,6 +44,16 @@
 - Both development images build. Python 3.14 passes `pip check` and all 113 backend tests; Node 24 passes all 13 frontend assertions and the production build.
 
 All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, and 0009.
+
+## Active task: director sound controls
+
+Implemented locally:
+
+- one always-visible director sound block containing master volume, `Fade 3s`, and `Silence`;
+- unchanged sound events and local immediate-stop behavior for Silence;
+- `Hide media` retained as the only media action at the bottom of Live Ops.
+
+Verification: frontend assertions and the production build pass. GitHub Actions and the focused browser check are pending.
 
 ## Completed task: synchronized sound fade
 
@@ -238,8 +248,8 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 ## Recommended continuation
 
 1. Publish the updated `web` branch containing the accepted task 0009 merge.
-2. Take roadmap item 18 in a separate branch and move Fade/Silence into an always-visible director sound block beside master volume.
-3. Keep authorization/security and persistence as mandatory gates before public deployment.
+2. Publish `task/director-sound-controls`, confirm GitHub Actions, and check the admin sound block in a browser.
+3. Close and integrate task 0010 only after acceptance; keep authorization/security and persistence as mandatory gates before public deployment.
 
 ## Resume checklist
 
@@ -252,7 +262,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. completed tasks 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
+4. active task 0010, then completed tasks 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:

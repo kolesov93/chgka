@@ -43,6 +43,15 @@ export function AdminControls({
     socket.emit('admin_ten_seconds');
   };
 
+  const fadeSounds = () => {
+    socket.emit('admin_fade_sounds');
+  };
+
+  const silence = () => {
+    socket.emit('admin_stop_sounds');
+    stopAllSounds();
+  };
+
   const kickPlayer = (playerName) => {
     if (confirm(`Отключить игрока "${playerName}"?`)) {
       socket.emit('admin_kick', { name: playerName });
@@ -188,22 +197,40 @@ export function AdminControls({
           </div>
         </div>
 
-        <div className="bg-slate-900/50 p-3 rounded-lg flex items-center gap-3">
-          <span className="text-xs text-slate-500 uppercase font-bold">Vol</span>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.05"
-            value={gameSettings?.volume ?? 1.0}
-            onChange={(event) => {
-              socket.emit('admin_volume', { volume: parseFloat(event.target.value) });
-            }}
-            className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
-          />
-          <span className="text-xs text-slate-400 w-8 text-right">
-            {Math.round((gameSettings?.volume ?? 1.0) * 100)}%
-          </span>
+        <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700 flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500 uppercase font-bold">Звук</span>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={gameSettings?.volume ?? 1.0}
+              onChange={(event) => {
+                socket.emit('admin_volume', { volume: parseFloat(event.target.value) });
+              }}
+              className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+            />
+            <span className="text-xs text-slate-400 w-8 text-right">
+              {Math.round((gameSettings?.volume ?? 1.0) * 100)}%
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={fadeSounds}
+              className="rounded bg-amber-800 hover:bg-amber-700 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white transition-colors"
+            >
+              Fade 3s
+            </button>
+            <button
+              type="button"
+              onClick={silence}
+              className="rounded bg-red-900 hover:bg-red-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white transition-colors"
+            >
+              Silence
+            </button>
+          </div>
         </div>
 
         <div className="border border-slate-700 p-3 rounded bg-slate-900/30">
@@ -274,7 +301,6 @@ export function AdminControls({
         <div className="pt-2 border-t border-slate-700">
           <LiveOpsPanel
             gameState={gameState}
-            stopAllSounds={stopAllSounds}
             addNotification={addNotification}
           />
         </div>

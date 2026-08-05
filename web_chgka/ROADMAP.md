@@ -31,7 +31,7 @@
 
 ### P1: критичные фичи для live-игры
 
-18. Режиссёрский блок управления звуком
+18. Режиссёрский блок управления звуком — `В работе`, branch: `task/director-sound-controls`, task: `docs/tasks/0010-director-sound-controls.md`
    - Перенести `Fade 3s` и `Silence` из свёрнутого Live Ops в постоянно видимый блок рядом с master volume.
    - Оставить `Hide media` в Live Ops и не менять backend-события или sound-control contract.
    - Считать fade/silence штатными режиссёрскими действиями без подтверждения и дополнительного клика для раскрытия панели.

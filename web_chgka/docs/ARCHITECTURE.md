@@ -29,7 +29,7 @@ FastAPI + python-socketio (backend/main.py)
 - `frontend/src/hooks/useGameSession.js` owns session restore, shared server state, players, pack/admin data, notifications, logout, and non-audio socket listeners.
 - `frontend/src/hooks/useDiscussionTimer.js` owns the admin countdown and one-shot local ten-second notification; `useSocketSoundEvents.js` bridges sound events to `useGameSound.js`.
 - `frontend/src/hooks/useSoundFade.js` derives one reconnect-aware emergency fade multiplier from the server sound-control snapshot. Shared media, effects, and the wheel consume that multiplier; the wheel also retains its intrinsic end-of-spin fade.
-- `frontend/src/components/` contains the admin question/media panel, normal admin controls, the separate danger-styled Live Ops recovery panel, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
+- `frontend/src/components/` contains the admin question/media panel, normal admin controls with the always-visible director sound block, the separate danger-styled Live Ops recovery panel, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
 - Development connects Socket.IO and media requests directly to `http://localhost:8000`. A production build uses the current origin (`/`).
 
 The frontend receives the shared game snapshot through `state_update`. Admin-only data uses separate events such as `players_update`, `pack_info`, and `admin_question`.
@@ -83,11 +83,13 @@ The admin has a separate collapsed recovery panel; it is not part of the normal 
 - `admin_cancel_spin` increments `spin_id`, so a sleeping spin handler cannot overwrite recovered state;
 - `admin_set_timer` sets or stops the deadline only in `DISCUSSION`.
 
-After admin authorization, every operation validates its complete input before mutation, mutates synchronously before any network emit await, logs the recovery, and then broadcasts authoritative state. Hide media and Silence reuse their existing events. Recovery does not play normal phase/scoring sounds and does not introduce arbitrary state editing, snapshots, or undo.
+After admin authorization, every operation validates its complete input before mutation, mutates synchronously before any network emit await, logs the recovery, and then broadcasts authoritative state. Hide media reuses its existing event and remains in this panel. Recovery does not play normal phase/scoring sounds and does not introduce arbitrary state editing, snapshots, or undo.
 
 ## Sound control
 
 Master volume and the server-authoritative sound-control snapshot travel through `settings_update`, separately from the flat game-state compatibility payload. The snapshot contains a monotonically increasing generation, mode, optional fade start/duration, fade starting level, and current server time. It is sent before game state on connect so a reconnecting browser cannot briefly restart audible shared audio or a wheel loop that is fading/stopped.
+
+The normal admin panel keeps master volume, `Fade 3s`, and `Silence` together in one always-visible director sound block. Fade and Silence are routine live-production actions and do not require opening the Live Ops recovery panel. They reuse the existing sound events and state contract.
 
 `admin_fade_sounds` starts a three-second fade and captures its generation. Clients combine server progress with local time since receipt and apply one multiplier to managed shared audio, one-shot effects, and the wheel loop. Gain follows a uniform 60 dB reduction (exponential amplitude) with 25 ms browser updates, leaving the sound effectively silent before final Stop. Repeated Fade starts from the current multiplier. At completion the backend stops shared-media playback authoritatively and emits `stop_sound` for effects and the wheel.
 
