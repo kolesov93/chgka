@@ -60,7 +60,14 @@ export function useGameSession() {
     }
 
     function onStateUpdate(newState) {
-      setGameState(newState);
+      if (!newState) {
+        setGameState(newState);
+        return;
+      }
+      const intro = newState.intro
+        ? { ...newState.intro, received_at_ms: Date.now() }
+        : null;
+      setGameState({ ...newState, intro });
     }
 
     function onRoleUpdate(data) {

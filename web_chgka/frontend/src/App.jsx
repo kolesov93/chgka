@@ -5,6 +5,7 @@ import { WaitingRoom } from './components/WaitingRoom';
 import { AdminControls } from './components/AdminControls';
 import { AdminQuestionPanel } from './components/AdminQuestionPanel';
 import { FinalScreen } from './components/FinalScreen';
+import { IntroScreen } from './components/IntroScreen';
 import { NotificationsPanel } from './components/NotificationsPanel';
 import { SharedMediaRenderer } from './components/SharedMediaRenderer';
 import { UserHeader } from './components/UserHeader';
@@ -44,6 +45,7 @@ function App() {
 
   const phase = gameState?.phase || 'LOGIN';
   const isAdmin = myRole === 'admin';
+  const isIntro = phase === 'INTRO';
   const isPreRound = phase === 'PRE_ROUND';
   const isDiscussion = phase === 'DISCUSSION';
   const isGameOver = phase === 'GAME_OVER';
@@ -121,9 +123,17 @@ function App() {
           )}
         </div>
 
-        <ScoreBoard score={gameState?.score} />
+        {!isIntro && <ScoreBoard score={gameState?.score} />}
 
-        {isGameOver ? (
+        {isIntro ? (
+          <div className="mb-4 flex w-full justify-center">
+            <IntroScreen
+              intro={gameState?.intro}
+              isAdmin={isAdmin}
+              introHtml={isAdmin ? packInfo?.intro_html : null}
+            />
+          </div>
+        ) : isGameOver ? (
           <div className="w-full flex justify-center mb-4">
             <FinalScreen score={gameState?.score} />
           </div>

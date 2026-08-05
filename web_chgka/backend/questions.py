@@ -55,6 +55,8 @@ class Question:
     
     # Optional metadata
     author: Optional[str] = None
+    city: Optional[str] = None
+    author_photo: Optional[Path] = None
     comment_html: Optional[str] = None
     sources_html: Optional[str] = None
     
@@ -310,6 +312,29 @@ def _validate_media_usage(base_folder: Path, media_links_from_md: set[Path]) -> 
         raise QuestionParseError(f"Unused media file: {one}")
 
 
+def _parse_author_photo(raw_path: Optional[str], folder: Path) -> Optional[Path]:
+    if raw_path is None:
+        return None
+    if not raw_path:
+        raise QuestionParseError("author_photo must not be empty")
+
+    rel_path = Path(raw_path)
+    if rel_path.is_absolute() or len(rel_path.parts) != 1 or rel_path.name in (".", ".."):
+        raise QuestionParseError(
+            "author_photo must be a file name next to question.md"
+        )
+    if rel_path.suffix.lower() not in _IMAGE_EXTS:
+        raise QuestionParseError(f"Unsupported author_photo format: {raw_path}")
+
+    folder_resolved = folder.resolve()
+    photo_path = (folder_resolved / rel_path).resolve()
+    if not photo_path.is_relative_to(folder_resolved):
+        raise QuestionParseError("author_photo escapes the question folder")
+    if not photo_path.is_file():
+        raise QuestionParseError(f"author_photo file not found: {raw_path}")
+    return photo_path
+
+
 def _parse_one_question_folder(folder: Path) -> Question:
     qmd = folder / "question.md"
     if not qmd.exists():
@@ -328,7 +353,9 @@ def _parse_one_question_folder(folder: Path) -> Question:
     except ValueError as e:
         raise QuestionParseError(f"Unknown question type: {qtype_raw}") from e
 
-    author = fm.get("author")
+    author = fm.get("author") or None
+    city = fm.get("city") or None
+    author_photo = _parse_author_photo(fm.get("author_photo"), folder)
 
     sections, order = _split_sections(body)
     _validate_section_order(order)
@@ -372,6 +399,8 @@ def _parse_one_question_folder(folder: Path) -> Question:
         question_html=question_html,
         answer_html=answer_html,
         author=author,
+        city=city,
+        author_photo=author_photo,
         comment_html=comment_html,
         sources_html=sources_html,
         media=_validate_media_reference_types(media_all),
@@ -449,6 +478,7 @@ class QuestionPack:
     """
     questions: list[Question]
     path: Path  # path to the pack folder
+    intro_html: Optional[str] = None  # admin-only intro speech
     
     def get_by_sector(self, sector: int) -> Question:
         """Get question by sector number (1-13)."""
@@ -458,6 +488,16 @@ class QuestionPack:
     
     def __len__(self) -> int:
         return len(self.questions)
+
+
+def _validate_pack_authors(question: Question) -> None:
+    if not question.author:
+        raise QuestionParseError("Missing required field: author")
+    for part_index, part in enumerate(question.parts, start=1):
+        if not part.author:
+            raise QuestionParseError(
+                f"Missing required field: author in blitz part {part_index}"
+            )
 
 
 def parse_question_pack(pack_folder: Path) -> QuestionPack:
@@ -491,14 +531,45 @@ def parse_question_pack(pack_folder: Path) -> QuestionPack:
             f"Unexpected question sector folder(s): {names} (expected only 01..13)"
         )
 
+    intro_path = pack_folder / "intro.md"
+    intro_html: Optional[str] = None
+    if intro_path.exists():
+        if not intro_path.is_file():
+            raise QuestionParseError(f"intro.md is not a file: {intro_path}")
+        if not intro_path.resolve().is_relative_to(pack_folder.resolve()):
+            raise QuestionParseError("intro.md must stay inside the pack folder")
+        try:
+            intro_data = intro_path.read_bytes()
+        except OSError as e:
+            raise QuestionParseError(f"Failed to read intro.md: {intro_path}") from e
+        if not intro_data or intro_data.strip() == b"":
+            raise QuestionParseError("intro.md is empty")
+        if b"\x00" in intro_data:
+            raise QuestionParseError("intro.md looks like binary data")
+        try:
+            intro_md = intro_data.decode("utf-8")
+        except UnicodeDecodeError as e:
+            raise QuestionParseError("intro.md is not valid UTF-8 (binary?)") from e
+        if _MEDIA_RE.search(intro_md):
+            raise QuestionParseError(
+                "Media in intro.md is not supported yet; use the temporary intro assets"
+            )
+        intro_html = markdown.markdown(intro_md, extensions=["extra", "sane_lists"])
+
     questions: list[Question] = []
     for sector in range(1, 14):
         qdir = pack_folder / f"{sector:02d}"
         if not qdir.exists() or not qdir.is_dir():
             raise QuestionParseError(f"Missing question folder for sector {sector}: {qdir}")
         try:
-            questions.append(parse_question(qdir))
+            question = parse_question(qdir)
+            _validate_pack_authors(question)
+            questions.append(question)
         except QuestionParseError as e:
             raise QuestionParseError(f"Failed to parse sector {sector} ({qdir}): {e}") from e
 
-    return QuestionPack(questions=questions, path=pack_folder.resolve())
+    return QuestionPack(
+        questions=questions,
+        path=pack_folder.resolve(),
+        intro_html=intro_html,
+    )

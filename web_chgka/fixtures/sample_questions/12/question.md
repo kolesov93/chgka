@@ -1,6 +1,7 @@
 ---
 title: Спортивный рекорд
 author: Алексей Громов
+author_photo: author.jpg
 ---
 
 # Вопрос
@@ -22,4 +23,3 @@ author: Алексей Громов
 # Источник
 
 - World Athletics (IAAF), Official Records
-

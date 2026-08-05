@@ -20,6 +20,25 @@ def _shared_image():
     }
 
 
+def _intro_authors():
+    groups = []
+    for sector in range(1, 13):
+        card_count = 3 if sector in (4, 7) else 1
+        groups.append(
+            [
+                {
+                    "sector": sector,
+                    "slot": slot,
+                    "name": f"Author {sector}.{slot}",
+                    "city": "Moscow" if sector == 1 else None,
+                    "has_photo": slot == 1,
+                }
+                for slot in range(1, card_count + 1)
+            ]
+        )
+    return groups
+
+
 def test_create_initial_app_state_defaults():
     state = create_initial_app_state()
 
@@ -34,23 +53,34 @@ def test_create_initial_app_state_defaults():
     assert state["wheel"]["is_spinning"] is False
     assert state["wheel"]["spin_id"] == 0
     assert state["timer"]["discussion_deadline_ms"] is None
+    assert state["presentation"]["intro"] is None
     assert state["presentation"]["shared_media"] is None
     assert state["pack"]["question_types"] is None
+    assert state["pack"]["intro_authors"] is None
     assert state["logs"] == []
 
 
-def test_create_initial_app_state_copies_question_types():
+def test_create_initial_app_state_copies_pack_ui_metadata():
     question_types = ["normal", "blitz", "superblitz"]
-    state = create_initial_app_state(question_types=question_types)
+    intro_authors = _intro_authors()
+    state = create_initial_app_state(
+        question_types=question_types,
+        intro_authors=intro_authors,
+    )
 
     assert state["pack"]["question_types"] == question_types
     assert state["pack"]["question_types"] is not question_types
+    assert state["pack"]["intro_authors"] == intro_authors
+    assert state["pack"]["intro_authors"] is not intro_authors
+    assert state["pack"]["intro_authors"][0] is not intro_authors[0]
+    assert state["pack"]["intro_authors"][0][0] is not intro_authors[0][0]
 
 
-def test_reset_app_state_clears_runtime_fields_and_preserves_question_types():
+def test_reset_app_state_clears_runtime_fields_and_preserves_pack_metadata():
     state = create_initial_app_state(
         phase=PHASE_PRE_ROUND,
         question_types=["normal", "blitz"],
+        intro_authors=_intro_authors(),
     )
     state["game"]["score"] = {"znatoki": 5, "tv": 4}
     state["game"]["used_questions"] = [1, 2, 9]
@@ -62,6 +92,11 @@ def test_reset_app_state_clears_runtime_fields_and_preserves_question_types():
     state["wheel"]["is_spinning"] = True
     state["wheel"]["spin_id"] = 7
     state["timer"]["discussion_deadline_ms"] = 12345
+    state["presentation"]["intro"] = {
+        "slide_index": 7,
+        "started_at_ms": 1_000,
+        "duration_ms": 87_757,
+    }
     state["presentation"]["shared_media"] = _shared_image()
     state["logs"] = ["old log"]
 
@@ -78,8 +113,10 @@ def test_reset_app_state_clears_runtime_fields_and_preserves_question_types():
     assert state["wheel"]["is_spinning"] is False
     assert state["wheel"]["spin_id"] == 8
     assert state["timer"]["discussion_deadline_ms"] is None
+    assert state["presentation"]["intro"] is None
     assert state["presentation"]["shared_media"] is None
     assert state["pack"]["question_types"] == ["normal", "blitz"]
+    assert state["pack"]["intro_authors"] == _intro_authors()
     assert state["logs"] == []
 
 
@@ -112,6 +149,7 @@ def test_public_game_state_flattens_app_state_for_current_frontend():
         "question_types": ["normal"],
         "discussion_deadline_ms": 12345,
         "round": {"kind": "normal", "sector": 3},
+        "intro": None,
         "shared_media": {
             "type": "image",
             "media_id": "abc",
@@ -136,6 +174,38 @@ def test_public_game_state_flattens_app_state_for_current_frontend():
     assert state["game"]["score"]["znatoki"] == 1
     assert state["game"]["used_questions"] == [3]
     assert state["game"]["round"]["sector"] == 3
+
+
+def test_public_game_state_serializes_intro_timing_for_reconnect():
+    state = create_initial_app_state(intro_authors=_intro_authors())
+    state["presentation"]["intro"] = {
+        "slide_index": 4,
+        "started_at_ms": 10_000,
+        "duration_ms": 87_757,
+    }
+
+    payload = public_game_state(state, now_ms=13_750)
+
+    assert payload["intro"] == {
+        "slide_index": 4,
+        "started_at_ms": 10_000,
+        "duration_ms": 87_757,
+        "server_now_ms": 13_750,
+        "authors": [
+            {
+                "sector": 4,
+                "slot": slot,
+                "name": f"Author 4.{slot}",
+                "city": None,
+                "has_photo": slot == 1,
+            }
+            for slot in range(1, 4)
+        ],
+    }
+    assert "server_now_ms" not in state["presentation"]["intro"]
+
+    state["presentation"]["intro"]["slide_index"] = 13
+    assert public_game_state(state, now_ms=14_000)["intro"]["authors"] == []
 
 
 def test_public_game_state_serializes_server_time_for_audio_reconnect():

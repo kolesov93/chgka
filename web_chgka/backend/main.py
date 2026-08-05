@@ -18,6 +18,7 @@ from live_ops import (
     live_ops_cancel_spin,
     live_ops_force_phase,
     live_ops_open_round,
+    live_ops_reset_to_intro,
     live_ops_set_score,
     live_ops_set_sector_used,
     live_ops_set_timer,
@@ -42,6 +43,7 @@ from sound_control import (
     supersede_fade,
 )
 from state import (
+    PHASE_INTRO,
     PHASE_LOGIN,
     PHASE_QUESTION_READING,
     PHASE_DISCUSSION,
@@ -54,11 +56,13 @@ from transitions import (
     TransitionEffects,
     TransitionError,
     transition_complete_spin,
+    transition_advance_intro,
     transition_end_round,
     transition_reset,
     transition_score,
     transition_start_discussion,
     transition_start_game,
+    transition_start_intro_music,
     transition_start_spin,
     transition_team_answer,
     transition_ten_seconds,
@@ -253,11 +257,28 @@ def _load_question_pack_on_startup() -> None:
         raise RuntimeError(f"Question pack must contain {SECTORS_COUNT} questions, got {len(types)}")
 
     app_state["pack"]["question_types"] = types
+    app_state["pack"]["intro_authors"] = [
+        [
+            {
+                "sector": sector,
+                "slot": slot,
+                "name": author_question.author,
+                "city": author_question.city,
+                "has_photo": author_question.author_photo is not None,
+            }
+            for slot, author_question in enumerate(
+                question.parts or [question],
+                start=1,
+            )
+        ]
+        for sector, question in enumerate(pack.questions[:12], start=1)
+    ]
     loaded_pack = pack
     pack_admin_info = {
         "path": str(pack.path),
         "question_titles": [q.title for q in pack.questions],
         "question_types": types,
+        "intro_html": pack.intro_html,
     }
     logger.info(f"Loaded question pack: {pack.path} ({len(types)} questions)")
 
@@ -487,6 +508,30 @@ async def get_media(media_id: str):
     # Inline display
     return FileResponse(str(p))
 
+
+@fastapi_app.get("/intro/author-photo/{sector}/{slot}")
+async def get_intro_author_photo(sector: int, slot: int):
+    if loaded_pack is None or not 1 <= sector <= 12:
+        raise HTTPException(status_code=404, detail="Author photo not found")
+    intro = app_state["presentation"]["intro"]
+    if app_state["game"]["phase"] != PHASE_INTRO or intro is None:
+        raise HTTPException(status_code=404, detail="Author photo not found")
+    if intro["slide_index"] != sector:
+        raise HTTPException(status_code=404, detail="Author photo not found")
+
+    question = loaded_pack.get_by_sector(sector)
+    author_questions = question.parts or [question]
+    if not 1 <= slot <= len(author_questions):
+        raise HTTPException(status_code=404, detail="Author photo not found")
+
+    photo_path = author_questions[slot - 1].author_photo
+    if photo_path is None or not photo_path.is_file():
+        raise HTTPException(status_code=404, detail="Author photo not found")
+    return FileResponse(
+        str(photo_path),
+        headers={"Cache-Control": "no-store"},
+    )
+
 @sio.event
 async def connect(sid, environ):
     logger.info(f"Client connected: {sid}")
@@ -682,12 +727,44 @@ async def admin_approve(sid, data):
 
 @sio.event
 async def start_game(sid):
-    """Админ запускает игру (переход из LOGIN в PRE_ROUND)"""
+    """Админ запускает intro перед первым раундом."""
     if not await require_admin(sid):
         return
     
     try:
         effects = transition_start_game(app_state)
+    except TransitionError as error:
+        await _emit_transition_error(sid, error)
+        return
+    await _apply_transition_effects(effects)
+
+
+@sio.event
+async def admin_start_intro_music(sid):
+    """Один раз запустить общий intro-трек по команде ведущего."""
+    if not await require_admin(sid):
+        return
+
+    try:
+        effects = transition_start_intro_music(app_state, now_ms=_now_ms())
+    except TransitionError as error:
+        await _emit_transition_error(sid, error)
+        return
+    await _apply_transition_effects(effects)
+
+
+@sio.event
+async def admin_advance_intro(sid, data):
+    """Переключить ровно один intro-слайд или перейти к первому раунду."""
+    if not await require_admin(sid):
+        return
+
+    payload = data if isinstance(data, dict) else {}
+    try:
+        effects = transition_advance_intro(
+            app_state,
+            expected_slide=payload.get("expected_slide"),
+        )
     except TransitionError as error:
         await _emit_transition_error(sid, error)
         return
@@ -845,6 +922,14 @@ async def admin_force_phase(sid, data):
             normal_discussion_seconds=NORMAL_DISCUSSION_SECONDS,
             blitz_discussion_seconds=BLITZ_DISCUSSION_SECONDS,
         ),
+    )
+
+
+@sio.event
+async def admin_reset_to_intro(sid, data=None):
+    return await _apply_live_ops_action(
+        sid,
+        lambda: live_ops_reset_to_intro(app_state),
     )
 
 

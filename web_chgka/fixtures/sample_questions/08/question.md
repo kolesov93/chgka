@@ -1,6 +1,7 @@
 ---
 title: Музыкальный ответ
 author: Игорь Белов
+author_photo: author.jpg
 ---
 
 # Вопрос
@@ -27,4 +28,3 @@ author: Игорь Белов
 
 - Rolling Stone Magazine
 - Billboard Charts Archive
-

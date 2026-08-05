@@ -1,6 +1,7 @@
 ---
 title: Суперблиц — Космос
 type: superblitz
+author: Сергей Николаев
 ---
 
 # Вопрос
@@ -17,4 +18,3 @@ type: superblitz
 
 - NASA History Office
 - Роскосмос, официальный сайт
-

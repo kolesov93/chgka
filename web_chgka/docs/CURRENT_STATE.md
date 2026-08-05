@@ -1,9 +1,9 @@
 # CHGKA Web Current State
 
-- Snapshot date: 2026-08-05
-- Latest completed task: `docs/tasks/0012-game-over.md`
-- Branch: `web`
-- Status: task 0012 is accepted and integrated locally; publishing the updated `web` branch is pending.
+- Snapshot date: 2026-08-06
+- Latest completed task: `docs/tasks/0013-intro.md`
+- Branch: `task/intro`
+- Status: task 0013 is implemented, locally verified, and accepted by focused browser smoke. Integration into `web` and remote CI on the merged branch are the current handoff point.
 
 ## Repository checkpoint
 
@@ -31,6 +31,7 @@
 - Game-over closure commit: `aef4553` (`Close explicit game over task`).
 - Game-over merge commit: `ea46a55` (`Merge explicit game over task`).
 - Local `web` contains the accepted merge and is ahead of `origin/web`; push is pending.
+- Intro implementation commits: `1b417a4`, `e7b7ad8`, `d18a57a`, `c6b0e70`, and `de4e847`; the latest commit includes accepted pack-backed normal/blitz author presentation.
 
 ## Product decisions
 
@@ -42,22 +43,37 @@
 
 ## Verified baseline
 
-- Backend: 118 tests pass with warnings treated as errors.
+- Backend: 139 tests pass with warnings treated as errors.
   - 47 question parser tests;
   - 5 synchronized sound-control tests;
-  - 9 live-ops recovery tests;
+  - 10 live-ops recovery tests;
   - 5 media identity/playback tests;
-  - 5 state helper tests;
+  - 6 state helper tests;
   - 3 wheel-sector/spin-selection tests;
-  - 18 pure transition tests;
-  - 17 handler concurrency/session/media/live-ops/sound-control/game-over tests;
-  - 9 pack-validator CLI, sector-directory, and media-path tests.
-- Frontend: 20 pure playback/live-ops/sound-fade/inline-media/game-over tests and the production build pass; the last clean install and full audit reported zero vulnerabilities.
+  - 20 pure transition tests;
+  - 23 handler concurrency/session/media/live-ops/sound-control/game-over/intro tests;
+  - 20 pack-validator CLI, sector-directory, media-path, author-metadata/photo, and intro-file tests.
+- Frontend: 25 pure playback/live-ops/sound-fade/inline-media/game-over/intro tests and the production build pass; the last clean install and full audit reported zero vulnerabilities.
 - Backend startup loads the sample pack with all 13 questions and reaches application startup completion.
 - `docker compose config --quiet` succeeds without warnings.
 - The last full development-image baseline (before tasks 0011–0012) built successfully: Python 3.14 passed `pip check` and 113 backend tests; Node 24 passed 13 frontend tests and the production build. The current source-only changes pass native tests/build and Compose validation; images were not rebuilt for task 0012.
 
 All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, 0009, 0010, 0011, and 0012.
+
+## Completed task: intro
+
+Implemented:
+
+- add the authoritative `INTRO` phase between lobby and the first `PRE_ROUND`;
+- enter intro silently, let the host start the existing meeting track once, and show static `00`, pack-backed author cards for sectors 1–12, then special static `13`;
+- give the host current/next slide context, reconnect-aware remaining-track time, and guarded one-step navigation;
+- parse optional root `intro.md` speech and expose it only through admin-only `pack_info`;
+- transition after slide `13` to the real score/table view at 0:0 and stop any remaining intro sound.
+- offer a dedicated Live Ops full reset to intro that clears progress/runtime context, stops audio, and restores silent slide `00` plus the manual music button.
+- require author metadata across the pack, support optional city/direct author photos, show one card for a normal sector and three part-author cards in one row for blitz/superblitz, and independently use a generated static silhouette where a pack photo is absent.
+- keep the twelve previous intro photos in the sample pack: normal-sector photos beside their questions, and the old sector 04/07 photos beside the first parts of the blitz/superblitz; EXIF/GPS metadata is removed.
+
+Verification: all 139 backend tests with warnings treated as errors, all 25 frontend tests, the production build, sample-pack CLI validation, and Compose configuration pass locally. The focused admin/player smoke passed on `de4e847`; remote CI will run after integration into `web`.
 
 ## Completed task: game over
 
@@ -271,7 +287,7 @@ Additional known gaps:
 - raw Markdown HTML is unsafe for untrusted question packs;
 - frontend development uses `localhost:8000`, so it does not yet support browsers running on other machines;
 - video sharing/playback, media queue/next, duration extraction, and automatic ended state remain unimplemented;
-- frontend coverage is limited to pure playback/live-ops/sound-fade/inline-media/game-over helpers; there are no browser/component tests, Socket.IO integration tests, or lint/typecheck.
+- frontend coverage is limited to pure playback/live-ops/sound-fade/inline-media/game-over/intro helpers; there are no browser/component tests, Socket.IO integration tests, or lint/typecheck.
 
 ## Repository artifacts
 
@@ -283,9 +299,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish the updated `web` branch containing the accepted task 0012 merge.
-2. Take roadmap item 9 in a separate branch and define the intro pack/state/UI contract before implementation.
-3. Keep authorization/security and persistence as mandatory gates before public deployment.
+1. Integrate accepted task 0013 into `web`, publish only `web`, and confirm remote CI.
+2. Remove the local task branch after the merged `web` result is verified.
+3. Take authorization/security as the recommended next task; persistence remains another mandatory gate before public deployment.
 
 ## Resume checklist
 
@@ -298,7 +314,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. completed tasks 0012, 0011, 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
+4. completed tasks 0013, 0012, 0011, 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:

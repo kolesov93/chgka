@@ -9,12 +9,20 @@ from state import (
     AppState,
     GamePhase,
     PHASE_DISCUSSION,
+    PHASE_INTRO,
     PHASE_POST_ROUND,
     PHASE_PRE_ROUND,
     PHASE_QUESTION_READING,
     PHASE_TEAM_ANSWER,
+    reset_app_state,
 )
-from transitions import BLITZ_PARTS, SECTORS_COUNT, TransitionEffects, TransitionError
+from transitions import (
+    BLITZ_PARTS,
+    INTRO_DURATION_MS,
+    SECTORS_COUNT,
+    TransitionEffects,
+    TransitionError,
+)
 
 
 MAX_SCORE = 6
@@ -270,6 +278,29 @@ def live_ops_force_phase(
         clear_media_tokens=clear_media,
         refresh_admin_question=clear_media,
         stop_sounds=was_spinning or clear_media,
+        spin_id=state["wheel"]["spin_id"],
+    )
+
+
+def live_ops_reset_to_intro(
+    state: AppState,
+) -> TransitionEffects:
+    old_phase = state["game"]["phase"]
+    old_score = dict(state["game"]["score"])
+    reset_app_state(state, phase=PHASE_INTRO)
+    state["presentation"]["intro"] = {
+        "slide_index": 0,
+        "started_at_ms": None,
+        "duration_ms": INTRO_DURATION_MS,
+    }
+    return TransitionEffects(
+        logs=(
+            "Live Ops: полный сброс "
+            f"из {old_phase} при счёте {old_score['znatoki']}:{old_score['tv']} -> INTRO",
+        ),
+        clear_media_tokens=True,
+        clear_admin_question=True,
+        stop_sounds=True,
         spin_id=state["wheel"]["spin_id"],
     )
 

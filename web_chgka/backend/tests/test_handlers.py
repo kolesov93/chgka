@@ -1,4 +1,5 @@
 import asyncio
+import shutil
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ from sound_control import begin_fade, create_sound_control_state
 from state import (
     PHASE_DISCUSSION,
     PHASE_GAME_OVER,
+    PHASE_INTRO,
     PHASE_POST_ROUND,
     PHASE_PRE_ROUND,
     PHASE_QUESTION_READING,
@@ -75,6 +77,171 @@ def test_concurrent_score_handlers_award_only_one_point(monkeypatch):
 
     assert state["game"]["score"] == {"znatoki": 1, "tv": 0}
     assert any(event == "admin_notification" for event, _, _ in fake_sio.events)
+
+
+def test_intro_handlers_broadcast_each_slide_once_and_stop_on_completion(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state()
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "players_list", [])
+    monkeypatch.setattr(main, "_now_ms", lambda: 10_000)
+
+    async def run():
+        await main.start_game("admin")
+        assert not any(
+            event == "play_sound" and data == {"sound": "intro"}
+            for event, data, _kwargs in fake_sio.events
+        )
+        await asyncio.gather(
+            main.admin_start_intro_music("admin"),
+            main.admin_start_intro_music("admin"),
+        )
+        await asyncio.gather(
+            main.admin_advance_intro("admin", {"expected_slide": 0}),
+            main.admin_advance_intro("admin", {"expected_slide": 0}),
+        )
+        state["presentation"]["intro"]["slide_index"] = 13
+        await main.admin_advance_intro("admin", {"expected_slide": 13})
+
+    asyncio.run(run())
+
+    assert state["game"]["phase"] == PHASE_PRE_ROUND
+    assert state["presentation"]["intro"] is None
+    assert sum(
+        event == "play_sound" and data == {"sound": "intro"}
+        for event, data, _kwargs in fake_sio.events
+    ) == 1
+    assert sum(
+        event == "state_update"
+        and bool(data["intro"])
+        and data["intro"]["slide_index"] == 1
+        for event, data, _kwargs in fake_sio.events
+    ) == 1
+    assert any(event == "admin_notification" for event, _, _ in fake_sio.events)
+    assert any(event == "stop_sound" for event, _, _ in fake_sio.events)
+
+
+def test_intro_advance_requires_admin(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_INTRO)
+    state["presentation"]["intro"] = {
+        "slide_index": 0,
+        "started_at_ms": 10_000,
+        "duration_ms": 87_757,
+    }
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _deny_admin)
+    monkeypatch.setattr(main, "app_state", state)
+
+    asyncio.run(main.admin_advance_intro("player", {"expected_slide": 0}))
+
+    assert state["presentation"]["intro"]["slide_index"] == 0
+    assert fake_sio.events == []
+
+
+def test_intro_author_photo_is_pack_backed_and_current_slide_only(tmp_path, monkeypatch):
+    pack_path = tmp_path / "pack"
+    shutil.copytree(SAMPLE_PACK, pack_path)
+    photo_path = pack_path / "04" / "01" / "author.jpg"
+    pack = parse_question_pack(pack_path)
+    state = create_initial_app_state(phase=PHASE_INTRO)
+    state["presentation"]["intro"] = {
+        "slide_index": 4,
+        "started_at_ms": None,
+        "duration_ms": 87_757,
+    }
+    monkeypatch.setattr(main, "loaded_pack", pack)
+    monkeypatch.setattr(main, "app_state", state)
+
+    response = asyncio.run(main.get_intro_author_photo(4, 1))
+
+    assert Path(response.path) == photo_path.resolve()
+    assert response.headers["cache-control"] == "no-store"
+
+    with pytest.raises(main.HTTPException) as error:
+        asyncio.run(main.get_intro_author_photo(4, 2))
+    assert error.value.status_code == 404
+
+    with pytest.raises(main.HTTPException) as error:
+        asyncio.run(main.get_intro_author_photo(4, 4))
+    assert error.value.status_code == 404
+
+    state["presentation"]["intro"]["slide_index"] = 2
+    with pytest.raises(main.HTTPException) as error:
+        asyncio.run(main.get_intro_author_photo(4, 1))
+    assert error.value.status_code == 404
+
+    with pytest.raises(main.HTTPException) as error:
+        asyncio.run(main.get_intro_author_photo(13, 1))
+    assert error.value.status_code == 404
+
+
+def test_pack_info_includes_intro_speech_for_admin_only(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    fake_sio.sessions = {
+        "admin": {"role": "admin"},
+        "player": {"role": "player"},
+    }
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(
+        main,
+        "pack_admin_info",
+        {"question_titles": [], "question_types": [], "intro_html": "<p>Речь</p>"},
+    )
+
+    async def run():
+        await main._emit_pack_info_to_admin("player")
+        await main._emit_pack_info_to_admin("admin")
+
+    asyncio.run(run())
+
+    pack_events = [
+        (data, kwargs)
+        for event, data, kwargs in fake_sio.events
+        if event == "pack_info"
+    ]
+    assert pack_events == [
+        (
+            {"pack": main.pack_admin_info},
+            {"to": "admin"},
+        )
+    ]
+
+
+def test_startup_builds_public_intro_authors_from_pack(monkeypatch):
+    state = create_initial_app_state()
+    monkeypatch.setenv("QUESTIONS_PACK_PATH", str(SAMPLE_PACK))
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", None)
+    monkeypatch.setattr(main, "pack_admin_info", {})
+
+    main._load_question_pack_on_startup()
+
+    authors = state["pack"]["intro_authors"]
+    assert len(authors) == 12
+    assert authors[0] == [
+        {
+            "sector": 1,
+            "slot": 1,
+            "name": "Михаил Савченко",
+            "city": "Москва",
+            "has_photo": True,
+        }
+    ]
+    assert authors[3] == [
+        {
+            "sector": 4,
+            "slot": slot,
+            "name": "Ольга Петрова",
+            "city": None,
+            "has_photo": slot == 1,
+        }
+        for slot in range(1, 4)
+    ]
+    assert authors[11][0]["name"] == "Алексей Громов"
+    assert all(card["sector"] != 13 for group in authors for card in group)
 
 
 def test_end_round_at_six_broadcasts_final_state_and_sound(monkeypatch):
@@ -375,6 +542,51 @@ def test_live_ops_open_round_force_phase_timer_and_clear_question(monkeypatch):
     assert any(event == "stop_sound" for event, _, _ in fake_sio.events)
     assert state["game"]["phase"] == PHASE_PRE_ROUND
     assert state["game"]["round"] is None
+
+
+def test_live_ops_reset_to_intro_stops_audio_and_waits_for_manual_music(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_POST_ROUND)
+    state["game"]["score"] = {"znatoki": 5, "tv": 4}
+    state["game"]["used_questions"] = [1, 3, 5]
+    state["game"]["round"] = {"kind": "normal", "sector": 5}
+    media_tokens = {"old": {"expires_at": 999.0}}
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "media_tokens", media_tokens)
+    monkeypatch.setattr(main, "_now_ms", lambda: 50_000)
+    monkeypatch.setattr(
+        main,
+        "players_list",
+        [{"sid": "admin", "role": "admin", "online": True}],
+    )
+
+    response = asyncio.run(main.admin_reset_to_intro("admin"))
+
+    assert response == {"ok": True}
+    assert state["game"]["phase"] == PHASE_INTRO
+    assert state["game"]["score"] == {"znatoki": 0, "tv": 0}
+    assert state["game"]["used_questions"] == []
+    assert state["presentation"]["intro"]["slide_index"] == 0
+    assert state["presentation"]["intro"]["started_at_ms"] is None
+    assert media_tokens == {}
+    event_names = [event for event, _data, _kwargs in fake_sio.events]
+    stop_index = event_names.index("stop_sound")
+    state_index = next(
+        index
+        for index, (event, data, _kwargs) in enumerate(fake_sio.events)
+        if event == "state_update" and data["phase"] == PHASE_INTRO
+    )
+    assert stop_index < state_index
+    assert not any(
+        event == "play_sound" and data == {"sound": "intro"}
+        for event, data, _kwargs in fake_sio.events
+    )
+    assert any(
+        event == "admin_question" and data is None
+        for event, data, _kwargs in fake_sio.events
+    )
 
 
 def test_live_ops_cancel_spin_prevents_sleeping_handler_completion(monkeypatch):
