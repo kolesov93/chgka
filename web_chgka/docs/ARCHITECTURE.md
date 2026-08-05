@@ -28,6 +28,7 @@ FastAPI + python-socketio (backend/main.py)
 - `frontend/src/socket.js` owns the single Socket.IO client plus backend/media URL construction.
 - `frontend/src/hooks/useGameSession.js` owns session restore, shared server state, players, pack/admin data, notifications, logout, and non-audio socket listeners.
 - `frontend/src/hooks/useDiscussionTimer.js` owns the admin countdown and one-shot local ten-second notification; `useSocketSoundEvents.js` bridges sound events to `useGameSound.js`.
+- `frontend/src/hooks/useSoundFade.js` derives one reconnect-aware emergency fade multiplier from the server sound-control snapshot. Shared media, effects, and the wheel consume that multiplier; the wheel also retains its intrinsic end-of-spin fade.
 - `frontend/src/components/` contains the admin question/media panel, normal admin controls, the separate danger-styled Live Ops recovery panel, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
 - Development connects Socket.IO and media requests directly to `http://localhost:8000`. A production build uses the current origin (`/`).
 
@@ -41,6 +42,7 @@ UI components may emit existing user actions through the shared socket, but they
 - `backend/state.py` defines the typed internal `AppState` and serializes it to the flat public payload expected by the frontend.
 - `backend/transitions.py` owns synchronous phase, spin, scoring, blitz, round-end, and reset rules. It mutates `AppState` before network awaits and returns transport effects such as logs, sounds, media-token cleanup, and admin-question refresh.
 - `backend/live_ops.py` owns exceptional admin recovery rules: exact score/sector edits, direct round opening, normalized phase forcing, stuck-spin cancellation, and timer repair. It uses the same transport effects without weakening normal transition guards.
+- `backend/sound_control.py` owns the pure generation-based `normal`/`fading`/`stopped` lifecycle and synchronized fade progress math.
 - `backend/questions.py` parses and validates filesystem question packs, assigns section-aware opaque media references, and converts Markdown sections to HTML.
 - `backend/media.py` builds the media catalog for the exact current round/blitz part, creates and validates media-token context, and owns synchronous playback-state transitions.
 - `backend/validate_pack.py` exposes that same parser as the pre-start `python -m validate_pack` CLI; it does not define separate validation rules.
@@ -83,6 +85,14 @@ The admin has a separate collapsed recovery panel; it is not part of the normal 
 
 After admin authorization, every operation validates its complete input before mutation, mutates synchronously before any network emit await, logs the recovery, and then broadcasts authoritative state. Hide media and Silence reuse their existing events. Recovery does not play normal phase/scoring sounds and does not introduce arbitrary state editing, snapshots, or undo.
 
+## Sound control
+
+Master volume and the server-authoritative sound-control snapshot travel through `settings_update`, separately from the flat game-state compatibility payload. The snapshot contains a monotonically increasing generation, mode, optional fade start/duration, fade starting level, and current server time. It is sent before game state on connect so a reconnecting browser cannot briefly restart audible shared audio or a wheel loop that is fading/stopped.
+
+`admin_fade_sounds` starts a three-second fade and captures its generation. Clients combine server progress with local time since receipt and apply one multiplier to managed shared audio, one-shot effects, and the wheel loop. Gain follows a uniform 60 dB reduction (exponential amplitude) with 25 ms browser updates, leaving the sound effectively silent before final Stop. Repeated Fade starts from the current multiplier. At completion the backend stops shared-media playback authoritatively and emits `stop_sound` for effects and the wheel.
+
+Every later server sound command advances the generation synchronously before its first emit. Play/effect/spin restores normal output; Silence and transition recovery stops select stopped output; explicit shared-media Play/Pause/Stop cancels pending global completion. A sleeping fade checks its captured generation before stopping anything, so it cannot affect newer audio. Private admin preview is deliberately outside this shared control plane.
+
 ## Question packs
 
 A pack contains 13 required sector directories named `01` through `13`. Each sector contains `question.md`; media live under a local `media/` directory.
@@ -106,11 +116,11 @@ The managed image/audio flow is:
 5. `admin_share_media` puts an image or stopped audio item into shared presentation state. The public serializer removes the internal reference, section, and filename; clients receive only the type/token/playback fields and fetch the file from the backend origin.
 6. Audio play/pause/stop actions mutate server-authoritative playback state. `state_update` includes the stored position, playback start timestamp, and serialization time so current and reconnecting clients align their local audio elements.
 
-Players receive no native playback controls. Browser autoplay restrictions are handled by a local permission button, which does not change server playback state. Stop resets audio to the beginning while keeping it visible; hide removes it. Video, queue/next, fade, duration extraction, and automatic server-side end detection remain roadmap work. Image preview stays in the separate media block; inline image previews are a separate task.
+Players receive no native playback controls. Browser autoplay restrictions are handled by a local permission button, which does not change server playback state. Stop resets audio to the beginning while keeping it visible; hide removes it. Shared audio participates in the global server-synchronized sound fade; private preview does not. Video, queue/next, duration extraction, and automatic server-side end detection remain roadmap work. Image preview stays in the separate media block; inline image previews are a separate task.
 
 ## Persistence and concurrency
 
-All mutable runtime data is process-local. A backend restart loses the game, players, sessions, logs, and media tokens.
+All mutable runtime data is process-local. A backend restart loses the game, players, sessions, logs, media tokens, volume, and sound-control generation.
 
 Socket.IO handlers are asynchronous and can overlap. UI button disabling is not a concurrency boundary. Core game and recovery handlers therefore call synchronous transitions before their first network await. Repeated scoring is rejected by the changed phase, and spin completion is accepted only for the current `spin_id`; reset and recovery cancellation both advance that generation.
 

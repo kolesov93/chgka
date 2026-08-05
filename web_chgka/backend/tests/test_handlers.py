@@ -5,6 +5,7 @@ import pytest
 
 import main
 from questions import parse_question_pack
+from sound_control import begin_fade, create_sound_control_state
 from state import (
     PHASE_DISCUSSION,
     PHASE_PRE_ROUND,
@@ -41,6 +42,15 @@ async def _allow_admin(_sid):
 
 async def _deny_admin(_sid):
     return False
+
+
+@pytest.fixture(autouse=True)
+def _isolated_global_settings(monkeypatch):
+    monkeypatch.setattr(
+        main,
+        "global_settings",
+        {"volume": 1.0, "sound_control": create_sound_control_state()},
+    )
 
 
 def test_concurrent_score_handlers_award_only_one_point(monkeypatch):
@@ -365,4 +375,180 @@ def test_live_ops_handlers_require_admin(monkeypatch):
 
     assert response == {"ok": False, "error": "not_admin"}
     assert state["game"]["score"] == {"znatoki": 0, "tv": 0}
+    assert fake_sio.events == []
+
+
+def test_sound_fade_stops_shared_audio_and_publishes_stopped_mode(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["presentation"]["shared_media"] = {
+        "type": "audio",
+        "media_id": "audio-token",
+        "media_ref": "audio-ref",
+        "section": "question",
+        "name": "melody.mp3",
+        "playback_state": "playing",
+        "position_ms": 0,
+        "started_at_ms": 1_000,
+    }
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main.time, "time", lambda: 1.0)
+
+    async def finish_immediately(_duration):
+        return None
+
+    monkeypatch.setattr(main.asyncio, "sleep", finish_immediately)
+
+    response = asyncio.run(main.admin_fade_sounds("admin"))
+
+    assert response == {"ok": True, "completed": True}
+    assert state["presentation"]["shared_media"]["playback_state"] == "stopped"
+    assert state["presentation"]["shared_media"]["position_ms"] == 0
+    assert main.global_settings["sound_control"]["mode"] == "stopped"
+    settings = [
+        data for event, data, _kwargs in fake_sio.events if event == "settings_update"
+    ]
+    assert [payload["sound_control"]["mode"] for payload in settings] == [
+        "fading",
+        "stopped",
+    ]
+    assert sum(event == "stop_sound" for event, _, _ in fake_sio.events) == 1
+    assert any("Затухание звука" in entry for entry in state["logs"])
+
+
+def test_later_effect_supersedes_sleeping_fade_completion(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_PRE_ROUND)
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+
+    async def play_effect_instead_of_wait(_duration):
+        await main.admin_sound("admin", {"sound": "gong1"})
+
+    monkeypatch.setattr(main.asyncio, "sleep", play_effect_instead_of_wait)
+
+    response = asyncio.run(main.admin_fade_sounds("admin"))
+
+    assert response == {"ok": True, "completed": False}
+    assert main.global_settings["sound_control"]["mode"] == "normal"
+    assert any(event == "play_sound" for event, _, _ in fake_sio.events)
+    assert not any(event == "stop_sound" for event, _, _ in fake_sio.events)
+
+
+def test_explicit_media_stop_supersedes_fade_when_media_is_already_stopped(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["presentation"]["shared_media"] = {
+        "type": "audio",
+        "media_id": "audio-token",
+        "media_ref": "audio-ref",
+        "section": "question",
+        "name": "melody.mp3",
+        "playback_state": "stopped",
+        "position_ms": 0,
+        "started_at_ms": None,
+    }
+    generation = begin_fade(main.global_settings["sound_control"], now_ms=1_000)
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(
+        main,
+        "_get_current_shared_media_token_info",
+        lambda: {"name": "melody.mp3"},
+    )
+
+    asyncio.run(main.admin_stop_media("admin"))
+
+    assert main.global_settings["sound_control"]["mode"] == "normal"
+    assert main.complete_fade(
+        main.global_settings["sound_control"],
+        generation=generation,
+    ) is False
+    settings = [
+        data for event, data, _kwargs in fake_sio.events if event == "settings_update"
+    ]
+    assert settings[-1]["sound_control"]["mode"] == "normal"
+
+
+def test_later_silence_supersedes_fade_without_duplicate_stop(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_PRE_ROUND)
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+
+    async def silence_instead_of_wait(_duration):
+        await main.admin_stop_sounds("admin")
+
+    monkeypatch.setattr(main.asyncio, "sleep", silence_instead_of_wait)
+
+    response = asyncio.run(main.admin_fade_sounds("admin"))
+
+    assert response == {"ok": True, "completed": False}
+    assert main.global_settings["sound_control"]["mode"] == "stopped"
+    assert sum(event == "stop_sound" for event, _, _ in fake_sio.events) == 1
+
+
+def test_later_spin_supersedes_fade_and_keeps_wheel_sound_enabled(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(
+        phase=PHASE_PRE_ROUND,
+        question_types=["normal"] * 13,
+    )
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+
+    async def start_spin_instead_of_wait(_duration):
+        effects = main.transition_start_spin(
+            state,
+            raw_angle=20.0,
+            raw_sector=2,
+            duration=5.0,
+        )
+        await main._apply_transition_effects(effects)
+
+    monkeypatch.setattr(main.asyncio, "sleep", start_spin_instead_of_wait)
+
+    response = asyncio.run(main.admin_fade_sounds("admin"))
+
+    assert response == {"ok": True, "completed": False}
+    assert state["wheel"]["is_spinning"] is True
+    assert main.global_settings["sound_control"]["mode"] == "normal"
+    assert not any(event == "stop_sound" for event, _, _ in fake_sio.events)
+
+
+def test_connect_receives_current_fade_snapshot_before_game_state(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_PRE_ROUND)
+    begin_fade(main.global_settings["sound_control"], now_ms=1_000)
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main.time, "time", lambda: 2.5)
+
+    asyncio.run(main.connect("player", {}))
+
+    assert [event for event, _, _ in fake_sio.events[:3]] == [
+        "settings_update",
+        "state_update",
+        "role_update",
+    ]
+    sound_control = fake_sio.events[0][1]["sound_control"]
+    assert sound_control["mode"] == "fading"
+    assert sound_control["server_now_ms"] == 2_500
+
+
+def test_sound_fade_requires_admin(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _deny_admin)
+
+    response = asyncio.run(main.admin_fade_sounds("player"))
+
+    assert response == {"ok": False, "error": "not_admin"}
+    assert main.global_settings["sound_control"] == create_sound_control_state()
     assert fake_sio.events == []

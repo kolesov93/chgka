@@ -120,6 +120,10 @@ export function LiveOpsPanel({ gameState, stopAllSounds, addNotification }) {
     stopAllSounds();
   };
 
+  const fadeSounds = () => {
+    socket.emit('admin_fade_sounds');
+  };
+
   return (
     <div className="rounded-lg border border-red-900/70 bg-red-950/20">
       <button
@@ -265,7 +269,7 @@ export function LiveOpsPanel({ gameState, stopAllSounds, addNotification }) {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
               disabled={!gameState?.shared_media}
@@ -273,6 +277,9 @@ export function LiveOpsPanel({ gameState, stopAllSounds, addNotification }) {
               className={`${buttonClass} bg-slate-700 hover:bg-slate-600 text-white`}
             >
               Hide media
+            </button>
+            <button type="button" onClick={fadeSounds} className={`${buttonClass} bg-amber-800 hover:bg-amber-700 text-white`}>
+              Fade 3s
             </button>
             <button type="button" onClick={silence} className={`${buttonClass} bg-red-900 hover:bg-red-800 text-white`}>
               Silence

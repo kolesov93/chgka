@@ -44,6 +44,7 @@ class TransitionEffects:
     refresh_admin_question: bool = False
     clear_admin_question: bool = False
     stop_sounds: bool = False
+    start_sound_output: bool = False
     spin_id: Optional[int] = None
     playing_sector: Optional[int] = None
 
@@ -118,6 +119,7 @@ def transition_start_spin(
     return TransitionEffects(
         logs=tuple(logs),
         clear_media_tokens=True,
+        start_sound_output=True,
         spin_id=spin_id,
         playing_sector=playing_sector,
     )

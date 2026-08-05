@@ -11,6 +11,7 @@ import { useDiscussionTimer } from './hooks/useDiscussionTimer';
 import { useGameSession } from './hooks/useGameSession';
 import { useGameSound } from './hooks/useGameSound';
 import { useSocketSoundEvents } from './hooks/useSocketSoundEvents';
+import { useSoundFade } from './hooks/useSoundFade';
 import { socket } from './socket';
 
 function App() {
@@ -31,7 +32,13 @@ function App() {
     logout,
   } = useGameSession();
 
-  const { playSound, stopAllSounds } = useGameSound(gameState, gameSettings?.volume);
+  const soundFadeMultiplier = useSoundFade(gameSettings?.sound_control);
+  const effectiveMediaVolume = (gameSettings?.volume ?? 1) * soundFadeMultiplier;
+  const { playSound, stopAllSounds } = useGameSound(
+    gameState,
+    gameSettings?.volume,
+    soundFadeMultiplier,
+  );
   useSocketSoundEvents(playSound, stopAllSounds);
 
   const phase = gameState?.phase || 'LOGIN';
@@ -122,14 +129,14 @@ function App() {
                 adminQuestion={adminQuestion}
                 phase={phase}
                 sharedMedia={sharedMedia}
-                volume={gameSettings?.volume}
+                volume={effectiveMediaVolume}
                 addNotification={addNotification}
               />
             </div>
           </div>
         ) : (
           <div className="w-full flex justify-center mb-4">
-            <SharedMediaRenderer media={sharedMedia} volume={gameSettings?.volume}>
+            <SharedMediaRenderer media={sharedMedia} volume={effectiveMediaVolume}>
               <GameTable
                 gameState={gameState}
                 isAdmin={isAdmin}

@@ -33,6 +33,14 @@ from media import (
     stop_shared_media,
 )
 from questions import parse_question_pack, QuestionParseError, QuestionPack
+from sound_control import (
+    FADE_DURATION_MS,
+    begin_fade,
+    complete_fade,
+    create_sound_control_state,
+    public_sound_control,
+    supersede_fade,
+)
 from state import (
     PHASE_LOGIN,
     PHASE_QUESTION_READING,
@@ -128,8 +136,37 @@ async def require_admin(sid):
     return True
 
 global_settings = {
-    "volume": 1.0
+    "volume": 1.0,
+    "sound_control": create_sound_control_state(),
 }
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
+
+
+def _public_settings(*, now_ms: Optional[int] = None) -> dict:
+    timestamp_ms = _now_ms() if now_ms is None else now_ms
+    return {
+        "volume": global_settings["volume"],
+        "sound_control": public_sound_control(
+            global_settings["sound_control"],
+            now_ms=timestamp_ms,
+        ),
+    }
+
+
+async def emit_settings_update(to: Optional[str] = None) -> None:
+    payload = _public_settings()
+    if to is None:
+        await sio.emit("settings_update", payload)
+    else:
+        await sio.emit("settings_update", payload, to=to)
+
+
+def _supersede_sound_fade(*, mode: str) -> int:
+    """Synchronously invalidate pending fade completion before network awaits."""
+    return supersede_fade(global_settings["sound_control"], mode=mode)
 
 # Хранилище игроков (теперь отдельно)
 # [{"sid": "...", "name": "...", "role": "player|admin", "token": "..."}]
@@ -339,7 +376,12 @@ async def _apply_transition_effects(effects: TransitionEffects) -> None:
     for message in effects.logs:
         add_log(message)
     if effects.stop_sounds:
+        _supersede_sound_fade(mode="stopped")
+        await emit_settings_update()
         await sio.emit("stop_sound")
+    if effects.start_sound_output or effects.sounds:
+        _supersede_sound_fade(mode="normal")
+        await emit_settings_update()
     for sound in effects.sounds:
         await sio.emit("play_sound", {"sound": sound})
     await emit_state_update()
@@ -451,9 +493,11 @@ async def connect(sid, environ):
     
     await sio.save_session(sid, {'role': 'player'})
     
+    # Settings go first so a reconnecting client knows whether sound is fading
+    # or stopped before a spinning wheel/shared audio is rendered from state.
+    await emit_settings_update(to=sid)
     await emit_state_update(to=sid)
     await sio.emit('role_update', {'role': 'player'}, to=sid)
-    await sio.emit('settings_update', global_settings, to=sid)
 
 @sio.event
 async def restore_session(sid, data):
@@ -985,6 +1029,12 @@ async def _admin_media_playback_action(sid: str, action: str) -> None:
         )
         return
 
+    # Any valid explicit playback command supersedes an older global fade, even
+    # when the requested media state was already active. A Play restores sound;
+    # Pause/Stop cancel pending all-sound completion without globally muting
+    # unrelated game sounds.
+    _supersede_sound_fade(mode="normal")
+    await emit_settings_update()
     if changed:
         labels = {"play": "запущено", "pause": "на паузе", "stop": "остановлено"}
         add_log(f"Аудио {labels[action]}: {info.get('name', 'media')}")
@@ -1067,7 +1117,9 @@ async def admin_sound(sid, data):
     if not await require_admin(sid):
         return
     
+    _supersede_sound_fade(mode="normal")
     add_log(f"Звук: {data.get('sound')}")
+    await emit_settings_update()
     await sio.emit('play_sound', data)
 
 @sio.event
@@ -1079,7 +1131,7 @@ async def admin_volume(sid, data):
         vol = float(data.get('volume', 1.0))
         vol = max(0.0, min(1.0, vol))
         global_settings["volume"] = vol
-        await sio.emit('settings_update', global_settings)
+        await emit_settings_update()
     except ValueError:
         pass
 
@@ -1096,10 +1148,50 @@ async def admin_stop_sounds(sid):
     except MediaPlaybackError:
         pass
 
+    _supersede_sound_fade(mode="stopped")
     add_log("Звук остановлен")
+    await emit_settings_update()
     await sio.emit('stop_sound')
     if media_stopped:
         await emit_state_update()
+
+
+@sio.event
+async def admin_fade_sounds(sid, data=None):
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+
+    generation = begin_fade(
+        global_settings["sound_control"],
+        now_ms=_now_ms(),
+        duration_ms=FADE_DURATION_MS,
+    )
+    add_log("Затухание звука: 3 сек.")
+    await emit_settings_update()
+    await emit_state_update()
+    await asyncio.sleep(FADE_DURATION_MS / 1000)
+
+    # A later Play, Stop, Silence, spin, effect, or Fade advances generation.
+    # The obsolete coroutine must not stop any sound from that later command.
+    if not complete_fade(
+        global_settings["sound_control"],
+        generation=generation,
+    ):
+        return {"ok": True, "completed": False}
+
+    media_stopped = False
+    try:
+        media_stopped = stop_shared_media(
+            app_state["presentation"].get("shared_media")
+        )
+    except MediaPlaybackError:
+        pass
+
+    await sio.emit("stop_sound")
+    await emit_settings_update()
+    if media_stopped:
+        await emit_state_update()
+    return {"ok": True, "completed": True}
 
 @sio.event
 async def admin_kick(sid, data):
