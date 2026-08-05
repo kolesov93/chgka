@@ -20,6 +20,18 @@ def _shared_image():
     }
 
 
+def _intro_authors():
+    return [
+        {
+            "sector": sector,
+            "name": f"Author {sector}",
+            "city": "Moscow" if sector == 1 else None,
+            "has_photo": sector == 4,
+        }
+        for sector in range(1, 13)
+    ]
+
+
 def test_create_initial_app_state_defaults():
     state = create_initial_app_state()
 
@@ -37,21 +49,30 @@ def test_create_initial_app_state_defaults():
     assert state["presentation"]["intro"] is None
     assert state["presentation"]["shared_media"] is None
     assert state["pack"]["question_types"] is None
+    assert state["pack"]["intro_authors"] is None
     assert state["logs"] == []
 
 
-def test_create_initial_app_state_copies_question_types():
+def test_create_initial_app_state_copies_pack_ui_metadata():
     question_types = ["normal", "blitz", "superblitz"]
-    state = create_initial_app_state(question_types=question_types)
+    intro_authors = _intro_authors()
+    state = create_initial_app_state(
+        question_types=question_types,
+        intro_authors=intro_authors,
+    )
 
     assert state["pack"]["question_types"] == question_types
     assert state["pack"]["question_types"] is not question_types
+    assert state["pack"]["intro_authors"] == intro_authors
+    assert state["pack"]["intro_authors"] is not intro_authors
+    assert state["pack"]["intro_authors"][0] is not intro_authors[0]
 
 
-def test_reset_app_state_clears_runtime_fields_and_preserves_question_types():
+def test_reset_app_state_clears_runtime_fields_and_preserves_pack_metadata():
     state = create_initial_app_state(
         phase=PHASE_PRE_ROUND,
         question_types=["normal", "blitz"],
+        intro_authors=_intro_authors(),
     )
     state["game"]["score"] = {"znatoki": 5, "tv": 4}
     state["game"]["used_questions"] = [1, 2, 9]
@@ -87,6 +108,7 @@ def test_reset_app_state_clears_runtime_fields_and_preserves_question_types():
     assert state["presentation"]["intro"] is None
     assert state["presentation"]["shared_media"] is None
     assert state["pack"]["question_types"] == ["normal", "blitz"]
+    assert state["pack"]["intro_authors"] == _intro_authors()
     assert state["logs"] == []
 
 
@@ -147,7 +169,7 @@ def test_public_game_state_flattens_app_state_for_current_frontend():
 
 
 def test_public_game_state_serializes_intro_timing_for_reconnect():
-    state = create_initial_app_state()
+    state = create_initial_app_state(intro_authors=_intro_authors())
     state["presentation"]["intro"] = {
         "slide_index": 4,
         "started_at_ms": 10_000,
@@ -161,6 +183,12 @@ def test_public_game_state_serializes_intro_timing_for_reconnect():
         "started_at_ms": 10_000,
         "duration_ms": 87_757,
         "server_now_ms": 13_750,
+        "author": {
+            "sector": 4,
+            "name": "Author 4",
+            "city": None,
+            "has_photo": True,
+        },
     }
     assert "server_now_ms" not in state["presentation"]["intro"]
 

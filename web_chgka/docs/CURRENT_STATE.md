@@ -43,7 +43,7 @@
 
 ## Verified baseline
 
-- Backend: 131 tests pass with warnings treated as errors.
+- Backend: 139 tests pass with warnings treated as errors.
   - 47 question parser tests;
   - 5 synchronized sound-control tests;
   - 10 live-ops recovery tests;
@@ -51,9 +51,9 @@
   - 6 state helper tests;
   - 3 wheel-sector/spin-selection tests;
   - 20 pure transition tests;
-  - 21 handler concurrency/session/media/live-ops/sound-control/game-over/intro tests;
-  - 14 pack-validator CLI, sector-directory, media-path, and intro-file tests.
-- Frontend: 24 pure playback/live-ops/sound-fade/inline-media/game-over/intro tests and the production build pass; the last clean install and full audit reported zero vulnerabilities.
+  - 23 handler concurrency/session/media/live-ops/sound-control/game-over/intro tests;
+  - 20 pack-validator CLI, sector-directory, media-path, author-metadata/photo, and intro-file tests.
+- Frontend: 25 pure playback/live-ops/sound-fade/inline-media/game-over/intro tests and the production build pass; the last clean install and full audit reported zero vulnerabilities.
 - Backend startup loads the sample pack with all 13 questions and reaches application startup completion.
 - `docker compose config --quiet` succeeds without warnings.
 - The last full development-image baseline (before tasks 0011–0012) built successfully: Python 3.14 passed `pip check` and 113 backend tests; Node 24 passed 13 frontend tests and the production build. The current source-only changes pass native tests/build and Compose validation; images were not rebuilt for task 0012.
@@ -65,13 +65,14 @@ All three GitHub Actions jobs and the focused admin/player browser smoke passed 
 Implemented locally:
 
 - add the authoritative `INTRO` phase between lobby and the first `PRE_ROUND`;
-- enter intro silently, let the host start the existing meeting track once, and show the shared temporary slide sequence `00`–`13`;
+- enter intro silently, let the host start the existing meeting track once, and show static `00`, pack-backed authors 1–12, then special static `13`;
 - give the host current/next slide context, reconnect-aware remaining-track time, and guarded one-step navigation;
 - parse optional root `intro.md` speech and expose it only through admin-only `pack_info`;
 - transition after slide `13` to the real score/table view at 0:0 and stop any remaining intro sound.
 - offer a dedicated Live Ops full reset to intro that clears progress/runtime context, stops audio, and restores silent slide `00` plus the manual music button.
+- require author metadata across the pack, support optional city/direct author photos, show public name/city on author slides, and use a generated static silhouette when no pack photo is available.
 
-Verification: all 131 backend tests with warnings treated as errors, all 24 frontend tests, the production build, sample-pack CLI validation, and Compose configuration pass locally. Remote CI and focused two-browser smoke are pending.
+Verification: all 139 backend tests with warnings treated as errors, all 25 frontend tests, the production build, sample-pack CLI validation, and Compose configuration pass locally. Remote CI and focused two-browser smoke are pending.
 
 ## Completed task: game over
 

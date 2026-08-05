@@ -1,13 +1,14 @@
 export const INTRO_LAST_SLIDE = 13;
+export const INTRO_FALLBACK_AUTHOR_SOURCE = '/images/intro/author-fallback.png';
 
 export function introSlideSource(slideIndex) {
   if (!Number.isInteger(slideIndex) || slideIndex < 0 || slideIndex > INTRO_LAST_SLIDE) {
     return null;
   }
 
-  const fileName = slideIndex === 0 ? '00_owl' : String(slideIndex).padStart(2, '0');
-  const extension = slideIndex === 0 || slideIndex === INTRO_LAST_SLIDE ? 'png' : 'jpg';
-  return `/images/intro/${fileName}.${extension}`;
+  if (slideIndex === 0) return '/images/intro/00_owl.png';
+  if (slideIndex === INTRO_LAST_SLIDE) return '/images/intro/13.png';
+  return null;
 }
 
 export function introSlideLabel(slideIndex) {
@@ -17,6 +18,11 @@ export function introSlideLabel(slideIndex) {
     return `Автор ${slideIndex} из 12`;
   }
   return 'Неизвестный слайд';
+}
+
+export function introAuthorCaption(author) {
+  if (!author?.name) return null;
+  return author.city ? `${author.name} (${author.city})` : author.name;
 }
 
 export function introNextStepLabel(slideIndex) {

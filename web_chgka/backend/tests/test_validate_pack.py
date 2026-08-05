@@ -46,6 +46,7 @@ def test_cli_prints_sample_pack_summary(capsys):
     assert captured.out == (
         f"VALID: {SAMPLE_DIR.resolve()}\n"
         "Questions: 13 (normal: 11, blitz: 1, superblitz: 1)\n"
+        "Authors: 13 (city: 2, photo: 0)\n"
         "Parts: 6\n"
         "Media: 9 (image: 5, audio: 2, video: 2)\n"
     )
@@ -106,6 +107,94 @@ def test_pack_allows_missing_intro_speech(tmp_path):
     (pack_path / "intro.md").unlink()
 
     assert parse_question_pack(pack_path).intro_html is None
+
+
+def test_pack_requires_author_for_sector_and_blitz_part(tmp_path):
+    pack_path = _copy_sample_pack(tmp_path)
+    sector_question = pack_path / "01" / "question.md"
+    sector_question.write_text(
+        sector_question.read_text(encoding="utf-8").replace(
+            "author: Михаил Савченко\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(QuestionParseError, match="author"):
+        parse_question_pack(pack_path)
+
+    pack_path = _copy_sample_pack(tmp_path / "second")
+    blitz_part = pack_path / "04" / "01" / "question.md"
+    blitz_part.write_text(
+        blitz_part.read_text(encoding="utf-8").replace(
+            "author: Ольга Петрова\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(QuestionParseError, match="author.*part 1"):
+        parse_question_pack(pack_path)
+
+
+def test_pack_parses_optional_city_and_author_photo(tmp_path):
+    pack_path = _copy_sample_pack(tmp_path)
+    question_path = pack_path / "01" / "question.md"
+    question_path.write_text(
+        question_path.read_text(encoding="utf-8").replace(
+            "city: Москва\n",
+            "city: Москва\nauthor_photo: author.jpg\n",
+        ),
+        encoding="utf-8",
+    )
+    photo_path = pack_path / "01" / "author.jpg"
+    photo_path.write_bytes(b"sample photo")
+
+    question = parse_question_pack(pack_path).get_by_sector(1)
+
+    assert question.city == "Москва"
+    assert question.author_photo == photo_path.resolve()
+
+
+@pytest.mark.parametrize(
+    ("photo_value", "message"),
+    [
+        ("missing.jpg", "not found"),
+        ("author.gif", "format"),
+        ("../author.jpg", "next to question.md"),
+    ],
+)
+def test_pack_rejects_invalid_author_photo_path(tmp_path, photo_value, message):
+    pack_path = _copy_sample_pack(tmp_path)
+    question_path = pack_path / "01" / "question.md"
+    question_path.write_text(
+        question_path.read_text(encoding="utf-8").replace(
+            "city: Москва\n",
+            f"city: Москва\nauthor_photo: {photo_value}\n",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(QuestionParseError, match=message):
+        parse_question_pack(pack_path)
+
+
+def test_pack_rejects_author_photo_symlink_escape(tmp_path):
+    pack_path = _copy_sample_pack(tmp_path)
+    outside_photo = tmp_path / "outside.jpg"
+    outside_photo.write_bytes(b"outside")
+    question_path = pack_path / "01" / "question.md"
+    question_path.write_text(
+        question_path.read_text(encoding="utf-8").replace(
+            "city: Москва\n",
+            "city: Москва\nauthor_photo: author.jpg\n",
+        ),
+        encoding="utf-8",
+    )
+    (pack_path / "01" / "author.jpg").symlink_to(outside_photo)
+
+    with pytest.raises(QuestionParseError, match="escapes"):
+        parse_question_pack(pack_path)
 
 
 @pytest.mark.parametrize(

@@ -1,17 +1,30 @@
 import { useEffect, useState } from 'react';
 import {
+  INTRO_FALLBACK_AUTHOR_SOURCE,
   formatIntroRemaining,
+  introAuthorCaption,
   introNextStepLabel,
   introRemainingMs,
   introSlideLabel,
   introSlideSource,
 } from '../intro';
-import { socket } from '../socket';
+import { introAuthorPhotoUrl, socket } from '../socket';
 
 export function IntroScreen({ intro, isAdmin = false, introHtml = null }) {
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [failedPhotoSector, setFailedPhotoSector] = useState(null);
   const slideIndex = intro?.slide_index;
-  const slideSource = introSlideSource(slideIndex);
+  const author = intro?.author || null;
+  const isAuthorSlide = Number.isInteger(slideIndex) && slideIndex >= 1 && slideIndex <= 12;
+  const usePackPhoto = (
+    isAuthorSlide
+    && author?.has_photo
+    && author.sector !== failedPhotoSector
+  );
+  const authorPhotoSource = usePackPhoto
+    ? introAuthorPhotoUrl(author.sector)
+    : INTRO_FALLBACK_AUTHOR_SOURCE;
+  const slideSource = introSlideSource(slideIndex) || (isAuthorSlide ? authorPhotoSource : null);
 
   useEffect(() => {
     if (!isAdmin || !intro) return undefined;
@@ -20,8 +33,13 @@ export function IntroScreen({ intro, isAdmin = false, introHtml = null }) {
     return () => clearInterval(interval);
   }, [isAdmin, intro?.started_at_ms]);
 
+  useEffect(() => {
+    setFailedPhotoSector(null);
+  }, [slideIndex]);
+
   const remaining = introRemainingMs(intro, nowMs);
   const musicStarted = Number.isFinite(intro?.started_at_ms);
+  const authorCaption = introAuthorCaption(author);
 
   return (
     <div className="w-full flex flex-col gap-4">
@@ -29,12 +47,18 @@ export function IntroScreen({ intro, isAdmin = false, introHtml = null }) {
         {slideSource ? (
           <img
             src={slideSource}
-            alt={introSlideLabel(slideIndex)}
+            alt={author?.name || introSlideLabel(slideIndex)}
+            onError={isAuthorSlide ? () => setFailedPhotoSector(author?.sector ?? slideIndex) : undefined}
             className="mx-auto max-h-[72vh] w-full rounded-lg object-contain"
           />
         ) : (
           <div className="flex min-h-72 items-center justify-center text-red-300">
             Intro-слайд недоступен
+          </div>
+        )}
+        {isAuthorSlide && authorCaption && (
+          <div className="mt-3 rounded-lg bg-slate-900/80 px-4 py-3 text-center text-xl font-bold text-white md:text-2xl">
+            {authorCaption}
           </div>
         )}
       </div>

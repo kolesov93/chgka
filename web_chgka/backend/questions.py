@@ -55,6 +55,8 @@ class Question:
     
     # Optional metadata
     author: Optional[str] = None
+    city: Optional[str] = None
+    author_photo: Optional[Path] = None
     comment_html: Optional[str] = None
     sources_html: Optional[str] = None
     
@@ -310,6 +312,29 @@ def _validate_media_usage(base_folder: Path, media_links_from_md: set[Path]) -> 
         raise QuestionParseError(f"Unused media file: {one}")
 
 
+def _parse_author_photo(raw_path: Optional[str], folder: Path) -> Optional[Path]:
+    if raw_path is None:
+        return None
+    if not raw_path:
+        raise QuestionParseError("author_photo must not be empty")
+
+    rel_path = Path(raw_path)
+    if rel_path.is_absolute() or len(rel_path.parts) != 1 or rel_path.name in (".", ".."):
+        raise QuestionParseError(
+            "author_photo must be a file name next to question.md"
+        )
+    if rel_path.suffix.lower() not in _IMAGE_EXTS:
+        raise QuestionParseError(f"Unsupported author_photo format: {raw_path}")
+
+    folder_resolved = folder.resolve()
+    photo_path = (folder_resolved / rel_path).resolve()
+    if not photo_path.is_relative_to(folder_resolved):
+        raise QuestionParseError("author_photo escapes the question folder")
+    if not photo_path.is_file():
+        raise QuestionParseError(f"author_photo file not found: {raw_path}")
+    return photo_path
+
+
 def _parse_one_question_folder(folder: Path) -> Question:
     qmd = folder / "question.md"
     if not qmd.exists():
@@ -328,7 +353,9 @@ def _parse_one_question_folder(folder: Path) -> Question:
     except ValueError as e:
         raise QuestionParseError(f"Unknown question type: {qtype_raw}") from e
 
-    author = fm.get("author")
+    author = fm.get("author") or None
+    city = fm.get("city") or None
+    author_photo = _parse_author_photo(fm.get("author_photo"), folder)
 
     sections, order = _split_sections(body)
     _validate_section_order(order)
@@ -372,6 +399,8 @@ def _parse_one_question_folder(folder: Path) -> Question:
         question_html=question_html,
         answer_html=answer_html,
         author=author,
+        city=city,
+        author_photo=author_photo,
         comment_html=comment_html,
         sources_html=sources_html,
         media=_validate_media_reference_types(media_all),
@@ -461,6 +490,16 @@ class QuestionPack:
         return len(self.questions)
 
 
+def _validate_pack_authors(question: Question) -> None:
+    if not question.author:
+        raise QuestionParseError("Missing required field: author")
+    for part_index, part in enumerate(question.parts, start=1):
+        if not part.author:
+            raise QuestionParseError(
+                f"Missing required field: author in blitz part {part_index}"
+            )
+
+
 def parse_question_pack(pack_folder: Path) -> QuestionPack:
     """
     Parse a question pack from a folder containing 13 question subfolders: 01..13.
@@ -523,7 +562,9 @@ def parse_question_pack(pack_folder: Path) -> QuestionPack:
         if not qdir.exists() or not qdir.is_dir():
             raise QuestionParseError(f"Missing question folder for sector {sector}: {qdir}")
         try:
-            questions.append(parse_question(qdir))
+            question = parse_question(qdir)
+            _validate_pack_authors(question)
+            questions.append(question)
         except QuestionParseError as e:
             raise QuestionParseError(f"Failed to parse sector {sector} ({qdir}): {e}") from e
 

@@ -146,10 +146,20 @@ class IntroState(TypedDict):
     duration_ms: int
 
 
+class IntroAuthorState(TypedDict):
+    """Public metadata for one of the twelve author intro screens."""
+
+    sector: int
+    name: str
+    city: Optional[str]
+    has_photo: bool
+
+
 class PublicIntroState(IntroState):
-    """Intro progress plus serialization time for a reconnect-aware countdown."""
+    """Intro progress plus current public author and serialization time."""
 
     server_now_ms: int
+    author: Optional[IntroAuthorState]
 
 
 class PresentationState(TypedDict):
@@ -168,6 +178,9 @@ class PackUiState(TypedDict):
     # Per-sector question kinds loaded from the pack. The frontend uses this to
     # render normal/blitz/superblitz envelope icons.
     question_types: Optional[list[QuestionTypeValue]]
+
+    # Public author metadata for sectors 1..12. Photo paths stay in QuestionPack.
+    intro_authors: Optional[list[IntroAuthorState]]
 
 
 class PublicGameState(TypedDict):
@@ -204,6 +217,7 @@ def create_initial_app_state(
     *,
     phase: GamePhase = PHASE_LOGIN,
     question_types: Optional[list[QuestionTypeValue]] = None,
+    intro_authors: Optional[list[IntroAuthorState]] = None,
 ) -> AppState:
     """Create a fresh app state with no runtime round/spin/media context."""
 
@@ -231,6 +245,7 @@ def create_initial_app_state(
         },
         "pack": {
             "question_types": list(question_types) if question_types is not None else None,
+            "intro_authors": deepcopy(intro_authors) if intro_authors is not None else None,
         },
         "logs": [],
     }
@@ -245,17 +260,19 @@ def reset_app_state(
 
     The in-place update preserves references held by `main.py`, while resetting
     runtime fields to the same shape as `create_initial_app_state()`. Loaded
-    `question_types` are preserved because they come from the pack parsed at
-    startup and are still needed after an admin reset.
+    Pack UI metadata is preserved because it comes from the pack parsed at
+    startup and is still needed after an admin reset.
     """
 
     question_types = state["pack"]["question_types"]
+    intro_authors = state["pack"]["intro_authors"]
     next_spin_id = state["wheel"].get("spin_id", 0) + 1
     state.clear()
     state.update(
         create_initial_app_state(
             phase=phase,
             question_types=question_types,
+            intro_authors=intro_authors,
         )
     )
     # Invalidate completion callbacks belonging to the pre-reset state. This
@@ -280,9 +297,17 @@ def public_game_state(
     internal_intro = state["presentation"]["intro"]
     intro: Optional[PublicIntroState] = None
     if internal_intro is not None:
+        slide_index = internal_intro["slide_index"]
+        intro_authors = state["pack"]["intro_authors"] or []
+        author = (
+            intro_authors[slide_index - 1]
+            if 1 <= slide_index <= 12 and len(intro_authors) >= slide_index
+            else None
+        )
         intro = {
             **internal_intro,
             "server_now_ms": timestamp_ms,
+            "author": author,
         }
     shared_media: Optional[PublicSharedMediaState] = None
     if internal_media is not None:

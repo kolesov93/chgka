@@ -1,6 +1,7 @@
 ---
 title: Загадка Эйнштейна
 author: Михаил Савченко
+city: Москва
 ---
 
 # Вопрос
@@ -22,4 +23,3 @@ author: Михаил Савченко
 # Источник
 
 - Walter Isaacson, "Einstein: His Life and Universe", 2007
-

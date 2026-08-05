@@ -25,6 +25,10 @@ class TestQuestionPackParsing:
         assert len(pack) == 13
         assert len(pack.questions) == 13
         assert all(isinstance(q, Question) for q in pack.questions)
+        assert all(q.author for q in pack.questions)
+        assert all(part.author for q in pack.questions for part in q.parts)
+        assert pack.questions[0].city == "Москва"
+        assert pack.questions[1].city is None
         assert "Вступительное слово" in pack.intro_html
 
 

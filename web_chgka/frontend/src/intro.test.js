@@ -3,18 +3,21 @@ import assert from 'node:assert/strict';
 
 import {
   formatIntroRemaining,
+  INTRO_FALLBACK_AUTHOR_SOURCE,
+  introAuthorCaption,
   introNextStepLabel,
   introRemainingMs,
   introSlideSource,
 } from './intro.js';
 
 
-test('intro slide sources preserve the temporary asset naming contract', () => {
+test('intro slide sources keep only the static boundary assets', () => {
   assert.equal(introSlideSource(0), '/images/intro/00_owl.png');
-  assert.equal(introSlideSource(1), '/images/intro/01.jpg');
-  assert.equal(introSlideSource(12), '/images/intro/12.jpg');
+  assert.equal(introSlideSource(1), null);
+  assert.equal(introSlideSource(12), null);
   assert.equal(introSlideSource(13), '/images/intro/13.png');
   assert.equal(introSlideSource(14), null);
+  assert.equal(INTRO_FALLBACK_AUTHOR_SOURCE, '/images/intro/author-fallback.png');
 });
 
 
@@ -23,6 +26,13 @@ test('intro next step labels describe the exact host action', () => {
   assert.equal(introNextStepLabel(7), 'Показать автора 8');
   assert.equal(introNextStepLabel(12), 'Показать финальный слайд');
   assert.equal(introNextStepLabel(13), 'Перейти к игре');
+});
+
+
+test('author caption adds optional city in parentheses', () => {
+  assert.equal(introAuthorCaption({ name: 'Анна', city: 'Казань' }), 'Анна (Казань)');
+  assert.equal(introAuthorCaption({ name: 'Анна', city: null }), 'Анна');
+  assert.equal(introAuthorCaption(null), null);
 });
 
 

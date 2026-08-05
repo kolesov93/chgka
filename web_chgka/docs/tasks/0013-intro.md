@@ -10,7 +10,7 @@ Status: In progress
 ## Current context
 
 - `start_game` сейчас переводит `LOGIN` напрямую в `PRE_ROUND`.
-- Временные assets уже хранятся во frontend: `images/intro/00_owl.png`, `01.jpg`…`12.jpg`, `13.png` и `sounds/meeting.mp3`.
+- Статичные assets приложения: `images/intro/00_owl.png`, особый `13.png`, fallback автора и `sounds/meeting.mp3`. Авторские фото секторов 1–12 принадлежат question pack.
 - Question pack содержит ровно 13 игровых директорий и допускает именованные вспомогательные файлы/директории в корне.
 - Состояние игры и звуковые события живут только в памяти; одноразовые эффекты не восстанавливаются после reconnect.
 
@@ -18,13 +18,14 @@ Status: In progress
 
 - Добавить авторитетную фазу `INTRO`; `start_game` переводит `LOGIN -> INTRO` и показывает слайд `00` без autoplay. Ведущий отдельной кнопкой один раз запускает `meeting.mp3`, после чего начинается countdown.
 - Ведущий последовательно переключает `00 -> 01 -> … -> 13`; следующий шаг после `13` переводит игру в `PRE_ROUND`, где все видят обычное живое табло 0:0.
-- Все клиенты получают текущий slide index из `state_update`; игроки видят только слайд, без текста и органов управления.
+- Все клиенты получают текущий slide index и metadata только соответствующего текущего автора из `state_update`; игроки видят общий слайд с именем/городом, но без речи и органов управления.
 - Ведущий видит текущий слайд, название следующего шага, оставшееся время трека и текст речи.
 - Клиент отправляет вместе с переключением ожидаемый slide index. Сервер отклоняет повторный/устаревший запрос, поэтому двойной клик не пропускает слайды.
 - При переходе из последнего слайда в `PRE_ROUND` intro-трек останавливается, если ещё играет.
 - Необязательный корневой `intro.md` question pack хранит Markdown речи. Backend валидирует UTF-8/непустое содержимое, преобразует его в HTML и включает только в admin-only `pack_info`.
 - Reset и normal phase guards продолжают быть серверными; reset из intro возвращает игру в `PRE_ROUND` согласно уже принятому контракту reset.
 - Live Ops содержит отдельный полный «Сброс до интро»: он обнуляет счёт и сыгранные сектора, очищает раунд/таймер/медиа/возможное вращение, останавливает звук и возвращает слайд `00` с незапущенной музыкой. Обычный Reset по-прежнему ведёт в `PRE_ROUND`.
+- Каждый вопрос и каждая часть блица имеют обязательный `author`, optional `city` и optional `author_photo`. Intro-слайды 1–12 публично показывают автора сектора, город в скобках и pack-backed фото либо встроенный fallback; сектор 13 остаётся особым статичным слайдом.
 
 ## Implementation decisions
 
@@ -33,20 +34,22 @@ Status: In progress
 - Зафиксировать длительность временного `meeting.mp3` как backend-константу текущего asset (`87_757 ms`).
 - Использовать `pack_info`, потому что это уже admin-only канал metadata; отдельное публичное событие для речи не создавать.
 - После слайда `13` рендерить реальный `ScoreBoard`/`GameTable`, а не временный файл `14_table00.png`.
+- Хранить в `AppState.pack` только публичные имя/город/наличие фото для первых 12 секторов; абсолютный путь остаётся внутри parsed `QuestionPack`.
+- Выдавать pack-backed фото через отдельный endpoint только во время соответствующего текущего intro-слайда, с `no-store`; при 404 frontend переключается на статичный fallback.
 
 ## Out of scope
 
-- Перенос картинок и музыки внутрь question pack, настраиваемая последовательность/длительность, загрузка intro-assets через media tokens.
+- Перенос музыки, стартового/особого слайдов или fallback внутрь question pack, настраиваемая последовательность/длительность.
 - Автоматический replay/seek одноразового intro-трека после reconnect или перезагрузки страницы.
 - Возврат к предыдущему слайду, произвольный выбор слайда, autoplay после окончания трека, редактирование речи из UI.
 - Изменения legacy Pyglet/VLC приложения, production deployment и persistence.
 
 ## Verification plan
 
-- Parser/CLI tests: pack без `intro.md`, корректный Markdown, пустой/не-UTF-8 файл, admin-only startup payload.
+- Parser/CLI tests: обязательные авторы, optional city/photo, containment/format фото, pack без `intro.md`, корректный Markdown, пустой/не-UTF-8 файл, admin-only startup payload.
 - State/transition tests: `LOGIN -> INTRO`, time snapshot, последовательное переключение, stale click rejection, последний слайд -> `PRE_ROUND`, cleanup/sound effects, reset.
 - Handler test: silent start, guarded music start, slide advance emits, authorization boundary and repeated action behavior.
-- Frontend pure tests: asset mapping, next-step labels and reconnect-aware countdown.
+- Frontend pure tests: static/dynamic asset boundary, fallback mapping, next-step labels and reconnect-aware countdown.
 - Full backend tests with warnings-as-errors, frontend tests/build and Compose validation.
 - Two-browser smoke: lobby -> silent intro, manual shared music start, player/admin parity, speech privacy, all slides, music countdown/stop and transition to table 0:0.
 
@@ -60,11 +63,12 @@ Implemented locally:
 - admin-only optional `intro.md` speech with UTF-8, containment, empty-file and media validation;
 - dedicated player/admin intro screen and direct transition from the final slide to the real table at 0:0.
 - dedicated Live Ops full reset to silent slide `00`, including progress cleanup and audio stop.
+- required pack authors plus optional city/direct author photo, public current-author metadata, context-bound photo delivery, and a generated static fallback silhouette.
 
 Passed locally:
 
-- `python3 -B -W error -m pytest -p no:cacheprovider -q`: 131 backend tests;
-- `npm test`: 24 frontend tests;
+- `python3 -B -W error -m pytest -p no:cacheprovider -q`: 139 backend tests;
+- `npm test`: 25 frontend tests;
 - `npm run build`;
 - sample-pack validator CLI;
 - `docker compose config --quiet`.

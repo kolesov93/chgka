@@ -43,6 +43,7 @@ from sound_control import (
     supersede_fade,
 )
 from state import (
+    PHASE_INTRO,
     PHASE_LOGIN,
     PHASE_QUESTION_READING,
     PHASE_DISCUSSION,
@@ -256,6 +257,15 @@ def _load_question_pack_on_startup() -> None:
         raise RuntimeError(f"Question pack must contain {SECTORS_COUNT} questions, got {len(types)}")
 
     app_state["pack"]["question_types"] = types
+    app_state["pack"]["intro_authors"] = [
+        {
+            "sector": sector,
+            "name": question.author,
+            "city": question.city,
+            "has_photo": question.author_photo is not None,
+        }
+        for sector, question in enumerate(pack.questions[:12], start=1)
+    ]
     loaded_pack = pack
     pack_admin_info = {
         "path": str(pack.path),
@@ -490,6 +500,25 @@ async def get_media(media_id: str):
         raise HTTPException(status_code=404, detail="Media not found")
     # Inline display
     return FileResponse(str(p))
+
+
+@fastapi_app.get("/intro/author-photo/{sector}")
+async def get_intro_author_photo(sector: int):
+    if loaded_pack is None or not 1 <= sector <= 12:
+        raise HTTPException(status_code=404, detail="Author photo not found")
+    intro = app_state["presentation"]["intro"]
+    if app_state["game"]["phase"] != PHASE_INTRO or intro is None:
+        raise HTTPException(status_code=404, detail="Author photo not found")
+    if intro["slide_index"] != sector:
+        raise HTTPException(status_code=404, detail="Author photo not found")
+
+    photo_path = loaded_pack.get_by_sector(sector).author_photo
+    if photo_path is None or not photo_path.is_file():
+        raise HTTPException(status_code=404, detail="Author photo not found")
+    return FileResponse(
+        str(photo_path),
+        headers={"Cache-Control": "no-store"},
+    )
 
 @sio.event
 async def connect(sid, environ):

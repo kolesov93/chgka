@@ -31,6 +31,8 @@ def _format_summary(pack: QuestionPack) -> str:
     media = [item for question in pack.questions for item in question.media]
     media.extend(item for part in parts for item in part.media)
     media_counts = Counter(item.type for item in media)
+    city_count = sum(bool(question.city) for question in pack.questions)
+    photo_count = sum(question.author_photo is not None for question in pack.questions)
 
     return "\n".join(
         (
@@ -40,6 +42,10 @@ def _format_summary(pack: QuestionPack) -> str:
                 f"(normal: {question_counts[QuestionType.NORMAL]}, "
                 f"blitz: {question_counts[QuestionType.BLITZ]}, "
                 f"superblitz: {question_counts[QuestionType.SUPERBLITZ]})"
+            ),
+            (
+                f"Authors: {len(pack.questions)} "
+                f"(city: {city_count}, photo: {photo_count})"
             ),
             f"Parts: {len(parts)}",
             (
