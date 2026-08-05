@@ -1,9 +1,9 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-05
-- Latest completed task: `docs/tasks/0011-inline-image-previews.md`
-- Branch: `web`
-- Status: task 0011 is accepted and integrated locally; publishing the updated `web` branch is pending.
+- Active task: `docs/tasks/0012-game-over.md`
+- Branch: `task/game-over`
+- Status: game-over behavior and invariants are defined; implementation has not started.
 
 ## Repository checkpoint
 
@@ -25,7 +25,8 @@
 - Inline image previews commit `280f930` is published on `origin/task/inline-image-previews` and accepted.
 - Inline image previews closure commit: `2a8aeeb` (`Close inline image preview task`).
 - Inline image previews merge commit: `f8503e3` (`Merge inline image preview task`).
-- Local `web` contains the accepted merge and is ahead of `origin/web`; push is pending.
+- Inline image previews handoff commit: `c829311` (`Record inline image preview handoff`).
+- Local `web` contains the accepted merge and handoff and is ahead of `origin/web`; push is pending.
 
 ## Product decisions
 
@@ -53,6 +54,17 @@
 - Both development images build. Python 3.14 passes `pip check` and all 113 backend tests; Node 24 passes all 13 frontend assertions and the production build.
 
 All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, 0009, 0010, and 0011.
+
+## Active task: game over
+
+Planned:
+
+- add the authoritative `GAME_OVER` phase after the host completes review of a six-point round;
+- clear active round/media/timer/wheel context and play the existing final sound once;
+- show all clients the graphical final score and a winner card, including after reconnect;
+- replace normal host actions with a new-game reset while retaining director controls and recovery access.
+
+Implementation and verification have not started.
 
 ## Completed task: inline image previews
 
@@ -268,8 +280,8 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish the updated `web` branch containing the accepted task 0011 merge.
-2. Take roadmap item 12 in a separate branch and implement the explicit game-over transition and final screen.
+1. Publish the updated `web` branch containing the accepted task 0011 merge and handoff.
+2. Implement and verify active task 0012 with an explicit `GAME_OVER` transition and final screen.
 3. Continue with intro after game completion; keep authorization/security and persistence as mandatory gates before public deployment.
 
 ## Resume checklist
@@ -283,7 +295,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. completed tasks 0011, 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
+4. active task 0012, then completed tasks 0011, 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:
