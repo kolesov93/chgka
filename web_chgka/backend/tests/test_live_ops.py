@@ -4,12 +4,14 @@ from live_ops import (
     live_ops_cancel_spin,
     live_ops_force_phase,
     live_ops_open_round,
+    live_ops_reset_to_intro,
     live_ops_set_score,
     live_ops_set_sector_used,
     live_ops_set_timer,
 )
 from state import (
     PHASE_DISCUSSION,
+    PHASE_INTRO,
     PHASE_POST_ROUND,
     PHASE_PRE_ROUND,
     PHASE_QUESTION_READING,
@@ -216,6 +218,49 @@ def test_force_discussion_uses_blitz_duration():
     )
 
     assert state["timer"]["discussion_deadline_ms"] == 21_000
+
+
+def test_reset_to_intro_clears_progress_and_restarts_timeline():
+    state = _state(phase=PHASE_POST_ROUND)
+    state["game"]["score"] = {"znatoki": 4, "tv": 3}
+    state["game"]["used_questions"] = [1, 2, 8]
+    state["game"]["round"] = {"kind": "normal", "sector": 8}
+    state["wheel"].update(
+        {
+            "current_sector": 8,
+            "target_angle": 45.0,
+            "playing_sector": 8,
+            "spin_duration": 5.0,
+            "is_spinning": True,
+            "spin_id": 7,
+        }
+    )
+    state["timer"]["discussion_deadline_ms"] = 99_000
+    state["presentation"]["shared_media"] = _shared_image()
+
+    effects = live_ops_reset_to_intro(state, now_ms=50_000)
+
+    assert state["game"] == {
+        "phase": PHASE_INTRO,
+        "score": {"znatoki": 0, "tv": 0},
+        "used_questions": [],
+        "round": None,
+    }
+    assert state["wheel"]["spin_id"] == 8
+    assert state["wheel"]["is_spinning"] is False
+    assert state["timer"]["discussion_deadline_ms"] is None
+    assert state["presentation"] == {
+        "intro": {
+            "slide_index": 0,
+            "started_at_ms": 50_000,
+            "duration_ms": 87_757,
+        },
+        "shared_media": None,
+    }
+    assert effects.sounds == ("intro",)
+    assert effects.stop_sounds is True
+    assert effects.clear_media_tokens is True
+    assert effects.clear_admin_question is True
 
 
 def test_cancel_spin_invalidates_sleeping_completion_and_preserves_progress():

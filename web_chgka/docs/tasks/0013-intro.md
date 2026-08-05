@@ -24,6 +24,7 @@ Status: In progress
 - При переходе из последнего слайда в `PRE_ROUND` intro-трек останавливается, если ещё играет.
 - Необязательный корневой `intro.md` question pack хранит Markdown речи. Backend валидирует UTF-8/непустое содержимое, преобразует его в HTML и включает только в admin-only `pack_info`.
 - Reset и normal phase guards продолжают быть серверными; reset из intro возвращает игру в `PRE_ROUND` согласно уже принятому контракту reset.
+- Live Ops содержит отдельный полный «Сброс до интро»: он обнуляет счёт и сыгранные сектора, очищает раунд/таймер/медиа/возможное вращение, возвращает слайд `00` и перезапускает intro-трек. Обычный Reset по-прежнему ведёт в `PRE_ROUND`.
 
 ## Implementation decisions
 
@@ -58,10 +59,11 @@ Implemented locally:
 - stale expected-slide guard against double-click/concurrent skipping;
 - admin-only optional `intro.md` speech with UTF-8, containment, empty-file and media validation;
 - dedicated player/admin intro screen and direct transition from the final slide to the real table at 0:0.
+- dedicated Live Ops full reset to slide `00`, including progress cleanup and stop-then-restart intro audio ordering.
 
 Passed locally:
 
-- `python3 -B -W error -m pytest -p no:cacheprovider -q`: 129 backend tests;
+- `python3 -B -W error -m pytest -p no:cacheprovider -q`: 131 backend tests;
 - `npm test`: 24 frontend tests;
 - `npm run build`;
 - sample-pack validator CLI;

@@ -464,6 +464,51 @@ def test_live_ops_open_round_force_phase_timer_and_clear_question(monkeypatch):
     assert state["game"]["round"] is None
 
 
+def test_live_ops_reset_to_intro_restarts_music_after_cleanup(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_POST_ROUND)
+    state["game"]["score"] = {"znatoki": 5, "tv": 4}
+    state["game"]["used_questions"] = [1, 3, 5]
+    state["game"]["round"] = {"kind": "normal", "sector": 5}
+    media_tokens = {"old": {"expires_at": 999.0}}
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "media_tokens", media_tokens)
+    monkeypatch.setattr(main, "_now_ms", lambda: 50_000)
+    monkeypatch.setattr(
+        main,
+        "players_list",
+        [{"sid": "admin", "role": "admin", "online": True}],
+    )
+
+    response = asyncio.run(main.admin_reset_to_intro("admin"))
+
+    assert response == {"ok": True}
+    assert state["game"]["phase"] == PHASE_INTRO
+    assert state["game"]["score"] == {"znatoki": 0, "tv": 0}
+    assert state["game"]["used_questions"] == []
+    assert state["presentation"]["intro"]["slide_index"] == 0
+    assert media_tokens == {}
+    event_names = [event for event, _data, _kwargs in fake_sio.events]
+    stop_index = event_names.index("stop_sound")
+    intro_index = next(
+        index
+        for index, (event, data, _kwargs) in enumerate(fake_sio.events)
+        if event == "play_sound" and data == {"sound": "intro"}
+    )
+    state_index = next(
+        index
+        for index, (event, data, _kwargs) in enumerate(fake_sio.events)
+        if event == "state_update" and data["phase"] == PHASE_INTRO
+    )
+    assert stop_index < intro_index < state_index
+    assert any(
+        event == "admin_question" and data is None
+        for event, data, _kwargs in fake_sio.events
+    )
+
+
 def test_live_ops_cancel_spin_prevents_sleeping_handler_completion(monkeypatch):
     fake_sio = FakeSio(yield_on_emit=False)
     state = create_initial_app_state(

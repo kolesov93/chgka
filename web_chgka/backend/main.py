@@ -18,6 +18,7 @@ from live_ops import (
     live_ops_cancel_spin,
     live_ops_force_phase,
     live_ops_open_round,
+    live_ops_reset_to_intro,
     live_ops_set_score,
     live_ops_set_sector_used,
     live_ops_set_timer,
@@ -865,6 +866,14 @@ async def admin_force_phase(sid, data):
             normal_discussion_seconds=NORMAL_DISCUSSION_SECONDS,
             blitz_discussion_seconds=BLITZ_DISCUSSION_SECONDS,
         ),
+    )
+
+
+@sio.event
+async def admin_reset_to_intro(sid, data=None):
+    return await _apply_live_ops_action(
+        sid,
+        lambda: live_ops_reset_to_intro(app_state, now_ms=_now_ms()),
     )
 
 

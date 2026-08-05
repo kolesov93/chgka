@@ -97,6 +97,13 @@ export function LiveOpsPanel({ gameState, addNotification }) {
     emitRecovery('admin_force_phase', { phase: nextPhase });
   };
 
+  const resetToIntro = () => {
+    if (!confirm('Полностью сбросить счёт, сыгранные сектора и начать интро заново?')) {
+      return;
+    }
+    emitRecovery('admin_reset_to_intro');
+  };
+
   const cancelSpin = () => {
     if (!confirm('Остановить зависшее вращение и вернуться в PRE_ROUND?')) return;
     emitRecovery('admin_cancel_spin');
@@ -206,6 +213,17 @@ export function LiveOpsPanel({ gameState, addNotification }) {
                 Открыть
               </button>
             </div>
+          </div>
+
+          <div>
+            <div className="text-[10px] uppercase font-bold text-slate-500 mb-2">Полный сброс</div>
+            <button
+              type="button"
+              onClick={resetToIntro}
+              className={`${buttonClass} w-full bg-red-800 hover:bg-red-700 text-white`}
+            >
+              Сбросить до интро
+            </button>
           </div>
 
           <div>

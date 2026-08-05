@@ -43,15 +43,15 @@
 
 ## Verified baseline
 
-- Backend: 129 tests pass with warnings treated as errors.
+- Backend: 131 tests pass with warnings treated as errors.
   - 47 question parser tests;
   - 5 synchronized sound-control tests;
-  - 9 live-ops recovery tests;
+  - 10 live-ops recovery tests;
   - 5 media identity/playback tests;
   - 6 state helper tests;
   - 3 wheel-sector/spin-selection tests;
   - 20 pure transition tests;
-  - 20 handler concurrency/session/media/live-ops/sound-control/game-over/intro tests;
+  - 21 handler concurrency/session/media/live-ops/sound-control/game-over/intro tests;
   - 14 pack-validator CLI, sector-directory, media-path, and intro-file tests.
 - Frontend: 24 pure playback/live-ops/sound-fade/inline-media/game-over/intro tests and the production build pass; the last clean install and full audit reported zero vulnerabilities.
 - Backend startup loads the sample pack with all 13 questions and reaches application startup completion.
@@ -69,8 +69,9 @@ Implemented locally:
 - give the host current/next slide context, reconnect-aware remaining-track time, and guarded one-step navigation;
 - parse optional root `intro.md` speech and expose it only through admin-only `pack_info`;
 - transition after slide `13` to the real score/table view at 0:0 and stop any remaining intro sound.
+- offer a dedicated Live Ops full reset to intro that clears progress/runtime context and restarts slide `00` plus the meeting track.
 
-Verification: all 129 backend tests with warnings treated as errors, all 24 frontend tests, the production build, sample-pack CLI validation, and Compose configuration pass locally. Remote CI and focused two-browser smoke are pending.
+Verification: all 131 backend tests with warnings treated as errors, all 24 frontend tests, the production build, sample-pack CLI validation, and Compose configuration pass locally. Remote CI and focused two-browser smoke are pending.
 
 ## Completed task: game over
 
@@ -284,7 +285,7 @@ Additional known gaps:
 - raw Markdown HTML is unsafe for untrusted question packs;
 - frontend development uses `localhost:8000`, so it does not yet support browsers running on other machines;
 - video sharing/playback, media queue/next, duration extraction, and automatic ended state remain unimplemented;
-- frontend coverage is limited to pure playback/live-ops/sound-fade/inline-media/game-over helpers; there are no browser/component tests, Socket.IO integration tests, or lint/typecheck.
+- frontend coverage is limited to pure playback/live-ops/sound-fade/inline-media/game-over/intro helpers; there are no browser/component tests, Socket.IO integration tests, or lint/typecheck.
 
 ## Repository artifacts
 
@@ -296,8 +297,8 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish the updated `web` branch containing the accepted task 0012 merge.
-2. Take roadmap item 9 in a separate branch and define the intro pack/state/UI contract before implementation.
+1. Publish the updated `web` branch containing the accepted task 0012 merge and publish `task/intro`.
+2. Run remote CI and the focused two-browser intro smoke, including Live Ops reset-to-intro, before merging task 0013.
 3. Keep authorization/security and persistence as mandatory gates before public deployment.
 
 ## Resume checklist

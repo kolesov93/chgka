@@ -88,10 +88,11 @@ The admin has a separate collapsed recovery panel; it is not part of the normal 
 - `admin_set_score` and `admin_set_sector_used` repair exact progress values;
 - `admin_open_round` derives question kind from the loaded pack and enters `QUESTION_READING` without a spin;
 - `admin_force_phase` accepts only the five recoverable non-final game phases and normalizes round, timer, spin, media, and admin-question context;
+- `admin_reset_to_intro` performs an explicit full progress reset, invalidates active runtime context, restores intro slide `00`, and restarts the meeting track;
 - `admin_cancel_spin` increments `spin_id`, so a sleeping spin handler cannot overwrite recovered state;
 - `admin_set_timer` sets or stops the deadline only in `DISCUSSION`.
 
-After admin authorization, every operation validates its complete input before mutation, mutates synchronously before any network emit await, logs the recovery, and then broadcasts authoritative state. Hide media reuses its existing event and remains in this panel. Recovery does not play normal phase/scoring sounds and does not introduce arbitrary state editing, snapshots, or undo.
+After admin authorization, every operation validates its complete input before mutation, mutates synchronously before any network emit await, logs the recovery, and then broadcasts authoritative state. Hide media reuses its existing event and remains in this panel. Recovery does not play normal phase/scoring sounds; the explicit intro reset is the sole exception and performs stop-then-start ordering for `meeting.mp3`. Recovery does not introduce arbitrary state editing, snapshots, or undo.
 
 ## Sound control
 
