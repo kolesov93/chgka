@@ -2,8 +2,8 @@
 
 - Snapshot date: 2026-08-06
 - Latest completed task: `docs/tasks/0013-intro.md`
-- Branch: `task/intro`
-- Status: task 0013 is implemented, locally verified, and accepted by focused browser smoke. Integration into `web` and remote CI on the merged branch are the current handoff point.
+- Branch: `web`
+- Status: accepted task 0013 is merged locally into `web`; publishing `web` and confirming remote CI are the current handoff point.
 
 ## Repository checkpoint
 
@@ -30,8 +30,10 @@
 - Game-over implementation commit `1e8a2aa` is published, remotely verified, and accepted; the temporary remote branch ref has since been removed.
 - Game-over closure commit: `aef4553` (`Close explicit game over task`).
 - Game-over merge commit: `ea46a55` (`Merge explicit game over task`).
-- Local `web` contains the accepted merge and is ahead of `origin/web`; push is pending.
 - Intro implementation commits: `1b417a4`, `e7b7ad8`, `d18a57a`, `c6b0e70`, and `de4e847`; the latest commit includes accepted pack-backed normal/blitz author presentation.
+- Intro closure commit: `3f3632a` (`Close managed intro task`).
+- Intro merge commit: `e16f8c9` (`Merge managed intro task`).
+- Local `web` contains the accepted game-over and intro merges and is ahead of the locally known `origin/web`; publishing and remote CI are pending.
 
 ## Product decisions
 
@@ -299,8 +301,8 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Integrate accepted task 0013 into `web`, publish only `web`, and confirm remote CI.
-2. Remove the local task branch after the merged `web` result is verified.
+1. Publish only `web` and confirm remote CI for merge `e16f8c9`.
+2. Remove local `task/intro` after the merged `web` result is remotely verified.
 3. Take authorization/security as the recommended next task; persistence remains another mandatory gate before public deployment.
 
 ## Resume checklist
