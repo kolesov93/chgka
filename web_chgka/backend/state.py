@@ -142,7 +142,7 @@ class IntroState(TypedDict):
     """Internal intro progress shared by every connected client."""
 
     slide_index: int
-    started_at_ms: int
+    started_at_ms: Optional[int]
     duration_ms: int
 
 

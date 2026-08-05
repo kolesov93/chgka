@@ -65,11 +65,11 @@ All three GitHub Actions jobs and the focused admin/player browser smoke passed 
 Implemented locally:
 
 - add the authoritative `INTRO` phase between lobby and the first `PRE_ROUND`;
-- play the existing meeting track once and show the shared temporary slide sequence `00`–`13`;
+- enter intro silently, let the host start the existing meeting track once, and show the shared temporary slide sequence `00`–`13`;
 - give the host current/next slide context, reconnect-aware remaining-track time, and guarded one-step navigation;
 - parse optional root `intro.md` speech and expose it only through admin-only `pack_info`;
 - transition after slide `13` to the real score/table view at 0:0 and stop any remaining intro sound.
-- offer a dedicated Live Ops full reset to intro that clears progress/runtime context and restarts slide `00` plus the meeting track.
+- offer a dedicated Live Ops full reset to intro that clears progress/runtime context, stops audio, and restores silent slide `00` plus the manual music button.
 
 Verification: all 131 backend tests with warnings treated as errors, all 24 frontend tests, the production build, sample-pack CLI validation, and Compose configuration pass locally. Remote CI and focused two-browser smoke are pending.
 

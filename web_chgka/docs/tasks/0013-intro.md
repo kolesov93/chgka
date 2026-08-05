@@ -16,7 +16,7 @@ Status: In progress
 
 ## Accepted behavior
 
-- Добавить авторитетную фазу `INTRO`; `start_game` переводит `LOGIN -> INTRO`, показывает слайд `00` и один раз запускает `meeting.mp3`.
+- Добавить авторитетную фазу `INTRO`; `start_game` переводит `LOGIN -> INTRO` и показывает слайд `00` без autoplay. Ведущий отдельной кнопкой один раз запускает `meeting.mp3`, после чего начинается countdown.
 - Ведущий последовательно переключает `00 -> 01 -> … -> 13`; следующий шаг после `13` переводит игру в `PRE_ROUND`, где все видят обычное живое табло 0:0.
 - Все клиенты получают текущий slide index из `state_update`; игроки видят только слайд, без текста и органов управления.
 - Ведущий видит текущий слайд, название следующего шага, оставшееся время трека и текст речи.
@@ -24,12 +24,12 @@ Status: In progress
 - При переходе из последнего слайда в `PRE_ROUND` intro-трек останавливается, если ещё играет.
 - Необязательный корневой `intro.md` question pack хранит Markdown речи. Backend валидирует UTF-8/непустое содержимое, преобразует его в HTML и включает только в admin-only `pack_info`.
 - Reset и normal phase guards продолжают быть серверными; reset из intro возвращает игру в `PRE_ROUND` согласно уже принятому контракту reset.
-- Live Ops содержит отдельный полный «Сброс до интро»: он обнуляет счёт и сыгранные сектора, очищает раунд/таймер/медиа/возможное вращение, возвращает слайд `00` и перезапускает intro-трек. Обычный Reset по-прежнему ведёт в `PRE_ROUND`.
+- Live Ops содержит отдельный полный «Сброс до интро»: он обнуляет счёт и сыгранные сектора, очищает раунд/таймер/медиа/возможное вращение, останавливает звук и возвращает слайд `00` с незапущенной музыкой. Обычный Reset по-прежнему ведёт в `PRE_ROUND`.
 
 ## Implementation decisions
 
 - Хранить intro runtime context в `presentation.intro`, рядом с остальным общим представлением, и сериализовать его отдельным полем `intro` в существующий плоский `state_update`.
-- Передавать `started_at_ms`, `duration_ms` и `server_now_ms`; frontend добавляет локальное время получения snapshot и обновляет countdown без серверного тика.
+- Передавать nullable `started_at_ms`, `duration_ms` и `server_now_ms`; до команды ведущего UI показывает «Не запущена», затем frontend добавляет локальное время получения snapshot и обновляет countdown без серверного тика.
 - Зафиксировать длительность временного `meeting.mp3` как backend-константу текущего asset (`87_757 ms`).
 - Использовать `pack_info`, потому что это уже admin-only канал metadata; отдельное публичное событие для речи не создавать.
 - После слайда `13` рендерить реальный `ScoreBoard`/`GameTable`, а не временный файл `14_table00.png`.
@@ -45,21 +45,21 @@ Status: In progress
 
 - Parser/CLI tests: pack без `intro.md`, корректный Markdown, пустой/не-UTF-8 файл, admin-only startup payload.
 - State/transition tests: `LOGIN -> INTRO`, time snapshot, последовательное переключение, stale click rejection, последний слайд -> `PRE_ROUND`, cleanup/sound effects, reset.
-- Handler test: start/advance emits, authorization boundary and repeated action behavior.
+- Handler test: silent start, guarded music start, slide advance emits, authorization boundary and repeated action behavior.
 - Frontend pure tests: asset mapping, next-step labels and reconnect-aware countdown.
 - Full backend tests with warnings-as-errors, frontend tests/build and Compose validation.
-- Two-browser smoke: lobby -> intro, player/admin parity, speech privacy, all slides, music countdown/stop and transition to table 0:0.
+- Two-browser smoke: lobby -> silent intro, manual shared music start, player/admin parity, speech privacy, all slides, music countdown/stop and transition to table 0:0.
 
 ## Local verification status
 
 Implemented locally:
 
 - authoritative `LOGIN -> INTRO -> PRE_ROUND` flow with slides `00`–`13`;
-- one-shot meeting track, shared slide state and reconnect-aware admin countdown;
+- explicit one-shot meeting-track button, shared slide state and reconnect-aware admin countdown without autoplay;
 - stale expected-slide guard against double-click/concurrent skipping;
 - admin-only optional `intro.md` speech with UTF-8, containment, empty-file and media validation;
 - dedicated player/admin intro screen and direct transition from the final slide to the real table at 0:0.
-- dedicated Live Ops full reset to slide `00`, including progress cleanup and stop-then-restart intro audio ordering.
+- dedicated Live Ops full reset to silent slide `00`, including progress cleanup and audio stop.
 
 Passed locally:
 

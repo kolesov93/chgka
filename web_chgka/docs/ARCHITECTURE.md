@@ -75,7 +75,7 @@ LOGIN -> INTRO -> PRE_ROUND -> QUESTION_READING -> DISCUSSION
                                                                `-> GAME_OVER
 ```
 
-`start_game` enters `INTRO` on slide `00`. The backend stores the current slide plus the fixed temporary `meeting.mp3` timeline; the host advances `00` through `13`, and the action after `13` stops the intro sound and enters `PRE_ROUND`. Each request carries the expected slide index, so a repeated or concurrent click cannot skip a slide. Reconnecting clients recover the current slide and countdown snapshot, but the one-shot intro audio is deliberately not replayed or seeked after reconnect.
+`start_game` enters `INTRO` on slide `00` without autoplay. A separate guarded host action records the start timestamp and broadcasts the one-shot `meeting.mp3`; until then the timeline is explicitly not started. The host advances `00` through `13`, and the action after `13` stops the intro sound and enters `PRE_ROUND`. Music and slide actions are independent, and repeated/concurrent requests cannot start the track twice or skip a slide. Reconnecting clients recover the current slide and countdown snapshot, but the one-shot intro audio is deliberately not replayed or seeked after reconnect.
 
 Blitz and superblitz use the later game phases plus `round.part_index` and the temporary `advance_next_part` flag.
 
@@ -88,11 +88,11 @@ The admin has a separate collapsed recovery panel; it is not part of the normal 
 - `admin_set_score` and `admin_set_sector_used` repair exact progress values;
 - `admin_open_round` derives question kind from the loaded pack and enters `QUESTION_READING` without a spin;
 - `admin_force_phase` accepts only the five recoverable non-final game phases and normalizes round, timer, spin, media, and admin-question context;
-- `admin_reset_to_intro` performs an explicit full progress reset, invalidates active runtime context, restores intro slide `00`, and restarts the meeting track;
+- `admin_reset_to_intro` performs an explicit full progress reset, invalidates active runtime context, stops audio, and restores intro slide `00` with music waiting for the host command;
 - `admin_cancel_spin` increments `spin_id`, so a sleeping spin handler cannot overwrite recovered state;
 - `admin_set_timer` sets or stops the deadline only in `DISCUSSION`.
 
-After admin authorization, every operation validates its complete input before mutation, mutates synchronously before any network emit await, logs the recovery, and then broadcasts authoritative state. Hide media reuses its existing event and remains in this panel. Recovery does not play normal phase/scoring sounds; the explicit intro reset is the sole exception and performs stop-then-start ordering for `meeting.mp3`. Recovery does not introduce arbitrary state editing, snapshots, or undo.
+After admin authorization, every operation validates its complete input before mutation, mutates synchronously before any network emit await, logs the recovery, and then broadcasts authoritative state. Hide media reuses its existing event and remains in this panel. Recovery does not play normal phase/scoring sounds; reset-to-intro stops existing audio and leaves the explicit music start to the host. Recovery does not introduce arbitrary state editing, snapshots, or undo.
 
 ## Sound control
 

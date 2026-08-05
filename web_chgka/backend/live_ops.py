@@ -284,18 +284,13 @@ def live_ops_force_phase(
 
 def live_ops_reset_to_intro(
     state: AppState,
-    *,
-    now_ms: int,
 ) -> TransitionEffects:
-    if not isinstance(now_ms, int) or isinstance(now_ms, bool) or now_ms < 0:
-        raise TransitionError("invalid_time", "Некорректное время начала интро")
-
     old_phase = state["game"]["phase"]
     old_score = dict(state["game"]["score"])
     reset_app_state(state, phase=PHASE_INTRO)
     state["presentation"]["intro"] = {
         "slide_index": 0,
-        "started_at_ms": now_ms,
+        "started_at_ms": None,
         "duration_ms": INTRO_DURATION_MS,
     }
     return TransitionEffects(
@@ -303,7 +298,6 @@ def live_ops_reset_to_intro(
             "Live Ops: полный сброс "
             f"из {old_phase} при счёте {old_score['znatoki']}:{old_score['tv']} -> INTRO",
         ),
-        sounds=("intro",),
         clear_media_tokens=True,
         clear_admin_question=True,
         stop_sounds=True,

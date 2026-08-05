@@ -79,19 +79,36 @@ def _game_winner(state: AppState) -> Optional[str]:
     return None
 
 
-def transition_start_game(state: AppState, *, now_ms: int) -> TransitionEffects:
+def transition_start_game(state: AppState) -> TransitionEffects:
     _require_phase(state, PHASE_LOGIN)
-    if not isinstance(now_ms, int) or isinstance(now_ms, bool) or now_ms < 0:
-        raise TransitionError("invalid_time", "Некорректное время начала интро")
 
     state["game"]["phase"] = PHASE_INTRO
     state["presentation"]["intro"] = {
         "slide_index": 0,
-        "started_at_ms": now_ms,
+        "started_at_ms": None,
         "duration_ms": INTRO_DURATION_MS,
     }
+    return TransitionEffects(logs=("Интро началось",))
+
+
+def transition_start_intro_music(
+    state: AppState,
+    *,
+    now_ms: int,
+) -> TransitionEffects:
+    _require_phase(state, PHASE_INTRO)
+    if not isinstance(now_ms, int) or isinstance(now_ms, bool) or now_ms < 0:
+        raise TransitionError("invalid_time", "Некорректное время начала музыки")
+
+    intro = state["presentation"]["intro"]
+    if intro is None:
+        raise TransitionError("missing_intro", "Нет активного интро")
+    if intro["started_at_ms"] is not None:
+        raise TransitionError("intro_music_started", "Музыка интро уже была запущена")
+
+    intro["started_at_ms"] = now_ms
     return TransitionEffects(
-        logs=("Интро началось",),
+        logs=("Интро: музыка запущена",),
         sounds=("intro",),
     )
 

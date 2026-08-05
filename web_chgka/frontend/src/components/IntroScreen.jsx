@@ -21,6 +21,7 @@ export function IntroScreen({ intro, isAdmin = false, introHtml = null }) {
   }, [isAdmin, intro?.started_at_ms]);
 
   const remaining = introRemainingMs(intro, nowMs);
+  const musicStarted = Number.isFinite(intro?.started_at_ms);
 
   return (
     <div className="w-full flex flex-col gap-4">
@@ -53,10 +54,19 @@ export function IntroScreen({ intro, isAdmin = false, introHtml = null }) {
                   Музыка
                 </div>
                 <div className="font-black tabular-nums text-yellow-400">
-                  {formatIntroRemaining(remaining)}
+                  {musicStarted ? formatIntroRemaining(remaining) : 'Не запущена'}
                 </div>
               </div>
             </div>
+            {!musicStarted && (
+              <button
+                type="button"
+                onClick={() => socket.emit('admin_start_intro_music')}
+                className="mb-2 w-full rounded-lg bg-amber-700 py-3 text-xs font-bold uppercase tracking-wider text-white shadow transition-all hover:bg-amber-600 active:scale-[0.98]"
+              >
+                Запустить музыку
+              </button>
+            )}
             <button
               type="button"
               onClick={() => socket.emit('admin_advance_intro', { expected_slide: slideIndex })}

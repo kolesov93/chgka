@@ -20,6 +20,7 @@ from transitions import (
     transition_score,
     transition_start_discussion,
     transition_start_game,
+    transition_start_intro_music,
     transition_start_spin,
     transition_team_answer,
     transition_ten_seconds,
@@ -39,26 +40,33 @@ def _shared_image():
     }
 
 
-def test_start_game_enters_intro_and_starts_music_once():
+def test_start_game_enters_silent_intro_and_music_starts_once_on_command():
     state = create_initial_app_state()
 
-    effects = transition_start_game(state, now_ms=10_000)
+    effects = transition_start_game(state)
 
     assert state["game"]["phase"] == PHASE_INTRO
     assert state["presentation"]["intro"] == {
         "slide_index": 0,
-        "started_at_ms": 10_000,
+        "started_at_ms": None,
         "duration_ms": 87_757,
     }
     assert effects.logs == ("Интро началось",)
-    assert effects.sounds == ("intro",)
+    assert effects.sounds == ()
     with pytest.raises(TransitionError, match="INTRO"):
-        transition_start_game(state, now_ms=10_001)
+        transition_start_game(state)
+
+    music = transition_start_intro_music(state, now_ms=10_000)
+    assert state["presentation"]["intro"]["started_at_ms"] == 10_000
+    assert music.sounds == ("intro",)
+    with pytest.raises(TransitionError) as exc_info:
+        transition_start_intro_music(state, now_ms=10_001)
+    assert exc_info.value.code == "intro_music_started"
 
 
 def test_intro_advances_exactly_once_and_rejects_stale_repeat():
     state = create_initial_app_state()
-    transition_start_game(state, now_ms=10_000)
+    transition_start_game(state)
 
     effects = transition_advance_intro(state, expected_slide=0)
 
@@ -72,7 +80,7 @@ def test_intro_advances_exactly_once_and_rejects_stale_repeat():
 
 def test_final_intro_step_stops_music_and_enters_pre_round():
     state = create_initial_app_state()
-    transition_start_game(state, now_ms=10_000)
+    transition_start_game(state)
     for expected_slide in range(13):
         transition_advance_intro(state, expected_slide=expected_slide)
         assert state["presentation"]["intro"]["slide_index"] == expected_slide + 1

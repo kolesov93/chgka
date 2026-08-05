@@ -43,5 +43,11 @@ test('intro countdown combines server progress and time since receipt', () => {
 
 test('malformed intro timing does not invent a countdown', () => {
   assert.equal(introRemainingMs({ duration_ms: 1000 }, 5_000), null);
+  assert.equal(introRemainingMs({
+    started_at_ms: null,
+    duration_ms: 87_757,
+    server_now_ms: 10_000,
+    received_at_ms: 20_000,
+  }, 20_000), null);
   assert.equal(formatIntroRemaining(null), '—:—');
 });

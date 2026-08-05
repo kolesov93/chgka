@@ -61,6 +61,7 @@ from transitions import (
     transition_score,
     transition_start_discussion,
     transition_start_game,
+    transition_start_intro_music,
     transition_start_spin,
     transition_team_answer,
     transition_ten_seconds,
@@ -690,7 +691,21 @@ async def start_game(sid):
         return
     
     try:
-        effects = transition_start_game(app_state, now_ms=_now_ms())
+        effects = transition_start_game(app_state)
+    except TransitionError as error:
+        await _emit_transition_error(sid, error)
+        return
+    await _apply_transition_effects(effects)
+
+
+@sio.event
+async def admin_start_intro_music(sid):
+    """Один раз запустить общий intro-трек по команде ведущего."""
+    if not await require_admin(sid):
+        return
+
+    try:
+        effects = transition_start_intro_music(app_state, now_ms=_now_ms())
     except TransitionError as error:
         await _emit_transition_error(sid, error)
         return
@@ -873,7 +888,7 @@ async def admin_force_phase(sid, data):
 async def admin_reset_to_intro(sid, data=None):
     return await _apply_live_ops_action(
         sid,
-        lambda: live_ops_reset_to_intro(app_state, now_ms=_now_ms()),
+        lambda: live_ops_reset_to_intro(app_state),
     )
 
 

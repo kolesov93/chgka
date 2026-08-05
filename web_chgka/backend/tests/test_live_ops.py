@@ -238,7 +238,7 @@ def test_reset_to_intro_clears_progress_and_restarts_timeline():
     state["timer"]["discussion_deadline_ms"] = 99_000
     state["presentation"]["shared_media"] = _shared_image()
 
-    effects = live_ops_reset_to_intro(state, now_ms=50_000)
+    effects = live_ops_reset_to_intro(state)
 
     assert state["game"] == {
         "phase": PHASE_INTRO,
@@ -252,12 +252,12 @@ def test_reset_to_intro_clears_progress_and_restarts_timeline():
     assert state["presentation"] == {
         "intro": {
             "slide_index": 0,
-            "started_at_ms": 50_000,
+            "started_at_ms": None,
             "duration_ms": 87_757,
         },
         "shared_media": None,
     }
-    assert effects.sounds == ("intro",)
+    assert effects.sounds == ()
     assert effects.stop_sounds is True
     assert effects.clear_media_tokens is True
     assert effects.clear_admin_question is True

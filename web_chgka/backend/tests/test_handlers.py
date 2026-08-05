@@ -89,6 +89,14 @@ def test_intro_handlers_broadcast_each_slide_once_and_stop_on_completion(monkeyp
 
     async def run():
         await main.start_game("admin")
+        assert not any(
+            event == "play_sound" and data == {"sound": "intro"}
+            for event, data, _kwargs in fake_sio.events
+        )
+        await asyncio.gather(
+            main.admin_start_intro_music("admin"),
+            main.admin_start_intro_music("admin"),
+        )
         await asyncio.gather(
             main.admin_advance_intro("admin", {"expected_slide": 0}),
             main.admin_advance_intro("admin", {"expected_slide": 0}),
@@ -100,10 +108,10 @@ def test_intro_handlers_broadcast_each_slide_once_and_stop_on_completion(monkeyp
 
     assert state["game"]["phase"] == PHASE_PRE_ROUND
     assert state["presentation"]["intro"] is None
-    assert any(
+    assert sum(
         event == "play_sound" and data == {"sound": "intro"}
         for event, data, _kwargs in fake_sio.events
-    )
+    ) == 1
     assert sum(
         event == "state_update"
         and bool(data["intro"])
@@ -464,7 +472,7 @@ def test_live_ops_open_round_force_phase_timer_and_clear_question(monkeypatch):
     assert state["game"]["round"] is None
 
 
-def test_live_ops_reset_to_intro_restarts_music_after_cleanup(monkeypatch):
+def test_live_ops_reset_to_intro_stops_audio_and_waits_for_manual_music(monkeypatch):
     fake_sio = FakeSio(yield_on_emit=False)
     state = create_initial_app_state(phase=PHASE_POST_ROUND)
     state["game"]["score"] = {"znatoki": 5, "tv": 4}
@@ -489,20 +497,20 @@ def test_live_ops_reset_to_intro_restarts_music_after_cleanup(monkeypatch):
     assert state["game"]["score"] == {"znatoki": 0, "tv": 0}
     assert state["game"]["used_questions"] == []
     assert state["presentation"]["intro"]["slide_index"] == 0
+    assert state["presentation"]["intro"]["started_at_ms"] is None
     assert media_tokens == {}
     event_names = [event for event, _data, _kwargs in fake_sio.events]
     stop_index = event_names.index("stop_sound")
-    intro_index = next(
-        index
-        for index, (event, data, _kwargs) in enumerate(fake_sio.events)
-        if event == "play_sound" and data == {"sound": "intro"}
-    )
     state_index = next(
         index
         for index, (event, data, _kwargs) in enumerate(fake_sio.events)
         if event == "state_update" and data["phase"] == PHASE_INTRO
     )
-    assert stop_index < intro_index < state_index
+    assert stop_index < state_index
+    assert not any(
+        event == "play_sound" and data == {"sound": "intro"}
+        for event, data, _kwargs in fake_sio.events
+    )
     assert any(
         event == "admin_question" and data is None
         for event, data, _kwargs in fake_sio.events
