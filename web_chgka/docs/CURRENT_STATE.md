@@ -1,9 +1,9 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-05
-- Active task: `docs/tasks/0012-game-over.md`
+- Latest completed task: `docs/tasks/0012-game-over.md`
 - Branch: `task/game-over`
-- Status: implementation and full local verification complete; publication, CI, and browser acceptance pending.
+- Status: implementation, publication, CI, and browser acceptance complete; integration into `web` is the current handoff point.
 
 ## Repository checkpoint
 
@@ -26,7 +26,8 @@
 - Inline image previews closure commit: `2a8aeeb` (`Close inline image preview task`).
 - Inline image previews merge commit: `f8503e3` (`Merge inline image preview task`).
 - Inline image previews handoff commit: `c829311` (`Record inline image preview handoff`).
-- Local `web` contains the accepted merge and handoff and is ahead of `origin/web`; push is pending.
+- `origin/web` contains the accepted inline image preview merge and handoff at `c829311`.
+- Game-over implementation commit `1e8a2aa` is published, remotely verified, and accepted; the temporary remote branch ref has since been removed.
 
 ## Product decisions
 
@@ -53,18 +54,18 @@
 - `docker compose config --quiet` succeeds without warnings.
 - The last full development-image baseline (before tasks 0011–0012) built successfully: Python 3.14 passed `pip check` and 113 backend tests; Node 24 passed 13 frontend tests and the production build. The current source-only changes pass native tests/build and Compose validation; images were not rebuilt for task 0012.
 
-All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, 0009, 0010, and 0011.
+All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, 0009, 0010, 0011, and 0012.
 
-## Active task: game over
+## Completed task: game over
 
-Implemented locally:
+Implemented:
 
 - add the authoritative `GAME_OVER` phase after the host completes review of a six-point round;
 - clear active round/media/timer/wheel context and play the existing final sound once;
 - show all clients the graphical final score and a winner card, including after reconnect;
 - replace normal host actions with a new-game reset while retaining director controls and recovery access.
 
-Verification: all 118 backend tests with warnings treated as errors, all 20 frontend tests, the production build, and Compose validation pass. GitHub Actions and the focused two-browser smoke are pending.
+Verification: all 118 backend tests with warnings treated as errors, all 20 frontend tests, the production build, and Compose validation pass locally; all three GitHub Actions jobs and the focused two-browser smoke passed on `1e8a2aa`.
 
 ## Completed task: inline image previews
 
@@ -279,9 +280,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish the updated `web` branch containing the accepted task 0011 merge and handoff.
-2. Publish task 0012, confirm GitHub Actions, and run the focused two-browser game-over smoke.
-3. Continue with intro after game completion; keep authorization/security and persistence as mandatory gates before public deployment.
+1. Integrate accepted task 0012 into `web`.
+2. Take roadmap item 9 in a separate branch and define the intro pack/state/UI contract before implementation.
+3. Keep authorization/security and persistence as mandatory gates before public deployment.
 
 ## Resume checklist
 
@@ -294,7 +295,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. active task 0012, then completed tasks 0011, 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
+4. completed tasks 0012, 0011, 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:

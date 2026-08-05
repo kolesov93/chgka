@@ -1,7 +1,7 @@
 # 0012: Game over
 
 Branch: `task/game-over`
-Status: In progress
+Status: Completed
 
 ## Goal
 
@@ -62,4 +62,7 @@ Passed locally:
 - `npm run build`;
 - `docker compose config --quiet`.
 
-Pending: GitHub Actions and the focused two-browser smoke.
+Remote verification and acceptance:
+
+- backend, frontend, and Compose GitHub Actions jobs passed on `1e8a2aa`;
+- the focused two-browser game-over smoke passed and the final flow was accepted.
