@@ -2,8 +2,8 @@
 
 - Snapshot date: 2026-08-05
 - Latest completed task: `docs/tasks/0009-sound-fade.md`
-- Branch: `task/sound-fade`
-- Status: implementation, publication, CI, and browser acceptance complete; integration into `web` is the current handoff point.
+- Branch: `web`
+- Status: task 0009 is accepted and integrated locally; publishing the updated `web` branch is pending.
 
 ## Repository checkpoint
 
@@ -14,6 +14,9 @@
 - Media/audio merge commit: `ae484f9` (`Merge managed audio media task`).
 - The previous publication checkpoint is resolved: `origin/web` contains the Live Ops merge and handoff.
 - Sound fade implementation commits `9c3ba27` and `bdd225e` are published on `origin/task/sound-fade` and accepted.
+- Sound fade closure commit: `8cc7e96` (`Close synchronized sound fade task`).
+- Sound fade merge commit: `3c6cccb` (`Merge synchronized sound fade task`).
+- Local `web` contains the accepted merge and is ahead of `origin/web`; push is pending.
 
 ## Product decisions
 
@@ -234,7 +237,7 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Integrate accepted task 0009 into `web`.
+1. Publish the updated `web` branch containing the accepted task 0009 merge.
 2. Take roadmap item 18 in a separate branch and move Fade/Silence into an always-visible director sound block beside master volume.
 3. Keep authorization/security and persistence as mandatory gates before public deployment.
 
