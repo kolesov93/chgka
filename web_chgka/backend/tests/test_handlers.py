@@ -6,6 +6,7 @@ import pytest
 import main
 from questions import parse_question_pack
 from state import (
+    PHASE_DISCUSSION,
     PHASE_PRE_ROUND,
     PHASE_QUESTION_READING,
     PHASE_TEAM_ANSWER,
@@ -36,6 +37,10 @@ class FakeSio:
 
 async def _allow_admin(_sid):
     return True
+
+
+async def _deny_admin(_sid):
+    return False
 
 
 def test_concurrent_score_handlers_award_only_one_point(monkeypatch):
@@ -215,3 +220,149 @@ def test_image_resolves_by_ref_and_preserves_share_behavior(monkeypatch):
 
     assert state["presentation"]["shared_media"]["type"] == "image"
     assert state["presentation"]["shared_media"]["media_ref"] == descriptor.media_ref
+
+
+def test_live_ops_handlers_apply_authoritative_state_and_reject_invalid_input(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_PRE_ROUND)
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "players_list", [])
+
+    async def run_flow():
+        score_response = await main.admin_set_score(
+            "admin",
+            {"znatoki": 4, "tv": 2},
+        )
+        assert score_response == {"ok": True}
+
+        sector_response = await main.admin_set_sector_used(
+            "admin",
+            {"sector": 3, "used": True},
+        )
+        assert sector_response == {"ok": True}
+
+        invalid_response = await main.admin_set_score(
+            "admin",
+            {"znatoki": 7, "tv": 0},
+        )
+        assert invalid_response["ok"] is False
+        assert invalid_response["error"] == "invalid_score"
+
+    asyncio.run(run_flow())
+
+    assert state["game"]["score"] == {"znatoki": 4, "tv": 2}
+    assert state["game"]["used_questions"] == [3]
+    assert sum(event == "state_update" for event, _, _ in fake_sio.events) == 2
+    assert any(event == "admin_notification" for event, _, _ in fake_sio.events)
+    assert any("Live Ops: счёт" in entry for entry in state["logs"])
+
+
+def test_live_ops_open_round_force_phase_timer_and_clear_question(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_PRE_ROUND)
+    pack = parse_question_pack(SAMPLE_PACK)
+    state["pack"]["question_types"] = [question.type.value for question in pack.questions]
+    state["presentation"]["shared_media"] = {
+        "type": "image",
+        "media_id": "old-media",
+        "media_ref": "old-ref",
+        "section": "question",
+        "name": "old.jpg",
+        "playback_state": "stopped",
+        "position_ms": 0,
+        "started_at_ms": None,
+    }
+    now = [100.0]
+
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", pack)
+    monkeypatch.setattr(main, "media_tokens", {"old-media": {"expires_at": 999.0}})
+    monkeypatch.setattr(
+        main,
+        "players_list",
+        [{"sid": "admin", "role": "admin", "online": True}],
+    )
+    monkeypatch.setattr(main.time, "time", lambda: now[0])
+
+    async def run_flow():
+        opened = await main.admin_open_round("admin", {"sector": 3})
+        assert opened == {"ok": True}
+        assert state["game"]["phase"] == PHASE_QUESTION_READING
+        assert state["game"]["round"] == {"kind": "normal", "sector": 3}
+        assert main.media_tokens == {}
+
+        discussion = await main.admin_force_phase(
+            "admin",
+            {"phase": PHASE_DISCUSSION},
+        )
+        assert discussion == {"ok": True}
+        assert state["timer"]["discussion_deadline_ms"] == 160_000
+
+        timer = await main.admin_set_timer("admin", {"seconds": 20})
+        assert timer == {"ok": True}
+        assert state["timer"]["discussion_deadline_ms"] == 120_000
+
+        pre_round = await main.admin_force_phase(
+            "admin",
+            {"phase": PHASE_PRE_ROUND},
+        )
+        assert pre_round == {"ok": True}
+
+    asyncio.run(run_flow())
+
+    question_events = [
+        data for event, data, _kwargs in fake_sio.events if event == "admin_question"
+    ]
+    assert question_events[0]["sector"] == 3
+    assert question_events[-1] is None
+    assert any(event == "stop_sound" for event, _, _ in fake_sio.events)
+    assert state["game"]["phase"] == PHASE_PRE_ROUND
+    assert state["game"]["round"] is None
+
+
+def test_live_ops_cancel_spin_prevents_sleeping_handler_completion(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(
+        phase=PHASE_PRE_ROUND,
+        question_types=["normal"] * 13,
+    )
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "players_list", [])
+    monkeypatch.setattr(main, "media_tokens", {"old": {"expires_at": 999.0}})
+    monkeypatch.setattr(main, "calculate_spin_result", lambda *_args: (10.0, 2))
+
+    async def cancel_instead_of_wait(_duration):
+        response = await main.admin_cancel_spin("admin")
+        assert response == {"ok": True}
+
+    monkeypatch.setattr(main.asyncio, "sleep", cancel_instead_of_wait)
+
+    asyncio.run(main.admin_spin("admin"))
+
+    assert state["game"]["phase"] == PHASE_PRE_ROUND
+    assert state["game"]["used_questions"] == []
+    assert state["wheel"]["is_spinning"] is False
+    assert main.media_tokens == {}
+    assert any(event == "stop_sound" for event, _, _ in fake_sio.events)
+
+
+def test_live_ops_handlers_require_admin(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_PRE_ROUND)
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _deny_admin)
+    monkeypatch.setattr(main, "app_state", state)
+
+    response = asyncio.run(
+        main.admin_set_score("player", {"znatoki": 1, "tv": 0})
+    )
+
+    assert response == {"ok": False, "error": "not_admin"}
+    assert state["game"]["score"] == {"znatoki": 0, "tv": 0}
+    assert fake_sio.events == []

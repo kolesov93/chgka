@@ -6,7 +6,7 @@ import secrets
 import os
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi import FastAPI
@@ -14,6 +14,14 @@ from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from live_ops import (
+    live_ops_cancel_spin,
+    live_ops_force_phase,
+    live_ops_open_round,
+    live_ops_set_score,
+    live_ops_set_sector_used,
+    live_ops_set_timer,
+)
 from media import (
     MediaPlaybackError,
     create_media_token_info,
@@ -290,6 +298,13 @@ async def _emit_current_question_to_admins() -> None:
             await sio.emit("admin_question", payload, to=p["sid"])
 
 
+async def _clear_admin_question_for_admins() -> None:
+    """Remove stale admin-only question content after recovery clears a round."""
+    for player in players_list:
+        if player.get("role") == "admin" and player.get("online", False):
+            await sio.emit("admin_question", None, to=player["sid"])
+
+
 def add_log(message):
     time_str = datetime.now().strftime("%H:%M:%S")
     log_entry = f"[{time_str}] {message}"
@@ -323,11 +338,31 @@ async def _apply_transition_effects(effects: TransitionEffects) -> None:
         _clear_all_media_tokens()
     for message in effects.logs:
         add_log(message)
+    if effects.stop_sounds:
+        await sio.emit("stop_sound")
     for sound in effects.sounds:
         await sio.emit("play_sound", {"sound": sound})
     await emit_state_update()
-    if effects.refresh_admin_question:
+    if effects.clear_admin_question:
+        await _clear_admin_question_for_admins()
+    elif effects.refresh_admin_question:
         await _emit_current_question_to_admins()
+
+
+async def _apply_live_ops_action(
+    sid: str,
+    action: Callable[[], TransitionEffects],
+) -> dict:
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+    try:
+        effects = action()
+    except TransitionError as error:
+        await _emit_transition_error(sid, error)
+        return {"ok": False, "error": error.code, "message": error.message}
+    await _apply_transition_effects(effects)
+    return {"ok": True}
+
 
 def get_sector_from_angle(angle):
     # В GameTable: angleDeg = 90 + (i * angleStep)
@@ -712,6 +747,83 @@ async def admin_score(sid, data):
         await _emit_transition_error(sid, error)
         return
     await _apply_transition_effects(effects)
+
+
+@sio.event
+async def admin_set_score(sid, data):
+    data = data if isinstance(data, dict) else {}
+    return await _apply_live_ops_action(
+        sid,
+        lambda: live_ops_set_score(
+            app_state,
+            znatoki=data.get("znatoki"),
+            tv=data.get("tv"),
+        ),
+    )
+
+
+@sio.event
+async def admin_set_sector_used(sid, data):
+    data = data if isinstance(data, dict) else {}
+    return await _apply_live_ops_action(
+        sid,
+        lambda: live_ops_set_sector_used(
+            app_state,
+            sector=data.get("sector"),
+            used=data.get("used"),
+        ),
+    )
+
+
+@sio.event
+async def admin_open_round(sid, data):
+    data = data if isinstance(data, dict) else {}
+    return await _apply_live_ops_action(
+        sid,
+        lambda: live_ops_open_round(
+            app_state,
+            sector=data.get("sector"),
+            part_index=data.get("part_index"),
+        ),
+    )
+
+
+@sio.event
+async def admin_force_phase(sid, data):
+    data = data if isinstance(data, dict) else {}
+    now_ms = int(time.time() * 1000)
+    return await _apply_live_ops_action(
+        sid,
+        lambda: live_ops_force_phase(
+            app_state,
+            phase=data.get("phase"),
+            now_ms=now_ms,
+            normal_discussion_seconds=NORMAL_DISCUSSION_SECONDS,
+            blitz_discussion_seconds=BLITZ_DISCUSSION_SECONDS,
+        ),
+    )
+
+
+@sio.event
+async def admin_cancel_spin(sid, data=None):
+    return await _apply_live_ops_action(
+        sid,
+        lambda: live_ops_cancel_spin(app_state),
+    )
+
+
+@sio.event
+async def admin_set_timer(sid, data):
+    data = data if isinstance(data, dict) else {}
+    now_ms = int(time.time() * 1000)
+    return await _apply_live_ops_action(
+        sid,
+        lambda: live_ops_set_timer(
+            app_state,
+            seconds=data.get("seconds"),
+            now_ms=now_ms,
+        ),
+    )
 
 
 @sio.event

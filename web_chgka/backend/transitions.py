@@ -42,6 +42,8 @@ class TransitionEffects:
     sounds: tuple[str, ...] = ()
     clear_media_tokens: bool = False
     refresh_admin_question: bool = False
+    clear_admin_question: bool = False
+    stop_sounds: bool = False
     spin_id: Optional[int] = None
     playing_sector: Optional[int] = None
 

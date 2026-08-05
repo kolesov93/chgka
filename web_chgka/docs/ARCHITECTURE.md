@@ -16,6 +16,7 @@ React clients
 FastAPI + python-socketio (backend/main.py)
     |-- AppState in memory
     |-- synchronous game transitions (backend/transitions.py)
+    |-- synchronous admin recovery operations (backend/live_ops.py)
     |-- players and session tokens in memory
     |-- question pack loaded from the filesystem
     `-- temporary media tokens -> GET /media/{media_id}
@@ -27,7 +28,7 @@ FastAPI + python-socketio (backend/main.py)
 - `frontend/src/socket.js` owns the single Socket.IO client plus backend/media URL construction.
 - `frontend/src/hooks/useGameSession.js` owns session restore, shared server state, players, pack/admin data, notifications, logout, and non-audio socket listeners.
 - `frontend/src/hooks/useDiscussionTimer.js` owns the admin countdown and one-shot local ten-second notification; `useSocketSoundEvents.js` bridges sound events to `useGameSound.js`.
-- `frontend/src/components/` contains the admin question/media panel, admin controls, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
+- `frontend/src/components/` contains the admin question/media panel, normal admin controls, the separate danger-styled Live Ops recovery panel, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
 - Development connects Socket.IO and media requests directly to `http://localhost:8000`. A production build uses the current origin (`/`).
 
 The frontend receives the shared game snapshot through `state_update`. Admin-only data uses separate events such as `players_update`, `pack_info`, and `admin_question`.
@@ -39,6 +40,7 @@ UI components may emit existing user actions through the shared socket, but they
 - `backend/main.py` creates the FastAPI/Socket.IO application and currently contains authentication, player lifecycle, phase handlers, scoring, spin orchestration, media access, logging, and emits.
 - `backend/state.py` defines the typed internal `AppState` and serializes it to the flat public payload expected by the frontend.
 - `backend/transitions.py` owns synchronous phase, spin, scoring, blitz, round-end, and reset rules. It mutates `AppState` before network awaits and returns transport effects such as logs, sounds, media-token cleanup, and admin-question refresh.
+- `backend/live_ops.py` owns exceptional admin recovery rules: exact score/sector edits, direct round opening, normalized phase forcing, stuck-spin cancellation, and timer repair. It uses the same transport effects without weakening normal transition guards.
 - `backend/questions.py` parses and validates filesystem question packs, assigns section-aware opaque media references, and converts Markdown sections to HTML.
 - `backend/media.py` builds the media catalog for the exact current round/blitz part, creates and validates media-token context, and owns synchronous playback-state transitions.
 - `backend/validate_pack.py` exposes that same parser as the pre-start `python -m validate_pack` CLI; it does not define separate validation rules.
@@ -69,6 +71,18 @@ LOGIN -> PRE_ROUND -> QUESTION_READING -> DISCUSSION
 
 Blitz and superblitz use the same phases plus `round.part_index` and the temporary `advance_next_part` flag. `GAME_OVER` and `INTRO` are roadmap items and are not current phases.
 
+## Live Ops recovery
+
+The admin has a separate collapsed recovery panel; it is not part of the normal game flow. New actions use explicit Socket.IO events rather than accepting arbitrary state patches:
+
+- `admin_set_score` and `admin_set_sector_used` repair exact progress values;
+- `admin_open_round` derives question kind from the loaded pack and enters `QUESTION_READING` without a spin;
+- `admin_force_phase` accepts only the five implemented game phases and normalizes round, timer, spin, media, and admin-question context;
+- `admin_cancel_spin` increments `spin_id`, so a sleeping spin handler cannot overwrite recovered state;
+- `admin_set_timer` sets or stops the deadline only in `DISCUSSION`.
+
+After admin authorization, every operation validates its complete input before mutation, mutates synchronously before any network emit await, logs the recovery, and then broadcasts authoritative state. Hide media and Silence reuse their existing events. Recovery does not play normal phase/scoring sounds and does not introduce arbitrary state editing, snapshots, or undo.
+
 ## Question packs
 
 A pack contains 13 required sector directories named `01` through `13`. Each sector contains `question.md`; media live under a local `media/` directory.
@@ -98,7 +112,7 @@ Players receive no native playback controls. Browser autoplay restrictions are h
 
 All mutable runtime data is process-local. A backend restart loses the game, players, sessions, logs, and media tokens.
 
-Socket.IO handlers are asynchronous and can overlap. UI button disabling is not a concurrency boundary. Core game handlers therefore call synchronous transitions before their first network await. Repeated scoring is rejected by the changed phase, and spin completion is accepted only for the current `spin_id`.
+Socket.IO handlers are asynchronous and can overlap. UI button disabling is not a concurrency boundary. Core game and recovery handlers therefore call synchronous transitions before their first network await. Repeated scoring is rejected by the changed phase, and spin completion is accepted only for the current `spin_id`; reset and recovery cancellation both advance that generation.
 
 ## Deployment status
 

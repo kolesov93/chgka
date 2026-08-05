@@ -148,6 +148,7 @@ function App() {
           discussionRemaining={discussionRemaining}
           onTenSeconds={markTenSecondsNotified}
           stopAllSounds={stopAllSounds}
+          addNotification={addNotification}
         />
       )}
     </div>
