@@ -25,6 +25,7 @@ class TestQuestionPackParsing:
         assert len(pack) == 13
         assert len(pack.questions) == 13
         assert all(isinstance(q, Question) for q in pack.questions)
+        assert "Вступительное слово" in pack.intro_html
 
 
 class TestValidQuestions:

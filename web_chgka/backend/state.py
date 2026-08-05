@@ -14,6 +14,7 @@ from typing import Literal, Optional, TypedDict
 
 GamePhase = Literal[
     "LOGIN",
+    "INTRO",
     "PRE_ROUND",
     "QUESTION_READING",
     "DISCUSSION",
@@ -26,6 +27,7 @@ GamePhase = Literal[
 # rendering both depend on these exact string values. The `Literal` alias above
 # must list raw string literals; the constants are typed against that alias.
 PHASE_LOGIN: GamePhase = "LOGIN"
+PHASE_INTRO: GamePhase = "INTRO"
 PHASE_PRE_ROUND: GamePhase = "PRE_ROUND"
 PHASE_QUESTION_READING: GamePhase = "QUESTION_READING"
 PHASE_DISCUSSION: GamePhase = "DISCUSSION"
@@ -136,8 +138,25 @@ class TimerState(TypedDict):
     discussion_deadline_ms: Optional[int]
 
 
+class IntroState(TypedDict):
+    """Internal intro progress shared by every connected client."""
+
+    slide_index: int
+    started_at_ms: int
+    duration_ms: int
+
+
+class PublicIntroState(IntroState):
+    """Intro progress plus serialization time for a reconnect-aware countdown."""
+
+    server_now_ms: int
+
+
 class PresentationState(TypedDict):
     """Shared presentation state shown to players."""
+
+    # Current server-authoritative intro slide and music timeline.
+    intro: Optional[IntroState]
 
     # Media currently shown to all clients instead of the game table.
     shared_media: Optional[SharedMediaState]
@@ -166,6 +185,7 @@ class PublicGameState(TypedDict):
     question_types: Optional[list[QuestionTypeValue]]
     discussion_deadline_ms: Optional[int]
     round: Optional[RoundState]
+    intro: Optional[PublicIntroState]
     shared_media: Optional[PublicSharedMediaState]
 
 
@@ -206,6 +226,7 @@ def create_initial_app_state(
             "discussion_deadline_ms": None,
         },
         "presentation": {
+            "intro": None,
             "shared_media": None,
         },
         "pack": {
@@ -255,6 +276,14 @@ def public_game_state(
     migration in the same step.
     """
     internal_media = state["presentation"]["shared_media"]
+    timestamp_ms = now_ms if now_ms is not None else int(time.time() * 1000)
+    internal_intro = state["presentation"]["intro"]
+    intro: Optional[PublicIntroState] = None
+    if internal_intro is not None:
+        intro = {
+            **internal_intro,
+            "server_now_ms": timestamp_ms,
+        }
     shared_media: Optional[PublicSharedMediaState] = None
     if internal_media is not None:
         shared_media = {
@@ -263,9 +292,7 @@ def public_game_state(
             "playback_state": internal_media["playback_state"],
             "position_ms": internal_media["position_ms"],
             "started_at_ms": internal_media["started_at_ms"],
-            "server_now_ms": (
-                now_ms if now_ms is not None else int(time.time() * 1000)
-            ),
+            "server_now_ms": timestamp_ms,
         }
 
     return deepcopy(
@@ -282,6 +309,7 @@ def public_game_state(
             "question_types": state["pack"]["question_types"],
             "discussion_deadline_ms": state["timer"]["discussion_deadline_ms"],
             "round": state["game"]["round"],
+            "intro": intro,
             "shared_media": shared_media,
         }
     )

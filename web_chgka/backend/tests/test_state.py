@@ -34,6 +34,7 @@ def test_create_initial_app_state_defaults():
     assert state["wheel"]["is_spinning"] is False
     assert state["wheel"]["spin_id"] == 0
     assert state["timer"]["discussion_deadline_ms"] is None
+    assert state["presentation"]["intro"] is None
     assert state["presentation"]["shared_media"] is None
     assert state["pack"]["question_types"] is None
     assert state["logs"] == []
@@ -62,6 +63,11 @@ def test_reset_app_state_clears_runtime_fields_and_preserves_question_types():
     state["wheel"]["is_spinning"] = True
     state["wheel"]["spin_id"] = 7
     state["timer"]["discussion_deadline_ms"] = 12345
+    state["presentation"]["intro"] = {
+        "slide_index": 7,
+        "started_at_ms": 1_000,
+        "duration_ms": 87_757,
+    }
     state["presentation"]["shared_media"] = _shared_image()
     state["logs"] = ["old log"]
 
@@ -78,6 +84,7 @@ def test_reset_app_state_clears_runtime_fields_and_preserves_question_types():
     assert state["wheel"]["is_spinning"] is False
     assert state["wheel"]["spin_id"] == 8
     assert state["timer"]["discussion_deadline_ms"] is None
+    assert state["presentation"]["intro"] is None
     assert state["presentation"]["shared_media"] is None
     assert state["pack"]["question_types"] == ["normal", "blitz"]
     assert state["logs"] == []
@@ -112,6 +119,7 @@ def test_public_game_state_flattens_app_state_for_current_frontend():
         "question_types": ["normal"],
         "discussion_deadline_ms": 12345,
         "round": {"kind": "normal", "sector": 3},
+        "intro": None,
         "shared_media": {
             "type": "image",
             "media_id": "abc",
@@ -136,6 +144,25 @@ def test_public_game_state_flattens_app_state_for_current_frontend():
     assert state["game"]["score"]["znatoki"] == 1
     assert state["game"]["used_questions"] == [3]
     assert state["game"]["round"]["sector"] == 3
+
+
+def test_public_game_state_serializes_intro_timing_for_reconnect():
+    state = create_initial_app_state()
+    state["presentation"]["intro"] = {
+        "slide_index": 4,
+        "started_at_ms": 10_000,
+        "duration_ms": 87_757,
+    }
+
+    payload = public_game_state(state, now_ms=13_750)
+
+    assert payload["intro"] == {
+        "slide_index": 4,
+        "started_at_ms": 10_000,
+        "duration_ms": 87_757,
+        "server_now_ms": 13_750,
+    }
+    assert "server_now_ms" not in state["presentation"]["intro"]
 
 
 def test_public_game_state_serializes_server_time_for_audio_reconnect():

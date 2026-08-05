@@ -3,6 +3,7 @@ import pytest
 from state import (
     PHASE_DISCUSSION,
     PHASE_GAME_OVER,
+    PHASE_INTRO,
     PHASE_LOGIN,
     PHASE_POST_ROUND,
     PHASE_PRE_ROUND,
@@ -12,6 +13,7 @@ from state import (
 )
 from transitions import (
     TransitionError,
+    transition_advance_intro,
     transition_complete_spin,
     transition_end_round,
     transition_reset,
@@ -37,15 +39,50 @@ def _shared_image():
     }
 
 
-def test_start_game_changes_login_to_pre_round_once():
+def test_start_game_enters_intro_and_starts_music_once():
     state = create_initial_app_state()
 
-    effects = transition_start_game(state)
+    effects = transition_start_game(state, now_ms=10_000)
+
+    assert state["game"]["phase"] == PHASE_INTRO
+    assert state["presentation"]["intro"] == {
+        "slide_index": 0,
+        "started_at_ms": 10_000,
+        "duration_ms": 87_757,
+    }
+    assert effects.logs == ("Интро началось",)
+    assert effects.sounds == ("intro",)
+    with pytest.raises(TransitionError, match="INTRO"):
+        transition_start_game(state, now_ms=10_001)
+
+
+def test_intro_advances_exactly_once_and_rejects_stale_repeat():
+    state = create_initial_app_state()
+    transition_start_game(state, now_ms=10_000)
+
+    effects = transition_advance_intro(state, expected_slide=0)
+
+    assert state["presentation"]["intro"]["slide_index"] == 1
+    assert effects.logs == ("Интро: слайд 01",)
+    with pytest.raises(TransitionError) as exc_info:
+        transition_advance_intro(state, expected_slide=0)
+    assert exc_info.value.code == "stale_intro"
+    assert state["presentation"]["intro"]["slide_index"] == 1
+
+
+def test_final_intro_step_stops_music_and_enters_pre_round():
+    state = create_initial_app_state()
+    transition_start_game(state, now_ms=10_000)
+    for expected_slide in range(13):
+        transition_advance_intro(state, expected_slide=expected_slide)
+        assert state["presentation"]["intro"]["slide_index"] == expected_slide + 1
+
+    effects = transition_advance_intro(state, expected_slide=13)
 
     assert state["game"]["phase"] == PHASE_PRE_ROUND
-    assert effects.logs == ("Игра началась!",)
-    with pytest.raises(TransitionError, match="PRE_ROUND"):
-        transition_start_game(state)
+    assert state["presentation"]["intro"] is None
+    assert state["game"]["score"] == {"znatoki": 0, "tv": 0}
+    assert effects.stop_sounds is True
 
 
 def test_spin_skips_used_sectors_across_wrap_and_completes_normal_round():

@@ -13,6 +13,7 @@ export function AdminControls({
 }) {
   const usedQuestions = gameState?.used_questions || [];
   const phase = gameState?.phase || 'LOGIN';
+  const isIntro = phase === 'INTRO';
   const isPreRound = phase === 'PRE_ROUND';
   const isQuestionReading = phase === 'QUESTION_READING';
   const isDiscussion = phase === 'DISCUSSION';
@@ -78,7 +79,7 @@ export function AdminControls({
           </div>
         </div>
 
-        {!isGameOver && (
+        {!isGameOver && !isIntro && (
           <div className="flex flex-col gap-3 border border-slate-700 p-3 rounded bg-slate-900/30">
           <div className="text-xs text-yellow-600 uppercase font-bold tracking-widest text-center">
             Управление Волчком
@@ -207,6 +208,11 @@ export function AdminControls({
             {isPreRound && (
               <div className="text-xs text-slate-500 font-bold uppercase tracking-widest">
                 Фаза: ожидание вращения
+              </div>
+            )}
+            {isIntro && (
+              <div className="rounded border border-blue-800/60 bg-blue-950/20 px-3 py-3 text-center text-xs font-bold uppercase tracking-widest text-blue-300">
+                Интро управляется рядом со слайдом
               </div>
             )}
             {isGameOver && (

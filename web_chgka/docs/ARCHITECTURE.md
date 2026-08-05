@@ -29,7 +29,8 @@ FastAPI + python-socketio (backend/main.py)
 - `frontend/src/hooks/useGameSession.js` owns session restore, shared server state, players, pack/admin data, notifications, logout, and non-audio socket listeners.
 - `frontend/src/hooks/useDiscussionTimer.js` owns the admin countdown and one-shot local ten-second notification; `useSocketSoundEvents.js` bridges sound events to `useGameSound.js`.
 - `frontend/src/hooks/useSoundFade.js` derives one reconnect-aware emergency fade multiplier from the server sound-control snapshot. Shared media, effects, and the wheel consume that multiplier; the wheel also retains its intrinsic end-of-spin fade.
-- `frontend/src/components/` contains the admin question/media panel with private inline image thumbnails, the shared final screen, normal admin controls with the always-visible director sound block, the separate danger-styled Live Ops recovery panel, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
+- `frontend/src/components/` contains the shared intro screen with host-only speech/navigation, the admin question/media panel with private inline image thumbnails, the shared final screen, normal admin controls with the always-visible director sound block, the separate danger-styled Live Ops recovery panel, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
+- `frontend/src/intro.js` owns the temporary slide asset mapping, host next-step labels, and reconnect-aware music countdown math.
 - `frontend/src/inlineMedia.js` safely turns resolved image placeholders into host-only thumbnail markup. Non-image and unknown placeholders remain unchanged.
 - Development connects Socket.IO and media requests directly to `http://localhost:8000`. A production build uses the current origin (`/`).
 
@@ -41,7 +42,7 @@ UI components may emit existing user actions through the shared socket, but they
 
 - `backend/main.py` creates the FastAPI/Socket.IO application and currently contains authentication, player lifecycle, phase handlers, scoring, spin orchestration, media access, logging, and emits.
 - `backend/state.py` defines the typed internal `AppState` and serializes it to the flat public payload expected by the frontend.
-- `backend/transitions.py` owns synchronous phase, spin, scoring, blitz, round-end, and reset rules. It mutates `AppState` before network awaits and returns transport effects such as logs, sounds, media-token cleanup, and admin-question refresh.
+- `backend/transitions.py` owns synchronous intro, phase, spin, scoring, blitz, round-end, and reset rules. It mutates `AppState` before network awaits and returns transport effects such as logs, sounds, media-token cleanup, and admin-question refresh.
 - `backend/live_ops.py` owns exceptional admin recovery rules: exact score/sector edits, direct round opening, normalized phase forcing, stuck-spin cancellation, and timer repair. It uses the same transport effects without weakening normal transition guards.
 - `backend/sound_control.py` owns the pure generation-based `normal`/`fading`/`stopped` lifecycle and synchronized fade progress math.
 - `backend/questions.py` parses and validates filesystem question packs, assigns section-aware opaque media references, and converts Markdown sections to HTML.
@@ -57,7 +58,7 @@ Internal state is split by responsibility:
 - `game`: phase, score, used questions, current round;
 - `wheel`: sector and spin animation state;
 - `timer`: discussion deadline;
-- `presentation`: shared media;
+- `presentation`: intro progress/timeline and shared media;
 - `pack`: question types needed by the UI;
 - `logs`: recent game log entries.
 
@@ -68,12 +69,15 @@ Internal state is split by responsibility:
 Current phases are:
 
 ```text
-LOGIN -> PRE_ROUND -> QUESTION_READING -> DISCUSSION
-      -> TEAM_ANSWER -> POST_ROUND -> PRE_ROUND
-                                  `-> GAME_OVER
+LOGIN -> INTRO -> PRE_ROUND -> QUESTION_READING -> DISCUSSION
+                                             -> TEAM_ANSWER -> POST_ROUND
+                                                               |-> PRE_ROUND
+                                                               `-> GAME_OVER
 ```
 
-Blitz and superblitz use the same phases plus `round.part_index` and the temporary `advance_next_part` flag. `INTRO` remains a roadmap item and is not a current phase.
+`start_game` enters `INTRO` on slide `00`. The backend stores the current slide plus the fixed temporary `meeting.mp3` timeline; the host advances `00` through `13`, and the action after `13` stops the intro sound and enters `PRE_ROUND`. Each request carries the expected slide index, so a repeated or concurrent click cannot skip a slide. Reconnecting clients recover the current slide and countdown snapshot, but the one-shot intro audio is deliberately not replayed or seeked after reconnect.
+
+Blitz and superblitz use the later game phases plus `round.part_index` and the temporary `advance_next_part` flag.
 
 The sixth point still enters `POST_ROUND`, preserving the host's answer/commentary review. The following end-round action enters `GAME_OVER` instead of `PRE_ROUND`, clears round/media/timer/wheel context, stops older effects, and then broadcasts the one-shot `final` sound. `GAME_OVER` is stable in the public snapshot, so reconnecting clients recover the final score/winner screen without replaying the sound. Normal game actions remain guarded by their expected phases; reset starts a new `PRE_ROUND` game with the same pack and connected players.
 
@@ -101,7 +105,7 @@ Every later server sound command advances the generation synchronously before it
 
 ## Question packs
 
-A pack contains 13 required sector directories named `01` through `13`. Each sector contains `question.md`; media live under a local `media/` directory.
+A pack contains 13 required sector directories named `01` through `13`. Each sector contains `question.md`; media live under a local `media/` directory. An optional root `intro.md` contains Markdown speech shown only to the admin through `pack_info`; intro media in that file are not supported yet.
 
 Supported question kinds are `normal`, `blitz`, and `superblitz`. Blitz variants contain three nested parts, also named `01` through `03`.
 
@@ -128,7 +132,7 @@ Players receive no native playback controls. Browser autoplay restrictions are h
 
 All mutable runtime data is process-local. A backend restart loses the game, players, sessions, logs, media tokens, volume, and sound-control generation.
 
-Socket.IO handlers are asynchronous and can overlap. UI button disabling is not a concurrency boundary. Core game and recovery handlers therefore call synchronous transitions before their first network await. Repeated scoring is rejected by the changed phase, and spin completion is accepted only for the current `spin_id`; reset and recovery cancellation both advance that generation.
+Socket.IO handlers are asynchronous and can overlap. UI button disabling is not a concurrency boundary. Core game and recovery handlers therefore call synchronous transitions before their first network await. Repeated scoring is rejected by the changed phase, intro navigation validates the expected slide index, and spin completion is accepted only for the current `spin_id`; reset and recovery cancellation both advance that generation.
 
 ## Deployment status
 

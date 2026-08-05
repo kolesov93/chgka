@@ -13,6 +13,7 @@ from state import (
     GamePhase,
     PHASE_DISCUSSION,
     PHASE_GAME_OVER,
+    PHASE_INTRO,
     PHASE_LOGIN,
     PHASE_POST_ROUND,
     PHASE_PRE_ROUND,
@@ -25,6 +26,8 @@ from state import (
 SECTORS_COUNT = 13
 BLITZ_PARTS = 3
 WINNING_SCORE = 6
+INTRO_LAST_SLIDE = 13
+INTRO_DURATION_MS = 87_757
 
 
 class TransitionError(ValueError):
@@ -76,10 +79,57 @@ def _game_winner(state: AppState) -> Optional[str]:
     return None
 
 
-def transition_start_game(state: AppState) -> TransitionEffects:
+def transition_start_game(state: AppState, *, now_ms: int) -> TransitionEffects:
     _require_phase(state, PHASE_LOGIN)
+    if not isinstance(now_ms, int) or isinstance(now_ms, bool) or now_ms < 0:
+        raise TransitionError("invalid_time", "Некорректное время начала интро")
+
+    state["game"]["phase"] = PHASE_INTRO
+    state["presentation"]["intro"] = {
+        "slide_index": 0,
+        "started_at_ms": now_ms,
+        "duration_ms": INTRO_DURATION_MS,
+    }
+    return TransitionEffects(
+        logs=("Интро началось",),
+        sounds=("intro",),
+    )
+
+
+def transition_advance_intro(
+    state: AppState,
+    *,
+    expected_slide: int,
+) -> TransitionEffects:
+    _require_phase(state, PHASE_INTRO)
+    if (
+        not isinstance(expected_slide, int)
+        or isinstance(expected_slide, bool)
+        or not 0 <= expected_slide <= INTRO_LAST_SLIDE
+    ):
+        raise TransitionError("invalid_intro_slide", "Некорректный номер intro-слайда")
+
+    intro = state["presentation"]["intro"]
+    if intro is None:
+        raise TransitionError("missing_intro", "Нет активного интро")
+    current_slide = intro["slide_index"]
+    if current_slide != expected_slide:
+        raise TransitionError(
+            "stale_intro",
+            f"Intro-слайд уже изменился: сейчас {current_slide:02d}",
+        )
+
+    if current_slide < INTRO_LAST_SLIDE:
+        next_slide = current_slide + 1
+        intro["slide_index"] = next_slide
+        return TransitionEffects(logs=(f"Интро: слайд {next_slide:02d}",))
+
+    state["presentation"]["intro"] = None
     state["game"]["phase"] = PHASE_PRE_ROUND
-    return TransitionEffects(logs=("Игра началась!",))
+    return TransitionEffects(
+        logs=("Интро завершено. Фаза: ожидание первого вращения",),
+        stop_sounds=True,
+    )
 
 
 def validate_spin_start(state: AppState) -> None:

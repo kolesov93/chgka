@@ -449,6 +449,7 @@ class QuestionPack:
     """
     questions: list[Question]
     path: Path  # path to the pack folder
+    intro_html: Optional[str] = None  # admin-only intro speech
     
     def get_by_sector(self, sector: int) -> Question:
         """Get question by sector number (1-13)."""
@@ -491,6 +492,31 @@ def parse_question_pack(pack_folder: Path) -> QuestionPack:
             f"Unexpected question sector folder(s): {names} (expected only 01..13)"
         )
 
+    intro_path = pack_folder / "intro.md"
+    intro_html: Optional[str] = None
+    if intro_path.exists():
+        if not intro_path.is_file():
+            raise QuestionParseError(f"intro.md is not a file: {intro_path}")
+        if not intro_path.resolve().is_relative_to(pack_folder.resolve()):
+            raise QuestionParseError("intro.md must stay inside the pack folder")
+        try:
+            intro_data = intro_path.read_bytes()
+        except OSError as e:
+            raise QuestionParseError(f"Failed to read intro.md: {intro_path}") from e
+        if not intro_data or intro_data.strip() == b"":
+            raise QuestionParseError("intro.md is empty")
+        if b"\x00" in intro_data:
+            raise QuestionParseError("intro.md looks like binary data")
+        try:
+            intro_md = intro_data.decode("utf-8")
+        except UnicodeDecodeError as e:
+            raise QuestionParseError("intro.md is not valid UTF-8 (binary?)") from e
+        if _MEDIA_RE.search(intro_md):
+            raise QuestionParseError(
+                "Media in intro.md is not supported yet; use the temporary intro assets"
+            )
+        intro_html = markdown.markdown(intro_md, extensions=["extra", "sane_lists"])
+
     questions: list[Question] = []
     for sector in range(1, 14):
         qdir = pack_folder / f"{sector:02d}"
@@ -501,4 +527,8 @@ def parse_question_pack(pack_folder: Path) -> QuestionPack:
         except QuestionParseError as e:
             raise QuestionParseError(f"Failed to parse sector {sector} ({qdir}): {e}") from e
 
-    return QuestionPack(questions=questions, path=pack_folder.resolve())
+    return QuestionPack(
+        questions=questions,
+        path=pack_folder.resolve(),
+        intro_html=intro_html,
+    )

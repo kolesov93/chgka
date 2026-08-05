@@ -48,3 +48,23 @@ Status: In progress
 - Frontend pure tests: asset mapping, next-step labels and reconnect-aware countdown.
 - Full backend tests with warnings-as-errors, frontend tests/build and Compose validation.
 - Two-browser smoke: lobby -> intro, player/admin parity, speech privacy, all slides, music countdown/stop and transition to table 0:0.
+
+## Local verification status
+
+Implemented locally:
+
+- authoritative `LOGIN -> INTRO -> PRE_ROUND` flow with slides `00`–`13`;
+- one-shot meeting track, shared slide state and reconnect-aware admin countdown;
+- stale expected-slide guard against double-click/concurrent skipping;
+- admin-only optional `intro.md` speech with UTF-8, containment, empty-file and media validation;
+- dedicated player/admin intro screen and direct transition from the final slide to the real table at 0:0.
+
+Passed locally:
+
+- `python3 -B -W error -m pytest -p no:cacheprovider -q`: 129 backend tests;
+- `npm test`: 24 frontend tests;
+- `npm run build`;
+- sample-pack validator CLI;
+- `docker compose config --quiet`.
+
+Remote CI and focused two-browser smoke are pending.

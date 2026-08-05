@@ -54,6 +54,7 @@ from transitions import (
     TransitionEffects,
     TransitionError,
     transition_complete_spin,
+    transition_advance_intro,
     transition_end_round,
     transition_reset,
     transition_score,
@@ -258,6 +259,7 @@ def _load_question_pack_on_startup() -> None:
         "path": str(pack.path),
         "question_titles": [q.title for q in pack.questions],
         "question_types": types,
+        "intro_html": pack.intro_html,
     }
     logger.info(f"Loaded question pack: {pack.path} ({len(types)} questions)")
 
@@ -682,12 +684,30 @@ async def admin_approve(sid, data):
 
 @sio.event
 async def start_game(sid):
-    """Админ запускает игру (переход из LOGIN в PRE_ROUND)"""
+    """Админ запускает intro перед первым раундом."""
     if not await require_admin(sid):
         return
     
     try:
-        effects = transition_start_game(app_state)
+        effects = transition_start_game(app_state, now_ms=_now_ms())
+    except TransitionError as error:
+        await _emit_transition_error(sid, error)
+        return
+    await _apply_transition_effects(effects)
+
+
+@sio.event
+async def admin_advance_intro(sid, data):
+    """Переключить ровно один intro-слайд или перейти к первому раунду."""
+    if not await require_admin(sid):
+        return
+
+    payload = data if isinstance(data, dict) else {}
+    try:
+        effects = transition_advance_intro(
+            app_state,
+            expected_slide=payload.get("expected_slide"),
+        )
     except TransitionError as error:
         await _emit_transition_error(sid, error)
         return

@@ -9,6 +9,7 @@ from sound_control import begin_fade, create_sound_control_state
 from state import (
     PHASE_DISCUSSION,
     PHASE_GAME_OVER,
+    PHASE_INTRO,
     PHASE_POST_ROUND,
     PHASE_PRE_ROUND,
     PHASE_QUESTION_READING,
@@ -75,6 +76,92 @@ def test_concurrent_score_handlers_award_only_one_point(monkeypatch):
 
     assert state["game"]["score"] == {"znatoki": 1, "tv": 0}
     assert any(event == "admin_notification" for event, _, _ in fake_sio.events)
+
+
+def test_intro_handlers_broadcast_each_slide_once_and_stop_on_completion(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state()
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "players_list", [])
+    monkeypatch.setattr(main, "_now_ms", lambda: 10_000)
+
+    async def run():
+        await main.start_game("admin")
+        await asyncio.gather(
+            main.admin_advance_intro("admin", {"expected_slide": 0}),
+            main.admin_advance_intro("admin", {"expected_slide": 0}),
+        )
+        state["presentation"]["intro"]["slide_index"] = 13
+        await main.admin_advance_intro("admin", {"expected_slide": 13})
+
+    asyncio.run(run())
+
+    assert state["game"]["phase"] == PHASE_PRE_ROUND
+    assert state["presentation"]["intro"] is None
+    assert any(
+        event == "play_sound" and data == {"sound": "intro"}
+        for event, data, _kwargs in fake_sio.events
+    )
+    assert sum(
+        event == "state_update"
+        and bool(data["intro"])
+        and data["intro"]["slide_index"] == 1
+        for event, data, _kwargs in fake_sio.events
+    ) == 1
+    assert any(event == "admin_notification" for event, _, _ in fake_sio.events)
+    assert any(event == "stop_sound" for event, _, _ in fake_sio.events)
+
+
+def test_intro_advance_requires_admin(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_INTRO)
+    state["presentation"]["intro"] = {
+        "slide_index": 0,
+        "started_at_ms": 10_000,
+        "duration_ms": 87_757,
+    }
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _deny_admin)
+    monkeypatch.setattr(main, "app_state", state)
+
+    asyncio.run(main.admin_advance_intro("player", {"expected_slide": 0}))
+
+    assert state["presentation"]["intro"]["slide_index"] == 0
+    assert fake_sio.events == []
+
+
+def test_pack_info_includes_intro_speech_for_admin_only(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    fake_sio.sessions = {
+        "admin": {"role": "admin"},
+        "player": {"role": "player"},
+    }
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(
+        main,
+        "pack_admin_info",
+        {"question_titles": [], "question_types": [], "intro_html": "<p>Речь</p>"},
+    )
+
+    async def run():
+        await main._emit_pack_info_to_admin("player")
+        await main._emit_pack_info_to_admin("admin")
+
+    asyncio.run(run())
+
+    pack_events = [
+        (data, kwargs)
+        for event, data, kwargs in fake_sio.events
+        if event == "pack_info"
+    ]
+    assert pack_events == [
+        (
+            {"pack": main.pack_admin_info},
+            {"to": "admin"},
+        )
+    ]
 
 
 def test_end_round_at_six_broadcasts_final_state_and_sound(monkeypatch):

@@ -4,7 +4,7 @@
 - Latest completed task: `docs/tasks/0012-game-over.md`
 - Active task: `docs/tasks/0013-intro.md`
 - Branch: `task/intro`
-- Status: task 0012 is accepted and integrated locally; task 0013 contract is defined and implementation is in progress. Publishing the updated `web` branch is still pending.
+- Status: task 0013 is implemented locally and awaiting remote CI plus focused two-browser acceptance. Publishing the updated `web` branch is still pending.
 
 ## Repository checkpoint
 
@@ -43,22 +43,34 @@
 
 ## Verified baseline
 
-- Backend: 118 tests pass with warnings treated as errors.
+- Backend: 129 tests pass with warnings treated as errors.
   - 47 question parser tests;
   - 5 synchronized sound-control tests;
   - 9 live-ops recovery tests;
   - 5 media identity/playback tests;
-  - 5 state helper tests;
+  - 6 state helper tests;
   - 3 wheel-sector/spin-selection tests;
-  - 18 pure transition tests;
-  - 17 handler concurrency/session/media/live-ops/sound-control/game-over tests;
-  - 9 pack-validator CLI, sector-directory, and media-path tests.
-- Frontend: 20 pure playback/live-ops/sound-fade/inline-media/game-over tests and the production build pass; the last clean install and full audit reported zero vulnerabilities.
+  - 20 pure transition tests;
+  - 20 handler concurrency/session/media/live-ops/sound-control/game-over/intro tests;
+  - 14 pack-validator CLI, sector-directory, media-path, and intro-file tests.
+- Frontend: 24 pure playback/live-ops/sound-fade/inline-media/game-over/intro tests and the production build pass; the last clean install and full audit reported zero vulnerabilities.
 - Backend startup loads the sample pack with all 13 questions and reaches application startup completion.
 - `docker compose config --quiet` succeeds without warnings.
 - The last full development-image baseline (before tasks 0011–0012) built successfully: Python 3.14 passed `pip check` and 113 backend tests; Node 24 passed 13 frontend tests and the production build. The current source-only changes pass native tests/build and Compose validation; images were not rebuilt for task 0012.
 
 All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, 0009, 0010, 0011, and 0012.
+
+## Active task: intro
+
+Implemented locally:
+
+- add the authoritative `INTRO` phase between lobby and the first `PRE_ROUND`;
+- play the existing meeting track once and show the shared temporary slide sequence `00`–`13`;
+- give the host current/next slide context, reconnect-aware remaining-track time, and guarded one-step navigation;
+- parse optional root `intro.md` speech and expose it only through admin-only `pack_info`;
+- transition after slide `13` to the real score/table view at 0:0 and stop any remaining intro sound.
+
+Verification: all 129 backend tests with warnings treated as errors, all 24 frontend tests, the production build, sample-pack CLI validation, and Compose configuration pass locally. Remote CI and focused two-browser smoke are pending.
 
 ## Completed task: game over
 

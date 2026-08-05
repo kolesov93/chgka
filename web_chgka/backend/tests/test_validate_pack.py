@@ -101,6 +101,40 @@ def test_pack_allows_named_auxiliary_directory(tmp_path):
     assert len(parse_question_pack(pack_path)) == 13
 
 
+def test_pack_allows_missing_intro_speech(tmp_path):
+    pack_path = _copy_sample_pack(tmp_path)
+    (pack_path / "intro.md").unlink()
+
+    assert parse_question_pack(pack_path).intro_html is None
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        (b"", "empty"),
+        (b"\xff\xfe", "UTF-8|binary"),
+        (b"![image](intro/photo.jpg)", "Media in intro.md"),
+    ],
+)
+def test_pack_rejects_invalid_intro_speech(tmp_path, content, message):
+    pack_path = _copy_sample_pack(tmp_path)
+    (pack_path / "intro.md").write_bytes(content)
+
+    with pytest.raises(QuestionParseError, match=message):
+        parse_question_pack(pack_path)
+
+
+def test_pack_rejects_intro_symlink_escape(tmp_path):
+    pack_path = _copy_sample_pack(tmp_path)
+    outside_intro = tmp_path / "outside.md"
+    outside_intro.write_text("Private speech", encoding="utf-8")
+    (pack_path / "intro.md").unlink()
+    (pack_path / "intro.md").symlink_to(outside_intro)
+
+    with pytest.raises(QuestionParseError, match="inside the pack"):
+        parse_question_pack(pack_path)
+
+
 def test_question_rejects_absolute_media_path(tmp_path):
     external_media = tmp_path / "external.jpg"
     external_media.write_bytes(b"image")
