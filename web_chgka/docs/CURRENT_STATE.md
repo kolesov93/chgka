@@ -2,8 +2,8 @@
 
 - Snapshot date: 2026-08-05
 - Latest completed task: `docs/tasks/0010-director-sound-controls.md`
-- Branch: `task/director-sound-controls`
-- Status: implementation, publication, CI, and browser acceptance complete; integration into `web` is the current handoff point.
+- Branch: `web`
+- Status: task 0010 is accepted and integrated locally; publishing the updated `web` branch is pending.
 
 ## Repository checkpoint
 
@@ -18,6 +18,9 @@
 - Sound fade merge commit: `3c6cccb` (`Merge synchronized sound fade task`).
 - `origin/web` contains the accepted sound-fade merge and handoff at `218aa2a`.
 - Director sound controls commit `2fda870` is published on `origin/task/director-sound-controls` and accepted.
+- Director sound controls closure commit: `fd63ff3` (`Close director sound controls task`).
+- Director sound controls merge commit: `1ee7156` (`Merge director sound controls task`).
+- Local `web` contains the accepted merge and is ahead of `origin/web`; push is pending.
 
 ## Product decisions
 
@@ -248,7 +251,7 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Integrate accepted task 0010 into `web`.
+1. Publish the updated `web` branch containing the accepted task 0010 merge.
 2. Take roadmap item 16 in a separate branch and add inline image previews to the host's question/answer text without changing sharing state or the media-token contract.
 3. Continue with game completion after inline previews; keep authorization/security and persistence as mandatory gates before public deployment.
 
