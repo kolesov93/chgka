@@ -29,7 +29,7 @@ FastAPI + python-socketio (backend/main.py)
 - `frontend/src/hooks/useGameSession.js` owns session restore, shared server state, players, pack/admin data, notifications, logout, and non-audio socket listeners.
 - `frontend/src/hooks/useDiscussionTimer.js` owns the admin countdown and one-shot local ten-second notification; `useSocketSoundEvents.js` bridges sound events to `useGameSound.js`.
 - `frontend/src/hooks/useSoundFade.js` derives one reconnect-aware emergency fade multiplier from the server sound-control snapshot. Shared media, effects, and the wheel consume that multiplier; the wheel also retains its intrinsic end-of-spin fade.
-- `frontend/src/components/` contains the admin question/media panel with private inline image thumbnails, normal admin controls with the always-visible director sound block, the separate danger-styled Live Ops recovery panel, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
+- `frontend/src/components/` contains the admin question/media panel with private inline image thumbnails, the shared final screen, normal admin controls with the always-visible director sound block, the separate danger-styled Live Ops recovery panel, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
 - `frontend/src/inlineMedia.js` safely turns resolved image placeholders into host-only thumbnail markup. Non-image and unknown placeholders remain unchanged.
 - Development connects Socket.IO and media requests directly to `http://localhost:8000`. A production build uses the current origin (`/`).
 
@@ -70,9 +70,12 @@ Current phases are:
 ```text
 LOGIN -> PRE_ROUND -> QUESTION_READING -> DISCUSSION
       -> TEAM_ANSWER -> POST_ROUND -> PRE_ROUND
+                                  `-> GAME_OVER
 ```
 
-Blitz and superblitz use the same phases plus `round.part_index` and the temporary `advance_next_part` flag. `GAME_OVER` and `INTRO` are roadmap items and are not current phases.
+Blitz and superblitz use the same phases plus `round.part_index` and the temporary `advance_next_part` flag. `INTRO` remains a roadmap item and is not a current phase.
+
+The sixth point still enters `POST_ROUND`, preserving the host's answer/commentary review. The following end-round action enters `GAME_OVER` instead of `PRE_ROUND`, clears round/media/timer/wheel context, stops older effects, and then broadcasts the one-shot `final` sound. `GAME_OVER` is stable in the public snapshot, so reconnecting clients recover the final score/winner screen without replaying the sound. Normal game actions remain guarded by their expected phases; reset starts a new `PRE_ROUND` game with the same pack and connected players.
 
 ## Live Ops recovery
 
@@ -80,7 +83,7 @@ The admin has a separate collapsed recovery panel; it is not part of the normal 
 
 - `admin_set_score` and `admin_set_sector_used` repair exact progress values;
 - `admin_open_round` derives question kind from the loaded pack and enters `QUESTION_READING` without a spin;
-- `admin_force_phase` accepts only the five implemented game phases and normalizes round, timer, spin, media, and admin-question context;
+- `admin_force_phase` accepts only the five recoverable non-final game phases and normalizes round, timer, spin, media, and admin-question context;
 - `admin_cancel_spin` increments `spin_id`, so a sleeping spin handler cannot overwrite recovered state;
 - `admin_set_timer` sets or stops the deadline only in `DISCUSSION`.
 

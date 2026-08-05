@@ -42,3 +42,24 @@ Finish a game explicitly after one side reaches six points, while preserving the
 - Handler test for authoritative final state plus stop/final sound events.
 - Frontend helper/build coverage for winner presentation and final-phase rendering.
 - Two-browser smoke for sixth point, answer review, explicit final action, score/winner display, final sound, reconnect, blocked normal controls, and new-game reset.
+
+## Local verification status
+
+Implemented locally:
+
+- explicit `GAME_OVER` state and atomic end-round finalization after a six-point `POST_ROUND`;
+- cleanup of round/media/token/timer/wheel/admin-question context plus stop-then-final sound effects;
+- score guards, including rejection of the impossible recovery score 6:6 until it is repaired;
+- shared final score/winner screen and reconnect rendering;
+- game-over host UI with normal controls removed and `Новая игра` reset retained;
+- reset stops final audio while retaining connected players and the loaded pack.
+
+Passed locally:
+
+- `python3 -m pytest -q`: 118 backend tests;
+- `python3 -W error -m pytest -q`: 118 backend tests;
+- `npm test`: 20 frontend tests, including 3 game-over presentation tests;
+- `npm run build`;
+- `docker compose config --quiet`.
+
+Pending: GitHub Actions and the focused two-browser smoke.

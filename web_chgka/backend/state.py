@@ -19,6 +19,7 @@ GamePhase = Literal[
     "DISCUSSION",
     "TEAM_ANSWER",
     "POST_ROUND",
+    "GAME_OVER",
 ]
 
 # Phase constants are part of the state contract: backend guards and frontend
@@ -30,6 +31,7 @@ PHASE_QUESTION_READING: GamePhase = "QUESTION_READING"
 PHASE_DISCUSSION: GamePhase = "DISCUSSION"
 PHASE_TEAM_ANSWER: GamePhase = "TEAM_ANSWER"
 PHASE_POST_ROUND: GamePhase = "POST_ROUND"
+PHASE_GAME_OVER: GamePhase = "GAME_OVER"
 
 QuestionKind = Literal["normal", "blitz", "superblitz"]
 QuestionTypeValue = QuestionKind

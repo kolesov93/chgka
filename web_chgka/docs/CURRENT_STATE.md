@@ -3,7 +3,7 @@
 - Snapshot date: 2026-08-05
 - Active task: `docs/tasks/0012-game-over.md`
 - Branch: `task/game-over`
-- Status: game-over behavior and invariants are defined; implementation has not started.
+- Status: implementation and full local verification complete; publication, CI, and browser acceptance pending.
 
 ## Repository checkpoint
 
@@ -38,33 +38,33 @@
 
 ## Verified baseline
 
-- Backend: 113 tests pass with warnings treated as errors.
+- Backend: 118 tests pass with warnings treated as errors.
   - 47 question parser tests;
   - 5 synchronized sound-control tests;
   - 9 live-ops recovery tests;
   - 5 media identity/playback tests;
   - 5 state helper tests;
   - 3 wheel-sector/spin-selection tests;
-  - 14 pure transition tests;
-  - 16 handler concurrency/session/media/live-ops/sound-control tests;
+  - 18 pure transition tests;
+  - 17 handler concurrency/session/media/live-ops/sound-control/game-over tests;
   - 9 pack-validator CLI, sector-directory, and media-path tests.
-- Frontend: 17 pure playback/live-ops/sound-fade/inline-media tests and the production build pass; the last clean install and full audit reported zero vulnerabilities.
+- Frontend: 20 pure playback/live-ops/sound-fade/inline-media/game-over tests and the production build pass; the last clean install and full audit reported zero vulnerabilities.
 - Backend startup loads the sample pack with all 13 questions and reaches application startup completion.
 - `docker compose config --quiet` succeeds without warnings.
-- Both development images build. Python 3.14 passes `pip check` and all 113 backend tests; Node 24 passes all 13 frontend assertions and the production build.
+- The last full development-image baseline (before tasks 0011–0012) built successfully: Python 3.14 passed `pip check` and 113 backend tests; Node 24 passed 13 frontend tests and the production build. The current source-only changes pass native tests/build and Compose validation; images were not rebuilt for task 0012.
 
 All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, 0009, 0010, and 0011.
 
 ## Active task: game over
 
-Planned:
+Implemented locally:
 
 - add the authoritative `GAME_OVER` phase after the host completes review of a six-point round;
 - clear active round/media/timer/wheel context and play the existing final sound once;
 - show all clients the graphical final score and a winner card, including after reconnect;
 - replace normal host actions with a new-game reset while retaining director controls and recovery access.
 
-Implementation and verification have not started.
+Verification: all 118 backend tests with warnings treated as errors, all 20 frontend tests, the production build, and Compose validation pass. GitHub Actions and the focused two-browser smoke are pending.
 
 ## Completed task: inline image previews
 
@@ -248,7 +248,7 @@ Completed:
 - fixed pending-player reconnect to remain pending;
 - added pure transition and handler-level concurrency/session tests.
 
-Scope decision: task 0002 builds a reliable transition layer while preserving the current product behavior. The new `GAME_OVER` phase remains roadmap task 12. The transition API must be extensible so that task 12 can add the phase without moving game rules back into Socket.IO handlers.
+Scope decision: task 0002 built the transition layer while preserving the then-current product behavior. Task 0012 now adds `GAME_OVER` through that transition API without moving game rules back into Socket.IO handlers.
 
 ## Resolved defects
 
@@ -261,14 +261,13 @@ The first three scenarios were reproduced against the old handlers and now have 
 
 Additional known gaps:
 
-- after the sixth point, there is no `GAME_OVER`; normal round end returns to `PRE_ROUND`, while further spin is silently rejected;
 - admin tokens have no TTL and older generated tokens are not centrally revoked;
 - all runtime state is lost on backend restart;
 - wildcard CORS and the default admin password are development-only security;
 - raw Markdown HTML is unsafe for untrusted question packs;
 - frontend development uses `localhost:8000`, so it does not yet support browsers running on other machines;
 - video sharing/playback, media queue/next, duration extraction, and automatic ended state remain unimplemented;
-- frontend coverage is limited to pure playback/live-ops/sound-fade/inline-media helpers; there are no browser/component tests, Socket.IO integration tests, or lint/typecheck.
+- frontend coverage is limited to pure playback/live-ops/sound-fade/inline-media/game-over helpers; there are no browser/component tests, Socket.IO integration tests, or lint/typecheck.
 
 ## Repository artifacts
 
@@ -281,7 +280,7 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 ## Recommended continuation
 
 1. Publish the updated `web` branch containing the accepted task 0011 merge and handoff.
-2. Implement and verify active task 0012 with an explicit `GAME_OVER` transition and final screen.
+2. Publish task 0012, confirm GitHub Actions, and run the focused two-browser game-over smoke.
 3. Continue with intro after game completion; keep authorization/security and persistence as mandatory gates before public deployment.
 
 ## Resume checklist
