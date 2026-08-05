@@ -64,6 +64,7 @@ def test_spin_skips_used_sectors_across_wrap_and_completes_normal_round():
     assert started.playing_sector == 1
     assert started.spin_id == 1
     assert started.clear_media_tokens is True
+    assert started.start_sound_output is True
     assert state["wheel"]["is_spinning"] is True
 
     completed = transition_complete_spin(state, spin_id=started.spin_id)

@@ -1,19 +1,18 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-05
-- Completed task: `docs/tasks/0008-live-ops-recovery.md`
-- Accepted implementation head: `7a1ee91` (`Add live ops recovery controls`)
-- Status: implementation, local/remote task verification, focused browser acceptance, and local integration into `web` are complete. Publication of the updated `web` is pending.
+- Active task: `docs/tasks/0009-sound-fade.md`
+- Branch: `task/sound-fade`
+- Status: implementation and full local verification complete; publication, CI, and browser acceptance pending.
 
 ## Repository checkpoint
 
-- Active branch: `web`.
+- Base branch: `web`, synchronized with `origin/web` at `ad10ac8` before task work.
 - Live Ops merge commit: `1708f1d` (`Merge live ops recovery task`).
 - The task closure commit `8d104f4` and implementation commit `7a1ee91` are both reachable from local `web`.
 - Live Ops implementation commit `7a1ee91` is published on `origin/task/live-ops-recovery` and accepted.
 - Media/audio merge commit: `ae484f9` (`Merge managed audio media task`).
-- At this snapshot local `web` is ahead of `origin/web` at `9875380`; publish it with `git push origin web` from an authenticated shell.
-- Pushing closure commit `8d104f4` to the task branch is optional because it is already reachable from `web`. After `web` is published, the merged task branch may be deleted locally and remotely.
+- The previous publication checkpoint is resolved: `origin/web` contains the Live Ops merge and handoff.
 
 ## Product decisions
 
@@ -25,21 +24,34 @@
 
 ## Verified baseline
 
-- Backend: 101 tests pass with warnings treated as errors.
+- Backend: 113 tests pass with warnings treated as errors.
   - 47 question parser tests;
+  - 5 synchronized sound-control tests;
   - 9 live-ops recovery tests;
   - 5 media identity/playback tests;
   - 5 state helper tests;
   - 3 wheel-sector/spin-selection tests;
   - 14 pure transition tests;
-  - 9 handler concurrency/session/media/live-ops tests;
+  - 16 handler concurrency/session/media/live-ops/sound-control tests;
   - 9 pack-validator CLI, sector-directory, and media-path tests.
-- Frontend: clean install, 8 pure playback/live-ops helper assertions, full audit with zero vulnerabilities, and production build succeed.
+- Frontend: clean install, 13 pure playback/live-ops/sound-fade helper assertions, full audit with zero vulnerabilities, and the production build pass.
 - Backend startup loads the sample pack with all 13 questions and reaches application startup completion.
 - `docker compose config --quiet` succeeds without warnings.
-- Both development images build. Python 3.14 passes `pip check` and all 101 backend tests; Node 24 passes all 8 frontend assertions and the production build.
+- Both development images build. Python 3.14 passes `pip check` and all 113 backend tests; Node 24 passes all 13 frontend assertions and the production build.
 
-All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007 and 0008.
+All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007 and 0008. Task 0009 has not yet been published.
+
+## Active task: synchronized sound fade
+
+Implemented locally:
+
+- a reconnect-aware `settings_update.sound_control` snapshot with `normal`, `fading`, and `stopped` modes;
+- generation guards preventing sleeping Fade completion from stopping later effect, Silence, spin, media playback, or repeated Fade commands;
+- smooth repeated Fade from the current level and a persistent stopped mode for reconnect;
+- one frontend multiplier shared by managed audio, effects, and the wheel's existing intrinsic fade;
+- a `Fade 3s` button beside Silence in Live Ops and authoritative shared-audio stop at completion.
+
+Verification: clean install/audit, 113 backend tests, 13 frontend assertions, production build, Compose validation, both image builds, Python 3.14 dependency/tests, and Node 24 tests/build pass.
 
 ## Completed task: live-ops recovery
 
@@ -206,8 +218,7 @@ Additional known gaps:
 - raw Markdown HTML is unsafe for untrusted question packs;
 - frontend development uses `localhost:8000`, so it does not yet support browsers running on other machines;
 - video sharing/playback, media queue/next, duration extraction, automatic ended state, and inline image previews remain unimplemented;
-- live ops has no server-synchronized three-second fade action next to `Silence`;
-- frontend coverage is limited to pure playback/live-ops helpers; there are no browser/component tests, Socket.IO integration tests, or lint/typecheck.
+- frontend coverage is limited to pure playback/live-ops/sound-fade helpers; there are no browser/component tests, Socket.IO integration tests, or lint/typecheck.
 
 ## Repository artifacts
 
@@ -219,11 +230,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish the updated local `web` with `git push origin web`; there is no unfinished Live Ops implementation.
-2. Start the next task from the updated `web` on a new task branch.
-3. The next agreed sound task is roadmap item 17: `Fade 3s` across shared audio, effects, and the wheel loop.
-4. Alternative product slices are roadmap item 8 (video plus media queue) and item 16 (inline image previews).
-5. Keep authorization/security and persistence as mandatory gates before public deployment.
+1. Publish `task/sound-fade`, confirm GitHub Actions, and run the focused two-browser sound smoke.
+2. Close and integrate task 0009 into `web` only after acceptance.
+3. Keep authorization/security and persistence as mandatory gates before public deployment.
 
 ## Resume checklist
 
@@ -236,7 +245,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. completed tasks 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
+4. active task 0009, then completed tasks 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:

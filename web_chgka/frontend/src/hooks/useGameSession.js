@@ -6,7 +6,7 @@ const PLAYER_TOKEN_KEY = 'chgka_player_token';
 
 export function useGameSession() {
   const [gameState, setGameState] = useState(null);
-  const [gameSettings, setGameSettings] = useState({ volume: 1.0 });
+  const [gameSettings, setGameSettings] = useState({ volume: 1.0, sound_control: null });
   const [players, setPlayers] = useState([]);
   const [myRole, setMyRole] = useState('player');
   const [myName, setMyName] = useState('');
@@ -69,7 +69,14 @@ export function useGameSession() {
 
     function onSettingsUpdate(newSettings) {
       if (newSettings) {
-        setGameSettings((current) => ({ ...current, ...newSettings }));
+        const soundControl = newSettings.sound_control
+          ? { ...newSettings.sound_control, received_at_ms: Date.now() }
+          : undefined;
+        setGameSettings((current) => ({
+          ...current,
+          ...newSettings,
+          ...(soundControl ? { sound_control: soundControl } : {}),
+        }));
       }
     }
 

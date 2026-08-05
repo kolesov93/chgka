@@ -16,7 +16,7 @@ const SOUNDS = {
   sector13: '/sounds/sector13.mp3',
 };
 
-export function useGameSound(gameState, globalVolume = 1.0) {
+export function useGameSound(gameState, globalVolume = 1.0, soundFadeMultiplier = 1.0) {
   const volchokRef = useRef(new Audio(SOUNDS.volchok));
   const fadeIntervalRef = useRef(null);
   const startFadeTimeoutRef = useRef(null);
@@ -26,9 +26,11 @@ export function useGameSound(gameState, globalVolume = 1.0) {
   
   // Вместо локального стейта используем ref для актуального значения
   const masterVolumeRef = useRef(globalVolume);
+  const soundFadeLevelRef = useRef(soundFadeMultiplier);
 
   useEffect(() => {
       masterVolumeRef.current = globalVolume;
+      soundFadeLevelRef.current = soundFadeMultiplier;
       
       activeEffectsRef.current.forEach(audio => {
           if (!audio.paused) applyVolume(audio, false);
@@ -38,15 +40,17 @@ export function useGameSound(gameState, globalVolume = 1.0) {
           const isFading = !!fadeIntervalRef.current;
           applyVolume(volchokRef.current, isFading);
       }
-  }, [globalVolume]);
+  }, [globalVolume, soundFadeMultiplier]);
 
   // Применяем громкость к конкретному аудио с учетом его типа
   const applyVolume = (audio, isFadeActive = false) => {
-      if (isFadeActive) {
-          audio.volume = fadeLevelRef.current * masterVolumeRef.current;
-      } else {
-          audio.volume = masterVolumeRef.current;
-      }
+      const wheelFadeLevel = isFadeActive ? fadeLevelRef.current : 1.0;
+      const effectiveVolume = (
+        wheelFadeLevel
+        * soundFadeLevelRef.current
+        * masterVolumeRef.current
+      );
+      audio.volume = Math.max(0, Math.min(1, effectiveVolume));
   };
 
   // 1. Реакция на изменение Master Volume (удаляем старый эффект)
