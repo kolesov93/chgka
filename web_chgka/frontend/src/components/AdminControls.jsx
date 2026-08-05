@@ -1,4 +1,5 @@
 import { GameLog } from './GameLog';
+import { LiveOpsPanel } from './LiveOpsPanel';
 import { socket } from '../socket';
 
 export function AdminControls({
@@ -8,6 +9,7 @@ export function AdminControls({
   discussionRemaining,
   onTenSeconds,
   stopAllSounds,
+  addNotification,
 }) {
   const usedQuestions = gameState?.used_questions || [];
   const phase = gameState?.phase || 'LOGIN';
@@ -36,11 +38,6 @@ export function AdminControls({
     if (confirm('Точно сбросить игру?')) socket.emit('admin_reset');
   };
 
-  const silence = () => {
-    socket.emit('admin_stop_sounds');
-    stopAllSounds();
-  };
-
   const signalTenSeconds = () => {
     onTenSeconds();
     socket.emit('admin_ten_seconds');
@@ -58,12 +55,6 @@ export function AdminControls({
         <div className="flex justify-between items-center border-b border-slate-700 pb-2">
           <span className="text-sm font-bold text-slate-400 uppercase">Admin Panel</span>
           <div className="flex gap-2">
-            <button
-              onClick={silence}
-              className="text-[10px] bg-red-900 hover:bg-red-800 text-white py-1 px-2 rounded font-bold uppercase tracking-wider"
-            >
-              Silence
-            </button>
             <button
               onClick={resetGame}
               className="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 py-1 px-2 rounded font-bold uppercase tracking-wider"
@@ -278,6 +269,14 @@ export function AdminControls({
               ))
             )}
           </div>
+        </div>
+
+        <div className="pt-2 border-t border-slate-700">
+          <LiveOpsPanel
+            gameState={gameState}
+            stopAllSounds={stopAllSounds}
+            addNotification={addNotification}
+          />
         </div>
 
         <div className="pt-2 border-t border-slate-700">
