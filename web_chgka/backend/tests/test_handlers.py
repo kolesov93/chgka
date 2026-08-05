@@ -8,6 +8,8 @@ from questions import parse_question_pack
 from sound_control import begin_fade, create_sound_control_state
 from state import (
     PHASE_DISCUSSION,
+    PHASE_GAME_OVER,
+    PHASE_POST_ROUND,
     PHASE_PRE_ROUND,
     PHASE_QUESTION_READING,
     PHASE_TEAM_ANSWER,
@@ -75,6 +77,46 @@ def test_concurrent_score_handlers_award_only_one_point(monkeypatch):
     assert any(event == "admin_notification" for event, _, _ in fake_sio.events)
 
 
+def test_end_round_at_six_broadcasts_final_state_and_sound(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_POST_ROUND)
+    state["game"]["round"] = {"kind": "normal", "sector": 6}
+    state["game"]["score"] = {"znatoki": 6, "tv": 4}
+    media_tokens = {"old": {"expires_at": 999.0}}
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", None)
+    monkeypatch.setattr(main, "media_tokens", media_tokens)
+    monkeypatch.setattr(
+        main,
+        "players_list",
+        [{"sid": "admin", "role": "admin", "online": True}],
+    )
+
+    asyncio.run(main.admin_end_round("admin"))
+
+    assert state["game"]["phase"] == PHASE_GAME_OVER
+    assert media_tokens == {}
+    event_names = [event for event, _, _ in fake_sio.events]
+    stop_index = event_names.index("stop_sound")
+    final_index = next(
+        index
+        for index, (event, data, _kwargs) in enumerate(fake_sio.events)
+        if event == "play_sound" and data == {"sound": "final"}
+    )
+    state_index = next(
+        index
+        for index, (event, data, _kwargs) in enumerate(fake_sio.events)
+        if event == "state_update" and data["phase"] == PHASE_GAME_OVER
+    )
+    assert stop_index < final_index < state_index
+    assert any(
+        event == "admin_question" and data is None
+        for event, data, _kwargs in fake_sio.events
+    )
+
+
 def test_reset_during_spin_keeps_reset_state(monkeypatch):
     fake_sio = FakeSio(yield_on_emit=False)
     state = create_initial_app_state(
@@ -96,6 +138,7 @@ def test_reset_during_spin_keeps_reset_state(monkeypatch):
     assert state["game"]["phase"] == PHASE_PRE_ROUND
     assert state["game"]["used_questions"] == []
     assert state["wheel"]["is_spinning"] is False
+    assert any(event == "stop_sound" for event, _, _ in fake_sio.events)
 
 
 def test_pending_player_stays_pending_after_restore(monkeypatch):

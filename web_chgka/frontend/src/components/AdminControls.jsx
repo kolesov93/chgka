@@ -18,12 +18,14 @@ export function AdminControls({
   const isDiscussion = phase === 'DISCUSSION';
   const isTeamAnswer = phase === 'TEAM_ANSWER';
   const isPostRound = phase === 'POST_ROUND';
+  const isGameOver = phase === 'GAME_OVER';
   const round = gameState?.round || null;
   const roundKind = round?.kind || 'normal';
   const isBlitzRound = roundKind === 'blitz' || roundKind === 'superblitz';
   const partIndex = typeof round?.part_index === 'number' ? round.part_index : null;
   const partLabel = isBlitzRound && partIndex !== null ? `${partIndex + 1}/3` : null;
   const blitzHasNextPart = isBlitzRound && round?.advance_next_part === true;
+  const hasWinner = (gameState?.score?.znatoki ?? 0) >= 6 || (gameState?.score?.tv ?? 0) >= 6;
   const regularPlayers = players.filter((player) => player.role !== 'admin');
   const approvedPlayerCount = regularPlayers.filter((player) => !player.pending).length;
   const pendingPlayerCount = regularPlayers.filter((player) => player.pending).length;
@@ -35,7 +37,10 @@ export function AdminControls({
   };
 
   const resetGame = () => {
-    if (confirm('Точно сбросить игру?')) socket.emit('admin_reset');
+    const message = isGameOver
+      ? 'Начать новую игру? Счёт и сыгранные сектора будут сброшены.'
+      : 'Точно сбросить игру?';
+    if (confirm(message)) socket.emit('admin_reset');
   };
 
   const signalTenSeconds = () => {
@@ -68,12 +73,13 @@ export function AdminControls({
               onClick={resetGame}
               className="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 py-1 px-2 rounded font-bold uppercase tracking-wider"
             >
-              Reset
+              {isGameOver ? 'Новая игра' : 'Reset'}
             </button>
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 border border-slate-700 p-3 rounded bg-slate-900/30">
+        {!isGameOver && (
+          <div className="flex flex-col gap-3 border border-slate-700 p-3 rounded bg-slate-900/30">
           <div className="text-xs text-yellow-600 uppercase font-bold tracking-widest text-center">
             Управление Волчком
           </div>
@@ -110,7 +116,8 @@ export function AdminControls({
               );
             })}
           </div>
-        </div>
+          </div>
+        )}
 
         <div className="border border-slate-700 p-3 rounded bg-slate-900/30">
           <div className="w-full">
@@ -184,14 +191,27 @@ export function AdminControls({
             {isPostRound && (
               <button
                 onClick={() => socket.emit('admin_end_round')}
-                className="w-full bg-emerald-700 hover:bg-emerald-600 text-white py-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-xs"
+                className={`w-full text-white py-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-xs ${
+                  hasWinner
+                    ? 'bg-yellow-700 hover:bg-yellow-600'
+                    : 'bg-emerald-700 hover:bg-emerald-600'
+                }`}
               >
-                {blitzHasNextPart ? 'Следующая часть' : 'Завершить раунд'}
+                {hasWinner
+                  ? 'Завершить игру'
+                  : blitzHasNextPart
+                    ? 'Следующая часть'
+                    : 'Завершить раунд'}
               </button>
             )}
             {isPreRound && (
               <div className="text-xs text-slate-500 font-bold uppercase tracking-widest">
                 Фаза: ожидание вращения
+              </div>
+            )}
+            {isGameOver && (
+              <div className="rounded border border-yellow-800/60 bg-yellow-950/20 px-3 py-3 text-center text-xs font-bold uppercase tracking-widest text-yellow-300">
+                Игра завершена
               </div>
             )}
           </div>

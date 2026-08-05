@@ -4,6 +4,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { WaitingRoom } from './components/WaitingRoom';
 import { AdminControls } from './components/AdminControls';
 import { AdminQuestionPanel } from './components/AdminQuestionPanel';
+import { FinalScreen } from './components/FinalScreen';
 import { NotificationsPanel } from './components/NotificationsPanel';
 import { SharedMediaRenderer } from './components/SharedMediaRenderer';
 import { UserHeader } from './components/UserHeader';
@@ -45,6 +46,7 @@ function App() {
   const isAdmin = myRole === 'admin';
   const isPreRound = phase === 'PRE_ROUND';
   const isDiscussion = phase === 'DISCUSSION';
+  const isGameOver = phase === 'GAME_OVER';
   const round = gameState?.round || null;
   const showTableForAdmin = isPreRound || !!gameState?.is_spinning;
   const sharedMedia = gameState?.shared_media || null;
@@ -121,7 +123,11 @@ function App() {
 
         <ScoreBoard score={gameState?.score} />
 
-        {isAdmin && !showTableForAdmin ? (
+        {isGameOver ? (
+          <div className="w-full flex justify-center mb-4">
+            <FinalScreen score={gameState?.score} />
+          </div>
+        ) : isAdmin && !showTableForAdmin ? (
           <div className="w-full flex justify-center mb-4">
             <div className="w-full">
               <AdminQuestionPanel

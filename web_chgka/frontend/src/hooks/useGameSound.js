@@ -14,6 +14,7 @@ const SOUNDS = {
   no1: '/sounds/no1.mp3',
   no2: '/sounds/no2.mp3',
   sector13: '/sounds/sector13.mp3',
+  final: '/sounds/final.mp3',
 };
 
 export function useGameSound(gameState, globalVolume = 1.0, soundFadeMultiplier = 1.0) {

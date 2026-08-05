@@ -12,6 +12,7 @@ from state import (
     AppState,
     GamePhase,
     PHASE_DISCUSSION,
+    PHASE_GAME_OVER,
     PHASE_LOGIN,
     PHASE_POST_ROUND,
     PHASE_PRE_ROUND,
@@ -23,6 +24,7 @@ from state import (
 
 SECTORS_COUNT = 13
 BLITZ_PARTS = 3
+WINNING_SCORE = 6
 
 
 class TransitionError(ValueError):
@@ -58,6 +60,22 @@ def _require_phase(state: AppState, expected: GamePhase) -> None:
         )
 
 
+def _game_winner(state: AppState) -> Optional[str]:
+    score = state["game"]["score"]
+    znatoki_won = score["znatoki"] >= WINNING_SCORE
+    tv_won = score["tv"] >= WINNING_SCORE
+    if znatoki_won and tv_won:
+        raise TransitionError(
+            "invalid_score",
+            "Обе стороны не могут одновременно иметь победный счёт",
+        )
+    if znatoki_won:
+        return "znatoki"
+    if tv_won:
+        return "tv"
+    return None
+
+
 def transition_start_game(state: AppState) -> TransitionEffects:
     _require_phase(state, PHASE_LOGIN)
     state["game"]["phase"] = PHASE_PRE_ROUND
@@ -68,8 +86,14 @@ def validate_spin_start(state: AppState) -> None:
     _require_phase(state, PHASE_PRE_ROUND)
     if state["wheel"]["is_spinning"]:
         raise TransitionError("spinning", "Волчок уже вращается")
-    if state["game"]["score"]["znatoki"] >= 6 or state["game"]["score"]["tv"] >= 6:
-        raise TransitionError("game_finished", "Одна из команд уже набрала 6 очков")
+    if (
+        state["game"]["score"]["znatoki"] >= WINNING_SCORE
+        or state["game"]["score"]["tv"] >= WINNING_SCORE
+    ):
+        raise TransitionError(
+            "game_finished",
+            f"Одна из команд уже набрала {WINNING_SCORE} очков",
+        )
     if len(set(state["game"]["used_questions"])) >= SECTORS_COUNT:
         raise TransitionError("no_questions", "Все секторы уже сыграны")
 
@@ -202,6 +226,8 @@ def transition_score(
     incorrect_sound: str,
 ) -> TransitionEffects:
     _require_phase(state, PHASE_TEAM_ANSWER)
+    if _game_winner(state) is not None:
+        raise TransitionError("game_finished", "Игра уже достигла победного счёта")
     if winner not in ("znatoki", "tv"):
         raise TransitionError("invalid_winner", f"Некорректный победитель: {winner}")
 
@@ -265,6 +291,29 @@ def transition_end_round(state: AppState, *, gong_sound: str) -> TransitionEffec
     _require_phase(state, PHASE_POST_ROUND)
     round_ctx = state["game"]["round"] or {}
     kind = round_ctx.get("kind", "normal")
+    winner = _game_winner(state)
+    if winner is not None:
+        score = state["game"]["score"]
+        winner_label = "Знатоков" if winner == "znatoki" else "Телезрителей"
+        state["game"]["round"] = None
+        state["game"]["phase"] = PHASE_GAME_OVER
+        state["presentation"]["shared_media"] = None
+        state["timer"]["discussion_deadline_ms"] = None
+        state["wheel"]["target_angle"] = None
+        state["wheel"]["playing_sector"] = None
+        state["wheel"]["spin_duration"] = 0
+        state["wheel"]["is_spinning"] = False
+        return TransitionEffects(
+            logs=(
+                f"Игра завершена. Победа {winner_label}: "
+                f"{score['znatoki']}:{score['tv']}",
+            ),
+            sounds=("final",),
+            clear_media_tokens=True,
+            clear_admin_question=True,
+            stop_sounds=True,
+        )
+
     advances_blitz = (
         kind in ("blitz", "superblitz")
         and round_ctx.get("advance_next_part") is True
@@ -304,4 +353,6 @@ def transition_reset(state: AppState) -> TransitionEffects:
     return TransitionEffects(
         logs=("Игра сброшена",),
         clear_media_tokens=True,
+        clear_admin_question=True,
+        stop_sounds=True,
     )

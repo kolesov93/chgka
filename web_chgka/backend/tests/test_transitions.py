@@ -2,6 +2,7 @@ import pytest
 
 from state import (
     PHASE_DISCUSSION,
+    PHASE_GAME_OVER,
     PHASE_LOGIN,
     PHASE_POST_ROUND,
     PHASE_PRE_ROUND,
@@ -110,7 +111,7 @@ def test_reset_invalidates_pending_spin_completion():
         duration=5.0,
     )
 
-    transition_reset(state)
+    effects = transition_reset(state)
 
     assert state["game"]["phase"] == PHASE_PRE_ROUND
     assert state["wheel"]["spin_id"] > started.spin_id
@@ -119,6 +120,8 @@ def test_reset_invalidates_pending_spin_completion():
     assert exc_info.value.code == "stale_spin"
     assert state["game"]["phase"] == PHASE_PRE_ROUND
     assert state["game"]["used_questions"] == []
+    assert effects.stop_sounds is True
+    assert effects.clear_admin_question is True
 
 
 def test_spin_rejects_when_all_sectors_are_used_without_mutation():
@@ -187,10 +190,15 @@ def test_normal_score_is_atomic_and_second_score_is_rejected():
     assert state["game"]["score"] == {"znatoki": 1, "tv": 0}
 
 
-def test_sixth_point_still_finishes_post_round_but_blocks_next_spin():
+def test_sixth_point_stays_in_post_round_until_explicit_final_action():
     state = create_initial_app_state(phase=PHASE_TEAM_ANSWER)
     state["game"]["round"] = {"kind": "normal", "sector": 6}
     state["game"]["score"]["znatoki"] = 5
+    state["presentation"]["shared_media"] = _shared_image()
+    state["timer"]["discussion_deadline_ms"] = 123
+    state["wheel"]["target_angle"] = 42.0
+    state["wheel"]["playing_sector"] = 6
+    state["wheel"]["spin_duration"] = 5.0
 
     transition_score(
         state,
@@ -201,8 +209,21 @@ def test_sixth_point_still_finishes_post_round_but_blocks_next_spin():
 
     assert state["game"]["score"]["znatoki"] == 6
     assert state["game"]["phase"] == PHASE_POST_ROUND
-    transition_end_round(state, gong_sound="gong1")
-    assert state["game"]["phase"] == PHASE_PRE_ROUND
+    effects = transition_end_round(state, gong_sound="gong1")
+
+    assert state["game"]["phase"] == PHASE_GAME_OVER
+    assert state["game"]["round"] is None
+    assert state["presentation"]["shared_media"] is None
+    assert state["timer"]["discussion_deadline_ms"] is None
+    assert state["wheel"]["target_angle"] is None
+    assert state["wheel"]["playing_sector"] is None
+    assert state["wheel"]["spin_duration"] == 0
+    assert effects.sounds == ("final",)
+    assert effects.stop_sounds is True
+    assert effects.clear_media_tokens is True
+    assert effects.clear_admin_question is True
+    assert "Победа Знатоков: 6:0" in effects.logs[0]
+
     with pytest.raises(TransitionError) as exc_info:
         transition_start_spin(
             state,
@@ -210,8 +231,72 @@ def test_sixth_point_still_finishes_post_round_but_blocks_next_spin():
             raw_sector=2,
             duration=5.0,
         )
-    assert exc_info.value.code == "game_finished"
+    assert exc_info.value.code == "bad_phase"
     assert state["game"]["score"]["znatoki"] == 6
+
+
+def test_pre_round_score_guard_still_blocks_spin_at_six_points():
+    state = create_initial_app_state(phase=PHASE_PRE_ROUND)
+    state["game"]["score"]["tv"] = 6
+
+    with pytest.raises(TransitionError) as exc_info:
+        transition_start_spin(
+            state,
+            raw_angle=20.0,
+            raw_sector=2,
+            duration=5.0,
+        )
+
+    assert exc_info.value.code == "game_finished"
+
+
+def test_scoring_rejects_recovery_state_that_already_has_a_winner():
+    state = create_initial_app_state(phase=PHASE_TEAM_ANSWER)
+    state["game"]["round"] = {"kind": "normal", "sector": 2}
+    state["game"]["score"] = {"znatoki": 2, "tv": 6}
+
+    with pytest.raises(TransitionError) as exc_info:
+        transition_score(
+            state,
+            winner="znatoki",
+            correct_sound="yes1",
+            incorrect_sound="no1",
+        )
+
+    assert exc_info.value.code == "game_finished"
+    assert state["game"]["score"] == {"znatoki": 2, "tv": 6}
+    assert state["game"]["phase"] == PHASE_TEAM_ANSWER
+
+
+def test_tv_win_and_pending_blitz_advance_finalize_instead_of_advancing():
+    state = create_initial_app_state(phase=PHASE_POST_ROUND)
+    state["game"]["round"] = {
+        "kind": "blitz",
+        "sector": 4,
+        "part_index": 0,
+        "advance_next_part": True,
+    }
+    state["game"]["score"]["tv"] = 6
+
+    effects = transition_end_round(state, gong_sound="gong1")
+
+    assert state["game"]["phase"] == PHASE_GAME_OVER
+    assert state["game"]["round"] is None
+    assert effects.sounds == ("final",)
+    assert "Победа Телезрителей: 0:6" in effects.logs[0]
+
+
+def test_ambiguous_recovery_score_must_be_fixed_before_finalization():
+    state = create_initial_app_state(phase=PHASE_POST_ROUND)
+    state["game"]["round"] = {"kind": "normal", "sector": 6}
+    state["game"]["score"] = {"znatoki": 6, "tv": 6}
+
+    with pytest.raises(TransitionError) as exc_info:
+        transition_end_round(state, gong_sound="gong1")
+
+    assert exc_info.value.code == "invalid_score"
+    assert state["game"]["phase"] == PHASE_POST_ROUND
+    assert state["game"]["round"] == {"kind": "normal", "sector": 6}
 
 
 def test_blitz_correct_intermediate_answer_advances_after_post_round():
