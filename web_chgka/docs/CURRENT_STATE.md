@@ -3,15 +3,17 @@
 - Snapshot date: 2026-08-05
 - Completed task: `docs/tasks/0008-live-ops-recovery.md`
 - Accepted implementation head: `7a1ee91` (`Add live ops recovery controls`)
-- Status: implementation, local/remote verification, and focused browser acceptance are complete; integration into `web` is the final repository step.
+- Status: implementation, local/remote task verification, focused browser acceptance, and local integration into `web` are complete. Publication of the updated `web` is pending.
 
 ## Repository checkpoint
 
-- Base branch: `web`, synchronized with `origin/web` at `9875380` before task work.
+- Active branch: `web`.
+- Live Ops merge commit: `1708f1d` (`Merge live ops recovery task`).
+- The task closure commit `8d104f4` and implementation commit `7a1ee91` are both reachable from local `web`.
 - Live Ops implementation commit `7a1ee91` is published on `origin/task/live-ops-recovery` and accepted.
 - Media/audio merge commit: `ae484f9` (`Merge managed audio media task`).
-- The task closure commit `64963f8` and implementation commit `8781f88` are both reachable from local `web`.
-- The previous publication checkpoint is resolved: `origin/web` contains the media/audio merge and handoff.
+- At this snapshot local `web` is ahead of `origin/web` at `9875380`; publish it with `git push origin web` from an authenticated shell.
+- Pushing closure commit `8d104f4` to the task branch is optional because it is already reachable from `web`. After `web` is published, the merged task branch may be deleted locally and remotely.
 
 ## Product decisions
 
@@ -217,8 +219,8 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Integrate the accepted task 0008 into `web` and publish the updated base branch.
-2. Start the next task from the updated `web`; there is no unfinished Live Ops implementation.
+1. Publish the updated local `web` with `git push origin web`; there is no unfinished Live Ops implementation.
+2. Start the next task from the updated `web` on a new task branch.
 3. The next agreed sound task is roadmap item 17: `Fade 3s` across shared audio, effects, and the wheel loop.
 4. Alternative product slices are roadmap item 8 (video plus media queue) and item 16 (inline image previews).
 5. Keep authorization/security and persistence as mandatory gates before public deployment.
