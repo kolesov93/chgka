@@ -2,8 +2,8 @@
 
 - Snapshot date: 2026-08-05
 - Latest completed task: `docs/tasks/0011-inline-image-previews.md`
-- Branch: `task/inline-image-previews`
-- Status: implementation, publication, CI, and browser acceptance complete; integration into `web` is the current handoff point.
+- Branch: `web`
+- Status: task 0011 is accepted and integrated locally; publishing the updated `web` branch is pending.
 
 ## Repository checkpoint
 
@@ -23,6 +23,9 @@
 - Director sound controls handoff commit: `c64d548` (`Record director sound controls handoff`).
 - `origin/web` contains the accepted director sound controls merge and handoff at `c64d548`.
 - Inline image previews commit `280f930` is published on `origin/task/inline-image-previews` and accepted.
+- Inline image previews closure commit: `2a8aeeb` (`Close inline image preview task`).
+- Inline image previews merge commit: `f8503e3` (`Merge inline image preview task`).
+- Local `web` contains the accepted merge and is ahead of `origin/web`; push is pending.
 
 ## Product decisions
 
@@ -265,7 +268,7 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Integrate accepted task 0011 into `web`.
+1. Publish the updated `web` branch containing the accepted task 0011 merge.
 2. Take roadmap item 12 in a separate branch and implement the explicit game-over transition and final screen.
 3. Continue with intro after game completion; keep authorization/security and persistence as mandatory gates before public deployment.
 
