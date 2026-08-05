@@ -147,19 +147,20 @@ class IntroState(TypedDict):
 
 
 class IntroAuthorState(TypedDict):
-    """Public metadata for one of the twelve author intro screens."""
+    """Public metadata for one author card on an intro screen."""
 
     sector: int
+    slot: int
     name: str
     city: Optional[str]
     has_photo: bool
 
 
 class PublicIntroState(IntroState):
-    """Intro progress plus current public author and serialization time."""
+    """Intro progress plus current public authors and serialization time."""
 
     server_now_ms: int
-    author: Optional[IntroAuthorState]
+    authors: list[IntroAuthorState]
 
 
 class PresentationState(TypedDict):
@@ -179,8 +180,8 @@ class PackUiState(TypedDict):
     # render normal/blitz/superblitz envelope icons.
     question_types: Optional[list[QuestionTypeValue]]
 
-    # Public author metadata for sectors 1..12. Photo paths stay in QuestionPack.
-    intro_authors: Optional[list[IntroAuthorState]]
+    # One author-card group per sector 1..12. Photo paths stay in QuestionPack.
+    intro_authors: Optional[list[list[IntroAuthorState]]]
 
 
 class PublicGameState(TypedDict):
@@ -217,7 +218,7 @@ def create_initial_app_state(
     *,
     phase: GamePhase = PHASE_LOGIN,
     question_types: Optional[list[QuestionTypeValue]] = None,
-    intro_authors: Optional[list[IntroAuthorState]] = None,
+    intro_authors: Optional[list[list[IntroAuthorState]]] = None,
 ) -> AppState:
     """Create a fresh app state with no runtime round/spin/media context."""
 
@@ -299,15 +300,15 @@ def public_game_state(
     if internal_intro is not None:
         slide_index = internal_intro["slide_index"]
         intro_authors = state["pack"]["intro_authors"] or []
-        author = (
+        authors = (
             intro_authors[slide_index - 1]
             if 1 <= slide_index <= 12 and len(intro_authors) >= slide_index
-            else None
+            else []
         )
         intro = {
             **internal_intro,
             "server_now_ms": timestamp_ms,
-            "author": author,
+            "authors": authors,
         }
     shared_media: Optional[PublicSharedMediaState] = None
     if internal_media is not None:

@@ -15,7 +15,7 @@ export function introSlideLabel(slideIndex) {
   if (slideIndex === 0) return 'Стартовый слайд';
   if (slideIndex === INTRO_LAST_SLIDE) return 'Финальный слайд';
   if (Number.isInteger(slideIndex) && slideIndex > 0 && slideIndex < INTRO_LAST_SLIDE) {
-    return `Автор ${slideIndex} из 12`;
+    return `Авторы сектора ${slideIndex} из 12`;
   }
   return 'Неизвестный слайд';
 }
@@ -26,9 +26,9 @@ export function introAuthorCaption(author) {
 }
 
 export function introNextStepLabel(slideIndex) {
-  if (slideIndex === 0) return 'Показать автора 1';
+  if (slideIndex === 0) return 'Показать авторов сектора 1';
   if (Number.isInteger(slideIndex) && slideIndex > 0 && slideIndex < 12) {
-    return `Показать автора ${slideIndex + 1}`;
+    return `Показать авторов сектора ${slideIndex + 1}`;
   }
   if (slideIndex === 12) return 'Показать финальный слайд';
   if (slideIndex === INTRO_LAST_SLIDE) return 'Перейти к игре';

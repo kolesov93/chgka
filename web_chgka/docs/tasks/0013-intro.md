@@ -18,14 +18,14 @@ Status: In progress
 
 - Добавить авторитетную фазу `INTRO`; `start_game` переводит `LOGIN -> INTRO` и показывает слайд `00` без autoplay. Ведущий отдельной кнопкой один раз запускает `meeting.mp3`, после чего начинается countdown.
 - Ведущий последовательно переключает `00 -> 01 -> … -> 13`; следующий шаг после `13` переводит игру в `PRE_ROUND`, где все видят обычное живое табло 0:0.
-- Все клиенты получают текущий slide index и metadata только соответствующего текущего автора из `state_update`; игроки видят общий слайд с именем/городом, но без речи и органов управления.
+- Все клиенты получают текущий slide index и metadata только соответствующих текущему сектору авторов из `state_update`; игроки видят общий слайд с именами/городами, но без речи и органов управления.
 - Ведущий видит текущий слайд, название следующего шага, оставшееся время трека и текст речи.
 - Клиент отправляет вместе с переключением ожидаемый slide index. Сервер отклоняет повторный/устаревший запрос, поэтому двойной клик не пропускает слайды.
 - При переходе из последнего слайда в `PRE_ROUND` intro-трек останавливается, если ещё играет.
 - Необязательный корневой `intro.md` question pack хранит Markdown речи. Backend валидирует UTF-8/непустое содержимое, преобразует его в HTML и включает только в admin-only `pack_info`.
 - Reset и normal phase guards продолжают быть серверными; reset из intro возвращает игру в `PRE_ROUND` согласно уже принятому контракту reset.
 - Live Ops содержит отдельный полный «Сброс до интро»: он обнуляет счёт и сыгранные сектора, очищает раунд/таймер/медиа/возможное вращение, останавливает звук и возвращает слайд `00` с незапущенной музыкой. Обычный Reset по-прежнему ведёт в `PRE_ROUND`.
-- Каждый вопрос и каждая часть блица имеют обязательный `author`, optional `city` и optional `author_photo`. Intro-слайды 1–12 публично показывают автора сектора, город в скобках и pack-backed фото либо встроенный fallback; сектор 13 остаётся особым статичным слайдом.
+- Каждый вопрос и каждая часть блица имеют обязательный `author`, optional `city` и optional `author_photo`. Intro-слайды 1–12 публично показывают одну карточку верхнего normal-вопроса либо три карточки частей блица/суперблица в один ряд; каждая карточка независимо использует pack-backed фото или fallback. Сектор 13 остаётся особым статичным слайдом.
 
 ## Implementation decisions
 
@@ -34,8 +34,8 @@ Status: In progress
 - Зафиксировать длительность временного `meeting.mp3` как backend-константу текущего asset (`87_757 ms`).
 - Использовать `pack_info`, потому что это уже admin-only канал metadata; отдельное публичное событие для речи не создавать.
 - После слайда `13` рендерить реальный `ScoreBoard`/`GameTable`, а не временный файл `14_table00.png`.
-- Хранить в `AppState.pack` только публичные имя/город/наличие фото для первых 12 секторов; абсолютный путь остаётся внутри parsed `QuestionPack`.
-- Выдавать pack-backed фото через отдельный endpoint только во время соответствующего текущего intro-слайда, с `no-store`; при 404 frontend переключается на статичный fallback.
+- Хранить в `AppState.pack` упорядоченные группы публичных карточек с sector/slot/именем/городом/наличием фото для первых 12 секторов; абсолютные пути остаются внутри parsed `QuestionPack`.
+- Выдавать pack-backed фото карточки через отдельный endpoint только во время соответствующего текущего intro-слайда, с `no-store`; при 404 frontend независимо переключает эту карточку на статичный fallback.
 
 ## Out of scope
 
@@ -49,7 +49,7 @@ Status: In progress
 - Parser/CLI tests: обязательные авторы, optional city/photo, containment/format фото, pack без `intro.md`, корректный Markdown, пустой/не-UTF-8 файл, admin-only startup payload.
 - State/transition tests: `LOGIN -> INTRO`, time snapshot, последовательное переключение, stale click rejection, последний слайд -> `PRE_ROUND`, cleanup/sound effects, reset.
 - Handler test: silent start, guarded music start, slide advance emits, authorization boundary and repeated action behavior.
-- Frontend pure tests: static/dynamic asset boundary, fallback mapping, next-step labels and reconnect-aware countdown.
+- Frontend pure tests: static/dynamic asset boundary, fallback mapping, sector-oriented labels and reconnect-aware countdown; production build validates three-card JSX.
 - Full backend tests with warnings-as-errors, frontend tests/build and Compose validation.
 - Two-browser smoke: lobby -> silent intro, manual shared music start, player/admin parity, speech privacy, all slides, music countdown/stop and transition to table 0:0.
 
@@ -63,7 +63,8 @@ Implemented locally:
 - admin-only optional `intro.md` speech with UTF-8, containment, empty-file and media validation;
 - dedicated player/admin intro screen and direct transition from the final slide to the real table at 0:0.
 - dedicated Live Ops full reset to silent slide `00`, including progress cleanup and audio stop.
-- required pack authors plus optional city/direct author photo, public current-author metadata, context-bound photo delivery, and a generated static fallback silhouette.
+- required pack authors plus optional city/direct author photo, one normal or three blitz-part public cards, context-bound per-slot photo delivery, and a generated static fallback silhouette.
+- restored twelve former intro photos into the sample pack, assigned the blitz/superblitz sector photos to their first parts, and stripped EXIF/GPS metadata after applying orientation.
 
 Passed locally:
 

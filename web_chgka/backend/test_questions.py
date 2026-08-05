@@ -29,6 +29,11 @@ class TestQuestionPackParsing:
         assert all(part.author for q in pack.questions for part in q.parts)
         assert pack.questions[0].city == "Москва"
         assert pack.questions[1].city is None
+        assert sum(
+            question.author_photo is not None
+            for sector in pack.questions
+            for question in [sector, *sector.parts]
+        ) == 12
         assert "Вступительное слово" in pack.intro_html
 
 

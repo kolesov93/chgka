@@ -1,6 +1,7 @@
 ---
 title: Литературный псевдоним
 author: Мария Кузнецова
+author_photo: author.jpg
 ---
 
 # Вопрос
@@ -20,4 +21,3 @@ author: Мария Кузнецова
 # Источник
 
 - Ron Powers, "Mark Twain: A Life"
-

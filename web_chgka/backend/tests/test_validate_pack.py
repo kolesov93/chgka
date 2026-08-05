@@ -46,7 +46,7 @@ def test_cli_prints_sample_pack_summary(capsys):
     assert captured.out == (
         f"VALID: {SAMPLE_DIR.resolve()}\n"
         "Questions: 13 (normal: 11, blitz: 1, superblitz: 1)\n"
-        "Authors: 13 (city: 2, photo: 0)\n"
+        "Authors: 19 (city: 2, photo: 12)\n"
         "Parts: 6\n"
         "Media: 9 (image: 5, audio: 2, video: 2)\n"
     )
@@ -139,18 +139,18 @@ def test_pack_requires_author_for_sector_and_blitz_part(tmp_path):
 
 def test_pack_parses_optional_city_and_author_photo(tmp_path):
     pack_path = _copy_sample_pack(tmp_path)
-    question_path = pack_path / "01" / "question.md"
+    question_path = pack_path / "13" / "question.md"
     question_path.write_text(
         question_path.read_text(encoding="utf-8").replace(
-            "city: Москва\n",
-            "city: Москва\nauthor_photo: author.jpg\n",
+            "author: Знатоки ЧГК\n",
+            "author: Знатоки ЧГК\ncity: Москва\nauthor_photo: author.jpg\n",
         ),
         encoding="utf-8",
     )
-    photo_path = pack_path / "01" / "author.jpg"
+    photo_path = pack_path / "13" / "author.jpg"
     photo_path.write_bytes(b"sample photo")
 
-    question = parse_question_pack(pack_path).get_by_sector(1)
+    question = parse_question_pack(pack_path).get_by_sector(13)
 
     assert question.city == "Москва"
     assert question.author_photo == photo_path.resolve()
@@ -169,8 +169,8 @@ def test_pack_rejects_invalid_author_photo_path(tmp_path, photo_value, message):
     question_path = pack_path / "01" / "question.md"
     question_path.write_text(
         question_path.read_text(encoding="utf-8").replace(
-            "city: Москва\n",
-            f"city: Москва\nauthor_photo: {photo_value}\n",
+            "author_photo: author.jpg\n",
+            f"author_photo: {photo_value}\n",
         ),
         encoding="utf-8",
     )
@@ -183,15 +183,9 @@ def test_pack_rejects_author_photo_symlink_escape(tmp_path):
     pack_path = _copy_sample_pack(tmp_path)
     outside_photo = tmp_path / "outside.jpg"
     outside_photo.write_bytes(b"outside")
-    question_path = pack_path / "01" / "question.md"
-    question_path.write_text(
-        question_path.read_text(encoding="utf-8").replace(
-            "city: Москва\n",
-            "city: Москва\nauthor_photo: author.jpg\n",
-        ),
-        encoding="utf-8",
-    )
-    (pack_path / "01" / "author.jpg").symlink_to(outside_photo)
+    author_photo = pack_path / "01" / "author.jpg"
+    author_photo.unlink()
+    author_photo.symlink_to(outside_photo)
 
     with pytest.raises(QuestionParseError, match="escapes"):
         parse_question_pack(pack_path)

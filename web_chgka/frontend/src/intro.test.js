@@ -7,6 +7,7 @@ import {
   introAuthorCaption,
   introNextStepLabel,
   introRemainingMs,
+  introSlideLabel,
   introSlideSource,
 } from './intro.js';
 
@@ -22,8 +23,9 @@ test('intro slide sources keep only the static boundary assets', () => {
 
 
 test('intro next step labels describe the exact host action', () => {
-  assert.equal(introNextStepLabel(0), 'Показать автора 1');
-  assert.equal(introNextStepLabel(7), 'Показать автора 8');
+  assert.equal(introSlideLabel(4), 'Авторы сектора 4 из 12');
+  assert.equal(introNextStepLabel(0), 'Показать авторов сектора 1');
+  assert.equal(introNextStepLabel(7), 'Показать авторов сектора 8');
   assert.equal(introNextStepLabel(12), 'Показать финальный слайд');
   assert.equal(introNextStepLabel(13), 'Перейти к игре');
 });

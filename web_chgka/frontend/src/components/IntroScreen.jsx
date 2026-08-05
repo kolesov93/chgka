@@ -12,19 +12,12 @@ import { introAuthorPhotoUrl, socket } from '../socket';
 
 export function IntroScreen({ intro, isAdmin = false, introHtml = null }) {
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const [failedPhotoSector, setFailedPhotoSector] = useState(null);
+  const [failedPhotoKeys, setFailedPhotoKeys] = useState([]);
   const slideIndex = intro?.slide_index;
-  const author = intro?.author || null;
+  const authors = Array.isArray(intro?.authors) ? intro.authors : [];
   const isAuthorSlide = Number.isInteger(slideIndex) && slideIndex >= 1 && slideIndex <= 12;
-  const usePackPhoto = (
-    isAuthorSlide
-    && author?.has_photo
-    && author.sector !== failedPhotoSector
-  );
-  const authorPhotoSource = usePackPhoto
-    ? introAuthorPhotoUrl(author.sector)
-    : INTRO_FALLBACK_AUTHOR_SOURCE;
-  const slideSource = introSlideSource(slideIndex) || (isAuthorSlide ? authorPhotoSource : null);
+  const slideSource = introSlideSource(slideIndex);
+  const hasMultipleAuthors = authors.length > 1;
 
   useEffect(() => {
     if (!isAdmin || !intro) return undefined;
@@ -34,31 +27,59 @@ export function IntroScreen({ intro, isAdmin = false, introHtml = null }) {
   }, [isAdmin, intro?.started_at_ms]);
 
   useEffect(() => {
-    setFailedPhotoSector(null);
+    setFailedPhotoKeys([]);
   }, [slideIndex]);
 
   const remaining = introRemainingMs(intro, nowMs);
   const musicStarted = Number.isFinite(intro?.started_at_ms);
-  const authorCaption = introAuthorCaption(author);
+  const markPhotoFailed = (photoKey) => {
+    setFailedPhotoKeys((current) => (
+      current.includes(photoKey) ? current : [...current, photoKey]
+    ));
+  };
 
   return (
     <div className="w-full flex flex-col gap-4">
       <div className="w-full rounded-xl border border-slate-700 bg-slate-950/40 p-3 shadow-2xl">
-        {slideSource ? (
+        {slideSource && (
           <img
             src={slideSource}
-            alt={author?.name || introSlideLabel(slideIndex)}
-            onError={isAuthorSlide ? () => setFailedPhotoSector(author?.sector ?? slideIndex) : undefined}
+            alt={introSlideLabel(slideIndex)}
             className="mx-auto max-h-[72vh] w-full rounded-lg object-contain"
           />
-        ) : (
-          <div className="flex min-h-72 items-center justify-center text-red-300">
-            Intro-слайд недоступен
+        )}
+        {isAuthorSlide && authors.length > 0 && (
+          <div className={hasMultipleAuthors ? 'grid grid-cols-3 gap-2 md:gap-4' : ''}>
+            {authors.map((author) => {
+              const photoKey = `${author.sector}:${author.slot}`;
+              const source = author.has_photo && !failedPhotoKeys.includes(photoKey)
+                ? introAuthorPhotoUrl(author.sector, author.slot)
+                : INTRO_FALLBACK_AUTHOR_SOURCE;
+              const caption = introAuthorCaption(author);
+
+              return (
+                <figure key={photoKey} className="min-w-0">
+                  <img
+                    src={source}
+                    alt={author.name}
+                    onError={() => markPhotoFailed(photoKey)}
+                    className={hasMultipleAuthors
+                      ? 'aspect-[4/3] max-h-[58vh] w-full rounded-lg object-contain'
+                      : 'mx-auto max-h-[72vh] w-full rounded-lg object-contain'}
+                  />
+                  {caption && (
+                    <figcaption className={`mt-3 rounded-lg bg-slate-900/80 px-2 py-3 text-center font-bold text-white ${hasMultipleAuthors ? 'text-sm md:text-xl' : 'text-xl md:text-2xl'}`}>
+                      {caption}
+                    </figcaption>
+                  )}
+                </figure>
+              );
+            })}
           </div>
         )}
-        {isAuthorSlide && authorCaption && (
-          <div className="mt-3 rounded-lg bg-slate-900/80 px-4 py-3 text-center text-xl font-bold text-white md:text-2xl">
-            {authorCaption}
+        {!slideSource && (!isAuthorSlide || authors.length === 0) && (
+          <div className="flex min-h-72 items-center justify-center text-red-300">
+            Intro-слайд недоступен
           </div>
         )}
       </div>

@@ -2,6 +2,7 @@
 title: Музыкальная загадка
 author: Андрей Козлов
 city: Казань
+author_photo: author.jpg
 ---
 
 # Вопрос

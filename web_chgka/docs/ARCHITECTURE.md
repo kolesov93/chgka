@@ -75,7 +75,7 @@ LOGIN -> INTRO -> PRE_ROUND -> QUESTION_READING -> DISCUSSION
                                                                `-> GAME_OVER
 ```
 
-`start_game` enters `INTRO` on static slide `00` without autoplay. A separate guarded host action records the start timestamp and broadcasts the one-shot `meeting.mp3`; until then the timeline is explicitly not started. Slides 1–12 use the corresponding sector's public author name, optional city, and pack-backed photo or static fallback; slide 13 is the existing special-sector graphic. The action after `13` stops intro sound and enters `PRE_ROUND`. Music and slide actions are independent, and repeated/concurrent requests cannot start the track twice or skip a slide. Reconnecting clients recover the current slide/author/countdown snapshot, but the one-shot audio is deliberately not replayed or seeked after reconnect.
+`start_game` enters `INTRO` on static slide `00` without autoplay. A separate guarded host action records the start timestamp and broadcasts the one-shot `meeting.mp3`; until then the timeline is explicitly not started. Slides 1–12 use pack-backed author cards: one top-level card for a normal question, or three part cards in one row for blitz/superblitz. Every card has its own optional city and pack photo or static fallback. Slide 13 is the existing special-sector graphic. The action after `13` stops intro sound and enters `PRE_ROUND`. Music and slide actions are independent, and repeated/concurrent requests cannot start the track twice or skip a slide. Reconnecting clients recover the current slide/authors/countdown snapshot, but the one-shot audio is deliberately not replayed or seeked after reconnect.
 
 Blitz and superblitz use the later game phases plus `round.part_index` and the temporary `advance_next_part` flag.
 
@@ -118,7 +118,7 @@ Markdown is converted to HTML on the backend. Media references become placeholde
 
 The parser recognizes images, audio, and video. Each Markdown occurrence receives an opaque `media_ref`, source section, and order. A file referenced in both question and answer therefore has two different references. Question HTML contains only the opaque reference; paths and inferred types are not trusted from the browser.
 
-Author photos are deliberately separate from managed question media. The flat intro snapshot exposes only the current sector's name, city, and `has_photo`; the filesystem path remains in `QuestionPack`. `GET /intro/author-photo/{sector}` serves only sectors 1–12, only while that exact author slide is current, and disables caching. Missing/failed photos use the static generated fallback. The special sector 13 never requests an author photo.
+Author photos are deliberately separate from managed question media. The flat intro snapshot exposes only the current sector's ordered author cards with sector, slot, name, city, and `has_photo`; filesystem paths remain in `QuestionPack`. `GET /intro/author-photo/{sector}/{slot}` serves only a card of sectors 1–12 while that exact sector slide is current and disables caching. Normal questions have slot 1; blitz variants map slots 1–3 to their nested parts. Missing/failed photos independently use the static generated fallback. The special sector 13 never requests an author photo.
 
 The managed image/audio flow is:
 

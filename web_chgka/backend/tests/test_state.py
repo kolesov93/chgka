@@ -21,15 +21,22 @@ def _shared_image():
 
 
 def _intro_authors():
-    return [
-        {
-            "sector": sector,
-            "name": f"Author {sector}",
-            "city": "Moscow" if sector == 1 else None,
-            "has_photo": sector == 4,
-        }
-        for sector in range(1, 13)
-    ]
+    groups = []
+    for sector in range(1, 13):
+        card_count = 3 if sector in (4, 7) else 1
+        groups.append(
+            [
+                {
+                    "sector": sector,
+                    "slot": slot,
+                    "name": f"Author {sector}.{slot}",
+                    "city": "Moscow" if sector == 1 else None,
+                    "has_photo": slot == 1,
+                }
+                for slot in range(1, card_count + 1)
+            ]
+        )
+    return groups
 
 
 def test_create_initial_app_state_defaults():
@@ -66,6 +73,7 @@ def test_create_initial_app_state_copies_pack_ui_metadata():
     assert state["pack"]["intro_authors"] == intro_authors
     assert state["pack"]["intro_authors"] is not intro_authors
     assert state["pack"]["intro_authors"][0] is not intro_authors[0]
+    assert state["pack"]["intro_authors"][0][0] is not intro_authors[0][0]
 
 
 def test_reset_app_state_clears_runtime_fields_and_preserves_pack_metadata():
@@ -183,14 +191,21 @@ def test_public_game_state_serializes_intro_timing_for_reconnect():
         "started_at_ms": 10_000,
         "duration_ms": 87_757,
         "server_now_ms": 13_750,
-        "author": {
-            "sector": 4,
-            "name": "Author 4",
-            "city": None,
-            "has_photo": True,
-        },
+        "authors": [
+            {
+                "sector": 4,
+                "slot": slot,
+                "name": f"Author 4.{slot}",
+                "city": None,
+                "has_photo": slot == 1,
+            }
+            for slot in range(1, 4)
+        ],
     }
     assert "server_now_ms" not in state["presentation"]["intro"]
+
+    state["presentation"]["intro"]["slide_index"] = 13
+    assert public_game_state(state, now_ms=14_000)["intro"]["authors"] == []
 
 
 def test_public_game_state_serializes_server_time_for_audio_reconnect():

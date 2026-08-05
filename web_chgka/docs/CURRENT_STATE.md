@@ -65,12 +65,13 @@ All three GitHub Actions jobs and the focused admin/player browser smoke passed 
 Implemented locally:
 
 - add the authoritative `INTRO` phase between lobby and the first `PRE_ROUND`;
-- enter intro silently, let the host start the existing meeting track once, and show static `00`, pack-backed authors 1–12, then special static `13`;
+- enter intro silently, let the host start the existing meeting track once, and show static `00`, pack-backed author cards for sectors 1–12, then special static `13`;
 - give the host current/next slide context, reconnect-aware remaining-track time, and guarded one-step navigation;
 - parse optional root `intro.md` speech and expose it only through admin-only `pack_info`;
 - transition after slide `13` to the real score/table view at 0:0 and stop any remaining intro sound.
 - offer a dedicated Live Ops full reset to intro that clears progress/runtime context, stops audio, and restores silent slide `00` plus the manual music button.
-- require author metadata across the pack, support optional city/direct author photos, show public name/city on author slides, and use a generated static silhouette when no pack photo is available.
+- require author metadata across the pack, support optional city/direct author photos, show one card for a normal sector and three part-author cards in one row for blitz/superblitz, and independently use a generated static silhouette where a pack photo is absent.
+- keep the twelve previous intro photos in the sample pack: normal-sector photos beside their questions, and the old sector 04/07 photos beside the first parts of the blitz/superblitz; EXIF/GPS metadata is removed.
 
 Verification: all 139 backend tests with warnings treated as errors, all 25 frontend tests, the production build, sample-pack CLI validation, and Compose configuration pass locally. Remote CI and focused two-browser smoke are pending.
 

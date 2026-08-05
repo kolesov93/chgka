@@ -1,6 +1,7 @@
 ---
 title: Кинематографическая загадка
 author: Анна Смирнова
+author_photo: author.jpg
 ---
 
 # Вопрос
@@ -24,4 +25,3 @@ author: Анна Смирнова
 # Источник
 
 - IMDb, Academy Awards Database
-

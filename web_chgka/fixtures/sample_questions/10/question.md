@@ -1,6 +1,7 @@
 ---
 title: Архитектурное чудо
 author: Павел Морозов
+author_photo: author.jpg
 ---
 
 # Вопрос
@@ -24,4 +25,3 @@ author: Павел Морозов
 # Источник
 
 - Sydney Opera House Trust, официальный сайт
-

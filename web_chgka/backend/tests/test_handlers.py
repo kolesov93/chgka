@@ -144,38 +144,37 @@ def test_intro_advance_requires_admin(monkeypatch):
 def test_intro_author_photo_is_pack_backed_and_current_slide_only(tmp_path, monkeypatch):
     pack_path = tmp_path / "pack"
     shutil.copytree(SAMPLE_PACK, pack_path)
-    question_path = pack_path / "01" / "question.md"
-    question_path.write_text(
-        question_path.read_text(encoding="utf-8").replace(
-            "city: Москва\n",
-            "city: Москва\nauthor_photo: author.jpg\n",
-        ),
-        encoding="utf-8",
-    )
-    photo_path = pack_path / "01" / "author.jpg"
-    photo_path.write_bytes(b"sample photo")
+    photo_path = pack_path / "04" / "01" / "author.jpg"
     pack = parse_question_pack(pack_path)
     state = create_initial_app_state(phase=PHASE_INTRO)
     state["presentation"]["intro"] = {
-        "slide_index": 1,
+        "slide_index": 4,
         "started_at_ms": None,
         "duration_ms": 87_757,
     }
     monkeypatch.setattr(main, "loaded_pack", pack)
     monkeypatch.setattr(main, "app_state", state)
 
-    response = asyncio.run(main.get_intro_author_photo(1))
+    response = asyncio.run(main.get_intro_author_photo(4, 1))
 
     assert Path(response.path) == photo_path.resolve()
     assert response.headers["cache-control"] == "no-store"
 
-    state["presentation"]["intro"]["slide_index"] = 2
     with pytest.raises(main.HTTPException) as error:
-        asyncio.run(main.get_intro_author_photo(1))
+        asyncio.run(main.get_intro_author_photo(4, 2))
     assert error.value.status_code == 404
 
     with pytest.raises(main.HTTPException) as error:
-        asyncio.run(main.get_intro_author_photo(13))
+        asyncio.run(main.get_intro_author_photo(4, 4))
+    assert error.value.status_code == 404
+
+    state["presentation"]["intro"]["slide_index"] = 2
+    with pytest.raises(main.HTTPException) as error:
+        asyncio.run(main.get_intro_author_photo(4, 1))
+    assert error.value.status_code == 404
+
+    with pytest.raises(main.HTTPException) as error:
+        asyncio.run(main.get_intro_author_photo(13, 1))
     assert error.value.status_code == 404
 
 
@@ -222,14 +221,27 @@ def test_startup_builds_public_intro_authors_from_pack(monkeypatch):
 
     authors = state["pack"]["intro_authors"]
     assert len(authors) == 12
-    assert authors[0] == {
-        "sector": 1,
-        "name": "Михаил Савченко",
-        "city": "Москва",
-        "has_photo": False,
-    }
-    assert authors[11]["name"] == "Алексей Громов"
-    assert all(author["sector"] != 13 for author in authors)
+    assert authors[0] == [
+        {
+            "sector": 1,
+            "slot": 1,
+            "name": "Михаил Савченко",
+            "city": "Москва",
+            "has_photo": True,
+        }
+    ]
+    assert authors[3] == [
+        {
+            "sector": 4,
+            "slot": slot,
+            "name": "Ольга Петрова",
+            "city": None,
+            "has_photo": slot == 1,
+        }
+        for slot in range(1, 4)
+    ]
+    assert authors[11][0]["name"] == "Алексей Громов"
+    assert all(card["sector"] != 13 for group in authors for card in group)
 
 
 def test_end_round_at_six_broadcasts_final_state_and_sound(monkeypatch):

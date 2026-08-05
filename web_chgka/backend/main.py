@@ -258,12 +258,19 @@ def _load_question_pack_on_startup() -> None:
 
     app_state["pack"]["question_types"] = types
     app_state["pack"]["intro_authors"] = [
-        {
-            "sector": sector,
-            "name": question.author,
-            "city": question.city,
-            "has_photo": question.author_photo is not None,
-        }
+        [
+            {
+                "sector": sector,
+                "slot": slot,
+                "name": author_question.author,
+                "city": author_question.city,
+                "has_photo": author_question.author_photo is not None,
+            }
+            for slot, author_question in enumerate(
+                question.parts or [question],
+                start=1,
+            )
+        ]
         for sector, question in enumerate(pack.questions[:12], start=1)
     ]
     loaded_pack = pack
@@ -502,8 +509,8 @@ async def get_media(media_id: str):
     return FileResponse(str(p))
 
 
-@fastapi_app.get("/intro/author-photo/{sector}")
-async def get_intro_author_photo(sector: int):
+@fastapi_app.get("/intro/author-photo/{sector}/{slot}")
+async def get_intro_author_photo(sector: int, slot: int):
     if loaded_pack is None or not 1 <= sector <= 12:
         raise HTTPException(status_code=404, detail="Author photo not found")
     intro = app_state["presentation"]["intro"]
@@ -512,7 +519,12 @@ async def get_intro_author_photo(sector: int):
     if intro["slide_index"] != sector:
         raise HTTPException(status_code=404, detail="Author photo not found")
 
-    photo_path = loaded_pack.get_by_sector(sector).author_photo
+    question = loaded_pack.get_by_sector(sector)
+    author_questions = question.parts or [question]
+    if not 1 <= slot <= len(author_questions):
+        raise HTTPException(status_code=404, detail="Author photo not found")
+
+    photo_path = author_questions[slot - 1].author_photo
     if photo_path is None or not photo_path.is_file():
         raise HTTPException(status_code=404, detail="Author photo not found")
     return FileResponse(

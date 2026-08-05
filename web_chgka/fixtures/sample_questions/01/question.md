@@ -2,6 +2,7 @@
 title: Загадка Эйнштейна
 author: Михаил Савченко
 city: Москва
+author_photo: author.jpg
 ---
 
 # Вопрос
