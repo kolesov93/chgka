@@ -1,7 +1,7 @@
 # 0010: Director sound controls
 
 Branch: `task/director-sound-controls`
-Status: In progress
+Status: Completed
 
 ## Goal
 
@@ -27,4 +27,7 @@ Passed locally:
 - `npm test`;
 - `npm run build`.
 
-Pending: GitHub Actions and the focused browser check.
+Remote verification and acceptance:
+
+- backend, frontend, and Compose GitHub Actions jobs passed on `2fda870`;
+- the focused browser check passed and the layout was accepted.
