@@ -18,7 +18,7 @@ const PHASE_LABELS = {
 
 const buttonClass = 'rounded px-2 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
 
-export function LiveOpsPanel({ gameState, stopAllSounds, addNotification }) {
+export function LiveOpsPanel({ gameState, addNotification }) {
   const [isOpen, setIsOpen] = useState(false);
   const [znatoki, setZnatoki] = useState(String(gameState?.score?.znatoki ?? 0));
   const [tv, setTv] = useState(String(gameState?.score?.tv ?? 0));
@@ -113,15 +113,6 @@ export function LiveOpsPanel({ gameState, stopAllSounds, addNotification }) {
       return;
     }
     setTimer(seconds);
-  };
-
-  const silence = () => {
-    socket.emit('admin_stop_sounds');
-    stopAllSounds();
-  };
-
-  const fadeSounds = () => {
-    socket.emit('admin_fade_sounds');
   };
 
   return (
@@ -269,20 +260,14 @@ export function LiveOpsPanel({ gameState, stopAllSounds, addNotification }) {
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-2">
+          <div>
             <button
               type="button"
               disabled={!gameState?.shared_media}
               onClick={() => socket.emit('admin_hide_media')}
-              className={`${buttonClass} bg-slate-700 hover:bg-slate-600 text-white`}
+              className={`${buttonClass} w-full bg-slate-700 hover:bg-slate-600 text-white`}
             >
               Hide media
-            </button>
-            <button type="button" onClick={fadeSounds} className={`${buttonClass} bg-amber-800 hover:bg-amber-700 text-white`}>
-              Fade 3s
-            </button>
-            <button type="button" onClick={silence} className={`${buttonClass} bg-red-900 hover:bg-red-800 text-white`}>
-              Silence
             </button>
           </div>
         </div>
