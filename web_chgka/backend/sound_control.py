@@ -7,6 +7,9 @@ from typing import Literal, Optional, TypedDict
 
 
 FADE_DURATION_MS = 3_000
+# A 60 dB reduction is effectively silent before the final authoritative stop.
+# Interpolating linearly in decibels means applying this exponential gain curve.
+FADE_MIN_GAIN = 0.001
 
 SoundMode = Literal["normal", "fading", "stopped"]
 
@@ -46,7 +49,10 @@ def sound_level(state: SoundControlState, *, now_ms: int) -> float:
         return 0.0
 
     progress = max(0.0, min(1.0, (now_ms - started_at_ms) / duration_ms))
-    return max(0.0, min(1.0, state["fade_from"] * (1.0 - progress)))
+    if progress >= 1.0:
+        return 0.0
+    fade_curve = FADE_MIN_GAIN**progress
+    return max(0.0, min(1.0, state["fade_from"] * fade_curve))
 
 
 def begin_fade(

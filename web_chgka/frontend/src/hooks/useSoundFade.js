@@ -11,7 +11,7 @@ export function useSoundFade(soundControl) {
     update();
 
     if (soundControl?.mode !== 'fading') return undefined;
-    const interval = setInterval(update, 50);
+    const interval = setInterval(update, 25);
     return () => clearInterval(interval);
   }, [soundControl]);
 

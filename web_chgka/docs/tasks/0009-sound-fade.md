@@ -10,6 +10,7 @@ Add a `Fade 3s` action next to `Silence` that fades every game-controlled sound 
 ## Accepted behavior
 
 - Fade lasts exactly three seconds and affects shared managed audio, one-shot game effects/signals, and the wheel loop.
+- Loudness falls uniformly from 0 to -60 dB (an exponential amplitude curve), so the sound is already effectively silent before the final Stop instead of remaining loud through most of the interval.
 - Private admin media preview is not shared game audio and remains outside this action.
 - The button is immediate, sits next to `Silence` in Live Ops, and writes one admin log entry.
 - A client reconnecting during an active fade receives its current progress instead of restarting from full volume.
@@ -25,6 +26,7 @@ Add a `Fade 3s` action next to `Silence` that fades every game-controlled sound 
 - Backend sound commands synchronously advance the generation before their first network emit. Fade completion checks the captured generation before stopping anything.
 - Fade completion stops shared media through its existing authoritative playback state and emits the existing immediate `stop_sound` command for effects and the wheel.
 - Frontend computes one shared fade multiplier and feeds it to `useGameSound` and every `SynchronizedAudio`; individual components do not own competing emergency-fade timers.
+- Backend and frontend use the same 60 dB curve; the browser updates it every 25 ms.
 
 ## Out of scope
 

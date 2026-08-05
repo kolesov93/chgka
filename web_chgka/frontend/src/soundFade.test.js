@@ -25,7 +25,8 @@ test('normal and stopped modes have stable multipliers', () => {
 
 test('fade combines server progress with local time since receipt', () => {
   assert.equal(soundFadeMultiplier(fading(), 10_000), 1);
-  assert.equal(soundFadeMultiplier(fading(), 11_500), 0.5);
+  assert.equal(soundFadeMultiplier(fading(), 11_500), 0.001 ** 0.5);
+  assert.equal(soundFadeMultiplier(fading(), 12_500), 0.001 ** (5 / 6));
   assert.equal(soundFadeMultiplier(fading(), 13_000), 0);
 });
 
@@ -35,19 +36,19 @@ test('reconnect snapshot resumes from server progress', () => {
     received_at_ms: 20_000,
   });
 
-  assert.equal(soundFadeMultiplier(snapshot, 20_000), 0.5);
-  assert.equal(soundFadeMultiplier(snapshot, 20_750), 0.25);
+  assert.equal(soundFadeMultiplier(snapshot, 20_000), 0.001 ** 0.5);
+  assert.equal(soundFadeMultiplier(snapshot, 20_750), 0.001 ** 0.75);
 });
 
 test('repeated fade honors its reduced starting level', () => {
   const snapshot = fading({
     fade_started_at_ms: 2_500,
-    fade_from: 0.5,
+    fade_from: 0.001 ** 0.5,
     server_now_ms: 2_500,
   });
 
-  assert.equal(soundFadeMultiplier(snapshot, 10_000), 0.5);
-  assert.equal(soundFadeMultiplier(snapshot, 11_500), 0.25);
+  assert.equal(soundFadeMultiplier(snapshot, 10_000), 0.001 ** 0.5);
+  assert.ok(Math.abs(soundFadeMultiplier(snapshot, 11_500) - 0.001) < 1e-12);
 });
 
 test('malformed active fade fails closed at zero volume', () => {

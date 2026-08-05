@@ -48,6 +48,7 @@ Implemented locally:
 - a reconnect-aware `settings_update.sound_control` snapshot with `normal`, `fading`, and `stopped` modes;
 - generation guards preventing sleeping Fade completion from stopping later effect, Silence, spin, media playback, or repeated Fade commands;
 - smooth repeated Fade from the current level and a persistent stopped mode for reconnect;
+- a shared 0 to -60 dB curve with 25 ms updates, avoiding the perceived end-cutoff of linear amplitude fading;
 - one frontend multiplier shared by managed audio, effects, and the wheel's existing intrinsic fade;
 - a `Fade 3s` button beside Silence in Live Ops and authoritative shared-audio stop at completion.
 

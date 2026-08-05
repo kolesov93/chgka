@@ -3,6 +3,8 @@ function clampLevel(value) {
   return Math.max(0, Math.min(1, value));
 }
 
+const FADE_MIN_GAIN = 0.001;
+
 export function soundFadeMultiplier(soundControl, localNowMs = Date.now()) {
   if (!soundControl || soundControl.mode === 'normal') return 1;
   if (soundControl.mode === 'stopped') return 0;
@@ -34,5 +36,6 @@ export function soundFadeMultiplier(soundControl, localNowMs = Date.now()) {
   const effectiveServerNowMs = serverNowMs + elapsedSinceSnapshotMs;
   const progress = Math.max(0, Math.min(1, (effectiveServerNowMs - startedAtMs) / durationMs));
   const fadeFrom = clampLevel(Number(soundControl.fade_from));
-  return clampLevel(fadeFrom * (1 - progress));
+  if (progress >= 1) return 0;
+  return clampLevel(fadeFrom * (FADE_MIN_GAIN ** progress));
 }

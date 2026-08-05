@@ -18,7 +18,8 @@ def test_fade_progresses_from_full_volume_to_zero():
 
     assert generation == 1
     assert sound_level(state, now_ms=1_000) == 1.0
-    assert sound_level(state, now_ms=2_500) == 0.5
+    assert sound_level(state, now_ms=2_500) == pytest.approx(0.001**0.5)
+    assert sound_level(state, now_ms=3_500) == pytest.approx(0.001 ** (5 / 6))
     assert sound_level(state, now_ms=4_000) == 0.0
 
 
@@ -29,9 +30,9 @@ def test_repeated_fade_continues_from_current_level_without_jump():
     generation = begin_fade(state, now_ms=2_500)
 
     assert generation == 2
-    assert state["fade_from"] == 0.5
-    assert sound_level(state, now_ms=2_500) == 0.5
-    assert sound_level(state, now_ms=4_000) == 0.25
+    assert state["fade_from"] == pytest.approx(0.001**0.5)
+    assert sound_level(state, now_ms=2_500) == pytest.approx(0.001**0.5)
+    assert sound_level(state, now_ms=4_000) == pytest.approx(0.001)
     assert sound_level(state, now_ms=5_500) == 0.0
 
 
