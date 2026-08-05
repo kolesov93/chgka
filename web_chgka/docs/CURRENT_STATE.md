@@ -1,10 +1,9 @@
 # CHGKA Web Current State
 
-- Snapshot date: 2026-08-05
-- Latest completed task: `docs/tasks/0012-game-over.md`
-- Active task: `docs/tasks/0013-intro.md`
+- Snapshot date: 2026-08-06
+- Latest completed task: `docs/tasks/0013-intro.md`
 - Branch: `task/intro`
-- Status: task 0013 is implemented locally and awaiting remote CI plus focused two-browser acceptance. Publishing the updated `web` branch is still pending.
+- Status: task 0013 is implemented, locally verified, and accepted by focused browser smoke. Integration into `web` and remote CI on the merged branch are the current handoff point.
 
 ## Repository checkpoint
 
@@ -32,6 +31,7 @@
 - Game-over closure commit: `aef4553` (`Close explicit game over task`).
 - Game-over merge commit: `ea46a55` (`Merge explicit game over task`).
 - Local `web` contains the accepted merge and is ahead of `origin/web`; push is pending.
+- Intro implementation commits: `1b417a4`, `e7b7ad8`, `d18a57a`, `c6b0e70`, and `de4e847`; the latest commit includes accepted pack-backed normal/blitz author presentation.
 
 ## Product decisions
 
@@ -60,9 +60,9 @@
 
 All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, 0009, 0010, 0011, and 0012.
 
-## Active task: intro
+## Completed task: intro
 
-Implemented locally:
+Implemented:
 
 - add the authoritative `INTRO` phase between lobby and the first `PRE_ROUND`;
 - enter intro silently, let the host start the existing meeting track once, and show static `00`, pack-backed author cards for sectors 1–12, then special static `13`;
@@ -73,7 +73,7 @@ Implemented locally:
 - require author metadata across the pack, support optional city/direct author photos, show one card for a normal sector and three part-author cards in one row for blitz/superblitz, and independently use a generated static silhouette where a pack photo is absent.
 - keep the twelve previous intro photos in the sample pack: normal-sector photos beside their questions, and the old sector 04/07 photos beside the first parts of the blitz/superblitz; EXIF/GPS metadata is removed.
 
-Verification: all 139 backend tests with warnings treated as errors, all 25 frontend tests, the production build, sample-pack CLI validation, and Compose configuration pass locally. Remote CI and focused two-browser smoke are pending.
+Verification: all 139 backend tests with warnings treated as errors, all 25 frontend tests, the production build, sample-pack CLI validation, and Compose configuration pass locally. The focused admin/player smoke passed on `de4e847`; remote CI will run after integration into `web`.
 
 ## Completed task: game over
 
@@ -299,9 +299,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish the updated `web` branch containing the accepted task 0012 merge and publish `task/intro`.
-2. Run remote CI and the focused two-browser intro smoke, including Live Ops reset-to-intro, before merging task 0013.
-3. Keep authorization/security and persistence as mandatory gates before public deployment.
+1. Integrate accepted task 0013 into `web`, publish only `web`, and confirm remote CI.
+2. Remove the local task branch after the merged `web` result is verified.
+3. Take authorization/security as the recommended next task; persistence remains another mandatory gate before public deployment.
 
 ## Resume checklist
 
@@ -314,7 +314,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. completed tasks 0012, 0011, 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
+4. completed tasks 0013, 0012, 0011, 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:

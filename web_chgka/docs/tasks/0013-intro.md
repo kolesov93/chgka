@@ -1,7 +1,7 @@
 # 0013: Интро
 
 Branch: `task/intro`
-Status: In progress
+Status: Completed
 
 ## Goal
 
@@ -53,7 +53,7 @@ Status: In progress
 - Full backend tests with warnings-as-errors, frontend tests/build and Compose validation.
 - Two-browser smoke: lobby -> silent intro, manual shared music start, player/admin parity, speech privacy, all slides, music countdown/stop and transition to table 0:0.
 
-## Local verification status
+## Verification and acceptance
 
 Implemented locally:
 
@@ -74,4 +74,7 @@ Passed locally:
 - sample-pack validator CLI;
 - `docker compose config --quiet`.
 
-Remote CI and focused two-browser smoke are pending.
+Acceptance:
+
+- the focused admin/player browser smoke passed on `de4e847`, including normal author photos, three-card blitz/superblitz rows, fallback silhouettes, the special static sector 13, manual music start, and reset-to-intro;
+- remote CI will run on the merged `web` branch; the task branch is intentionally not published.
