@@ -1,9 +1,9 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-05
-- Latest completed task: `docs/tasks/0010-director-sound-controls.md`
-- Branch: `web`
-- Status: task 0010 is accepted and integrated locally; publishing the updated `web` branch is pending.
+- Active task: `docs/tasks/0011-inline-image-previews.md`
+- Branch: `task/inline-image-previews`
+- Status: implementation scope and token reuse are defined; code changes have not started.
 
 ## Repository checkpoint
 
@@ -20,7 +20,8 @@
 - Director sound controls commit `2fda870` is published on `origin/task/director-sound-controls` and accepted.
 - Director sound controls closure commit: `fd63ff3` (`Close director sound controls task`).
 - Director sound controls merge commit: `1ee7156` (`Merge director sound controls task`).
-- Local `web` contains the accepted merge and is ahead of `origin/web`; push is pending.
+- Director sound controls handoff commit: `c64d548` (`Record director sound controls handoff`).
+- Local `web` contains the accepted merge and handoff and is ahead of `origin/web`; push is pending.
 
 ## Product decisions
 
@@ -48,6 +49,17 @@
 - Both development images build. Python 3.14 passes `pip check` and all 113 backend tests; Node 24 passes all 13 frontend assertions and the production build.
 
 All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, 0009, and 0010.
+
+## Active task: inline image previews
+
+Planned:
+
+- privately resolve current image refs through the existing context-bound admin media-token flow;
+- replace blank image placeholders in host-only question HTML with compact thumbnails;
+- make thumbnail clicks select the existing media control block without changing player presentation;
+- preserve non-image placeholders, token validation, sharing state, and the player UI.
+
+Implementation and verification have not started.
 
 ## Completed task: director sound controls
 
@@ -251,8 +263,8 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish the updated `web` branch containing the accepted task 0010 merge.
-2. Take roadmap item 16 in a separate branch and add inline image previews to the host's question/answer text without changing sharing state or the media-token contract.
+1. Publish the updated `web` branch containing the accepted task 0010 merge and handoff.
+2. Implement and verify active task 0011 without changing sharing state or the media-token contract.
 3. Continue with game completion after inline previews; keep authorization/security and persistence as mandatory gates before public deployment.
 
 ## Resume checklist
@@ -266,7 +278,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. completed tasks 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
+4. active task 0011, then completed tasks 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:
