@@ -18,12 +18,6 @@
 
 ### P0: техническая прочность
 
-5. Авторизация и безопасность — `В работе` (`task/auth-security`)
-   - Убрать dev default password из production-сценария или падать без `ADMIN_PASSWORD`.
-   - Ограничить CORS в production.
-   - Добавить TTL/revoke для admin tokens.
-   - Санитизировать markdown HTML, если вопросные паки могут быть недоверенными.
-
 6. Persist/recovery
    - Сейчас всё состояние in-memory. При рестарте backend игра теряется.
    - Минимальный вариант: snapshot state в JSON.
