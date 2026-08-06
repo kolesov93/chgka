@@ -2,8 +2,9 @@
 
 - Snapshot date: 2026-08-06
 - Latest completed task: `docs/tasks/0013-intro.md`
-- Branch: `web`
-- Status: accepted task 0013 is merged locally into `web`; publishing `web` and confirming remote CI are the current handoff point.
+- Active task: `docs/tasks/0014-auth-security.md`
+- Branch: `task/auth-security`
+- Status: task 0014 is planned from synchronized `web`; implementation and verification are in progress.
 
 ## Repository checkpoint
 

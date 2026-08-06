@@ -18,7 +18,7 @@
 
 ### P0: техническая прочность
 
-5. Авторизация и безопасность
+5. Авторизация и безопасность — `В работе` (`task/auth-security`)
    - Убрать dev default password из production-сценария или падать без `ADMIN_PASSWORD`.
    - Ограничить CORS в production.
    - Добавить TTL/revoke для admin tokens.
