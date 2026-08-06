@@ -68,3 +68,31 @@ ADMIN_TOKEN_TTL_SECONDS=43200
 - Parser tests proving scripts, event/style attributes, unsafe URLs and embeds are removed while normal Markdown and opaque media placeholders remain intact.
 - Frontend tests/build for session-expiry state and mutually exclusive restore payloads.
 - Full backend tests with warnings-as-errors, frontend tests/build, sample-pack validator and Compose validation.
+
+## Implemented locally
+
+- Added strict startup configuration for environment, password, exact origins, and bounded admin-token TTL; development Compose supplies explicit local values and production has no code defaults.
+- Replaced the unbounded admin-token dictionary with one opaque in-memory token with fixed expiry, revoke/replacement/logout behavior, and role-plus-token checks on every privileged event.
+- Added browser expiry handling: reconnect preserves the original deadline, the UI automatically drops admin role/private data at expiry, and stale/replaced sessions show a re-login message.
+- Applied one CORS allowlist to FastAPI and Socket.IO and disabled credentialed cross-origin HTTP requests.
+- Sanitized all question/answer/comment/source/intro HTML with pinned `nh3`, preserving only safe formatting, links, and managed media placeholders.
+- Added production env documentation, a non-secret `.env.example`, local CORS commands, and focused backend/frontend regression coverage.
+
+## Local verification
+
+- 172 backend tests pass with warnings treated as errors, both in the working environment and a clean temporary venv; `pip check` reports no broken requirements there.
+- 30 frontend assertions pass after `npm ci`; the production build succeeds and `npm audit` reports zero vulnerabilities.
+- The sample pack validator reports 13 valid questions, 19 authors, 6 parts, and 9 media files.
+- `docker compose config --quiet` succeeds.
+
+Manual browser acceptance and remote CI are still pending.
+
+## Focused manual acceptance
+
+1. Start normal development Compose, log in as the host with `admin123`, join from a second browser as a player, and confirm normal lobby/game controls plus the private question card.
+2. Reload the host browser and confirm the role, controls, pack info, and current private question are restored without another password prompt.
+3. Log in as the host from a second browser/profile. The original host must return to login with the replacement-session message; its old token must not restore on reload.
+4. Log out from the current host, reload, and confirm the browser remains logged out.
+5. Restart with `ADMIN_TOKEN_TTL_SECONDS=60 docker compose up --build`, log in as the host, and do not click anything. After 60 seconds the browser must automatically return to login, clear private admin UI, and show the expiry message.
+6. Run both CORS preflight commands from `README.md`: port 5173 must be allowed and port 5174 rejected.
+7. Open the sample image question and confirm its inline preview still renders; ordinary Markdown formatting in question/answer/intro must remain intact.

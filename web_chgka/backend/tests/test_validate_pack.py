@@ -109,6 +109,22 @@ def test_pack_allows_missing_intro_speech(tmp_path):
     assert parse_question_pack(pack_path).intro_html is None
 
 
+def test_pack_sanitizes_intro_speech_html(tmp_path):
+    pack_path = _copy_sample_pack(tmp_path)
+    (pack_path / "intro.md").write_text(
+        '<script>alert("x")</script>\n\n# Речь\n\n'
+        '<span onmouseover="alert(1)">Безопасный текст</span>',
+        encoding="utf-8",
+    )
+
+    intro_html = parse_question_pack(pack_path).intro_html
+
+    assert "script" not in intro_html
+    assert "onmouseover" not in intro_html
+    assert "<h1>Речь</h1>" in intro_html
+    assert "Безопасный текст" in intro_html
+
+
 def test_pack_requires_author_for_sector_and_blitz_part(tmp_path):
     pack_path = _copy_sample_pack(tmp_path)
     sector_question = pack_path / "01" / "question.md"

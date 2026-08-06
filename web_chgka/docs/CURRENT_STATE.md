@@ -4,11 +4,12 @@
 - Latest completed task: `docs/tasks/0013-intro.md`
 - Active task: `docs/tasks/0014-auth-security.md`
 - Branch: `task/auth-security`
-- Status: task 0014 is planned from synchronized `web`; implementation and verification are in progress.
+- Status: task 0014 is implemented locally and passes automated verification; focused browser acceptance, publication, and remote CI are pending.
 
 ## Repository checkpoint
 
-- Base branch: `web`, synchronized with `origin/web` at `ad10ac8` before task work.
+- Base branch: `web`, synchronized with `origin/web` at `3d5dfca` before task work.
+- Auth/security planning commit: `00a5d04` (`Plan authentication security task`).
 - Live Ops merge commit: `1708f1d` (`Merge live ops recovery task`).
 - The task closure commit `8d104f4` and implementation commit `7a1ee91` are both reachable from local `web`.
 - Live Ops implementation commit `7a1ee91` is published on `origin/task/live-ops-recovery` and accepted.
@@ -34,7 +35,7 @@
 - Intro implementation commits: `1b417a4`, `e7b7ad8`, `d18a57a`, `c6b0e70`, and `de4e847`; the latest commit includes accepted pack-backed normal/blitz author presentation.
 - Intro closure commit: `3f3632a` (`Close managed intro task`).
 - Intro merge commit: `e16f8c9` (`Merge managed intro task`).
-- Local `web` contains the accepted game-over and intro merges and is ahead of the locally known `origin/web`; publishing and remote CI are pending.
+- `origin/web` contains the accepted intro merge and handoff at `3d5dfca`.
 
 ## Product decisions
 
@@ -62,6 +63,19 @@
 - The last full development-image baseline (before tasks 0011–0012) built successfully: Python 3.14 passed `pip check` and 113 backend tests; Node 24 passed 13 frontend tests and the production build. The current source-only changes pass native tests/build and Compose validation; images were not rebuilt for task 0012.
 
 All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, 0009, 0010, 0011, and 0012.
+
+## Active task: authorization and security
+
+Implemented locally:
+
+- require explicit development/production configuration, an admin password, and exact allowed browser origins; production rejects the development password, short secrets, non-HTTPS origins, and wildcard/path origins;
+- use one opaque admin token with a fixed 12-hour default TTL, replacement/revoke/logout behavior, and role-plus-token validation on every privileged Socket.IO event;
+- carry the original expiry through reconnect and automatically clear the browser's admin role/private data with an explicit re-login message;
+- apply the same exact-origin allowlist to FastAPI CORS and Socket.IO/WebSocket handshakes;
+- sanitize every Markdown-derived question and intro fragment through a pinned `nh3` allowlist while retaining managed media placeholders;
+- document development startup, production env injection, local CORS checks, and the remaining deployment boundary.
+
+Verification: 172 backend tests pass with warnings treated as errors in both the working Python environment and a clean temporary venv; clean-env `pip check`, all 30 frontend assertions after `npm ci`, production build, zero-vulnerability npm audit, sample-pack validation, and Compose configuration pass. Focused browser smoke and remote CI are pending.
 
 ## Completed task: intro
 
@@ -284,10 +298,10 @@ The first three scenarios were reproduced against the old handlers and now have 
 
 Additional known gaps:
 
-- admin tokens have no TTL and older generated tokens are not centrally revoked;
 - all runtime state is lost on backend restart;
-- wildcard CORS and the default admin password are development-only security;
-- raw Markdown HTML is unsafe for untrusted question packs;
+- admin/player/media tokens and game state remain process-local and support only one backend worker;
+- player reconnect tokens still have no TTL/rotation;
+- production TLS, reverse proxy, DNS, secret injection, rate limiting, and deployment are not implemented;
 - frontend development uses `localhost:8000`, so it does not yet support browsers running on other machines;
 - video sharing/playback, media queue/next, duration extraction, and automatic ended state remain unimplemented;
 - frontend coverage is limited to pure playback/live-ops/sound-fade/inline-media/game-over/intro helpers; there are no browser/component tests, Socket.IO integration tests, or lint/typecheck.
@@ -302,9 +316,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish only `web` and confirm remote CI for merge `e16f8c9`.
-2. Remove local `task/intro` after the merged `web` result is remotely verified.
-3. Take authorization/security as the recommended next task; persistence remains another mandatory gate before public deployment.
+1. Commit and publish `task/auth-security`, then confirm remote CI.
+2. Run the focused auth/CORS browser smoke, including a 60-second admin TTL override.
+3. After acceptance, close task 0014 and merge it into `web`; persistence remains the next mandatory public-deployment gate.
 
 ## Resume checklist
 

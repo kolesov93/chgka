@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export function LoginScreen({ socket, gameState }) {
+export function LoginScreen({ socket, gameState, sessionNotice = '' }) {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -79,6 +79,15 @@ export function LoginScreen({ socket, gameState }) {
         <h1 className="text-3xl font-bold text-center mb-8 text-yellow-500">
           Что? Где? Когда?
         </h1>
+
+        {sessionNotice && (
+          <p
+            role="status"
+            className="mb-6 rounded-lg border border-yellow-700 bg-yellow-950/60 px-4 py-3 text-sm text-yellow-200"
+          >
+            {sessionNotice}
+          </p>
+        )}
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -178,4 +187,3 @@ export function LoginScreen({ socket, gameState }) {
     </div>
   );
 }
-

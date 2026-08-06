@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { socket } from '../socket';
-
-const ADMIN_TOKEN_KEY = 'chgka_admin_token';
-const PLAYER_TOKEN_KEY = 'chgka_player_token';
+import {
+  ADMIN_TOKEN_KEY,
+  PLAYER_TOKEN_KEY,
+  getAdminExpiryMs,
+  getExpiredAdminSession,
+  getSessionRestorePayload,
+  saveAdminToken,
+} from '../session';
 
 export function useGameSession() {
   const [gameState, setGameState] = useState(null);
@@ -16,6 +21,29 @@ export function useGameSession() {
   const [hasJoined, setHasJoined] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [sessionNotice, setSessionNotice] = useState('');
+  const [adminExpiresAtMs, setAdminExpiresAtMs] = useState(null);
+
+  const expireAdminSession = useCallback((data) => {
+    const expired = getExpiredAdminSession(data);
+    localStorage.removeItem(ADMIN_TOKEN_KEY);
+    setMyRole(expired.role);
+    setMyName(expired.name);
+    setHasJoined(expired.hasJoined);
+    setIsPending(expired.isPending);
+    setPackInfo(expired.packInfo);
+    setAdminQuestion(expired.adminQuestion);
+    setSessionNotice(expired.notice);
+    setAdminExpiresAtMs(null);
+  }, []);
+
+  useEffect(() => {
+    if (adminExpiresAtMs === null) return undefined;
+
+    const delayMs = Math.max(0, adminExpiresAtMs - Date.now());
+    const timeoutId = setTimeout(() => expireAdminSession(), delayMs);
+    return () => clearTimeout(timeoutId);
+  }, [adminExpiresAtMs, expireAdminSession]);
 
   const addNotification = useCallback((notification) => {
     const id = Date.now();
@@ -42,15 +70,8 @@ export function useGameSession() {
     function onConnect() {
       setIsConnected(true);
 
-      const savedAdminToken = localStorage.getItem(ADMIN_TOKEN_KEY);
-      if (savedAdminToken) {
-        socket.emit('restore_session', { token: savedAdminToken });
-      }
-
-      const savedPlayerToken = localStorage.getItem(PLAYER_TOKEN_KEY);
-      if (savedPlayerToken) {
-        socket.emit('restore_session', { player_token: savedPlayerToken });
-      }
+      const restorePayload = getSessionRestorePayload(localStorage);
+      if (restorePayload) socket.emit('restore_session', restorePayload);
     }
 
     function onDisconnect() {
@@ -71,7 +92,10 @@ export function useGameSession() {
     }
 
     function onRoleUpdate(data) {
-      if (data?.role) setMyRole(data.role);
+      if (data?.role) {
+        setMyRole(data.role);
+        if (data.role !== 'admin') setAdminExpiresAtMs(null);
+      }
     }
 
     function onSettingsUpdate(newSettings) {
@@ -92,16 +116,25 @@ export function useGameSession() {
     }
 
     function onAuthSuccess(data) {
-      localStorage.setItem(ADMIN_TOKEN_KEY, data.token);
+      saveAdminToken(localStorage, data.token);
+      setAdminExpiresAtMs(getAdminExpiryMs(data));
+      setSessionNotice('');
     }
 
     function onAuthFailed(data) {
       console.error('[Auth] Failed:', data.message || 'Неверный пароль');
       localStorage.removeItem(ADMIN_TOKEN_KEY);
+      setAdminExpiresAtMs(null);
     }
 
-    function onAuthRestored() {
+    function onAuthRestored(data) {
       console.log('[Auth] Session restored successfully');
+      setAdminExpiresAtMs(getAdminExpiryMs(data));
+      setSessionNotice('');
+    }
+
+    function onAuthExpired(data) {
+      expireAdminSession(data);
     }
 
     function onJoinSuccess(data) {
@@ -109,6 +142,7 @@ export function useGameSession() {
       if (data.name) setMyName(data.name);
       setIsPending(false);
       setHasJoined(true);
+      setSessionNotice('');
     }
 
     function onJoinPending(data) {
@@ -116,6 +150,7 @@ export function useGameSession() {
       if (data.name) setMyName(data.name);
       setIsPending(true);
       setHasJoined(true);
+      setSessionNotice('');
     }
 
     function onKicked(data) {
@@ -148,6 +183,7 @@ export function useGameSession() {
     socket.on('auth_success', onAuthSuccess);
     socket.on('auth_failed', onAuthFailed);
     socket.on('auth_restored', onAuthRestored);
+    socket.on('auth_expired', onAuthExpired);
     socket.on('join_success', onJoinSuccess);
     socket.on('join_pending', onJoinPending);
     socket.on('kicked', onKicked);
@@ -165,6 +201,7 @@ export function useGameSession() {
       socket.off('auth_success', onAuthSuccess);
       socket.off('auth_failed', onAuthFailed);
       socket.off('auth_restored', onAuthRestored);
+      socket.off('auth_expired', onAuthExpired);
       socket.off('join_success', onJoinSuccess);
       socket.off('join_pending', onJoinPending);
       socket.off('kicked', onKicked);
@@ -172,7 +209,7 @@ export function useGameSession() {
       socket.off('pack_info', onPackInfo);
       socket.off('admin_question', onAdminQuestion);
     };
-  }, [addNotification]);
+  }, [addNotification, expireAdminSession]);
 
   const logout = useCallback(() => {
     if (!confirm('Вы действительно хотите выйти?')) return;
@@ -188,6 +225,10 @@ export function useGameSession() {
     setHasJoined(false);
     setPlayers([]);
     setIsConnected(false);
+    setPackInfo(null);
+    setAdminQuestion(null);
+    setSessionNotice('');
+    setAdminExpiresAtMs(null);
 
     socket.connect();
   }, []);
@@ -203,6 +244,7 @@ export function useGameSession() {
     isConnected,
     hasJoined,
     isPending,
+    sessionNotice,
     notifications,
     addNotification,
     dismissNotification,
