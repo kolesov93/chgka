@@ -85,9 +85,9 @@ npm run build
 - Production допускает только `CHGKA_ENV=production`, пароль длиной не менее 12 символов (не `admin123`) и точные HTTPS origins. Пример полного набора переменных есть в [`.env.example`](.env.example); сам backend `.env`-файлы не загружает.
 - `ADMIN_TOKEN_TTL_SECONDS` необязателен: по умолчанию admin-сессия действует 12 часов без продления при reconnect; допустимый диапазон — от 60 секунд до 24 часов.
 
-## Проверка CORS локально
+## Диагностика CORS локально
 
-Публичный адрес для этого не нужен. При запущенном backend разрешённый frontend-origin возвращает заголовок `Access-Control-Allow-Origin`:
+Автоматические тесты проверяют разрешённый и запрещённый origins для FastAPI и Socket.IO. Если нужно диагностировать конкретный локальный запуск, публичный адрес не нужен: разрешённый frontend-origin возвращает заголовок `Access-Control-Allow-Origin`:
 
 ```bash
 curl -i -X OPTIONS http://localhost:8000/ \

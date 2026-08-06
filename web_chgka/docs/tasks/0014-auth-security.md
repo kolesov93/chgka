@@ -34,6 +34,7 @@ Status: In progress
 - Хранить opaque tokens server-side, не вводить JWT/signing secret или refresh token до persistence.
 - Проверять фиксированный absolute expiry и не делать sliding sessions: двенадцати часов достаточно для одной игры, а поведение остаётся предсказуемым.
 - Считать один token допустимым для reconnect/нескольких вкладок одного browser profile; новый password login создаёт новый token и отзывает предыдущий.
+- После browser smoke отдельно подтверждена модель единственного активного ведущего: новый password login служит явным способом прервать старую или зависшую admin-сессию; независимые параллельные admin-сессии не вводим.
 - Использовать `nh3` с pinned version и явным allowlist вместо собственного HTML parser.
 - Сохранить current-origin frontend production routing; отдельный `VITE_BACKEND_URL` нужен только при будущем split-origin deployment.
 
@@ -64,7 +65,7 @@ ADMIN_TOKEN_TTL_SECONDS=43200
 
 - Pure config tests for missing/invalid environment, production password/origin guards, normalized multiple origins and token TTL bounds.
 - Token tests for fixed expiry, revoke, single-token replacement, reconnect, logout and privileged action denial after expiration.
-- FastAPI/Socket.IO configuration assertions and manual localhost origin smoke on ports 5173/5174.
+- FastAPI preflight and actual Engine.IO handshake tests for allowed and denied localhost origins, plus a shared Socket.IO configuration assertion.
 - Parser tests proving scripts, event/style attributes, unsafe URLs and embeds are removed while normal Markdown and opaque media placeholders remain intact.
 - Frontend tests/build for session-expiry state and mutually exclusive restore payloads.
 - Full backend tests with warnings-as-errors, frontend tests/build, sample-pack validator and Compose validation.
@@ -80,19 +81,20 @@ ADMIN_TOKEN_TTL_SECONDS=43200
 
 ## Local verification
 
-- 172 backend tests pass with warnings treated as errors, both in the working environment and a clean temporary venv; `pip check` reports no broken requirements there.
+- 173 backend tests pass with warnings treated as errors; the pre-smoke clean temporary venv also passed its then-current full suite and `pip check` reported no broken requirements.
 - 30 frontend assertions pass after `npm ci`; the production build succeeds and `npm audit` reports zero vulnerabilities.
 - The sample pack validator reports 13 valid questions, 19 authors, 6 parts, and 9 media files.
 - `docker compose config --quiet` succeeds.
 
-Manual browser acceptance and remote CI are still pending.
+Focused browser acceptance passed on implementation commit `c371ad2`; remote CI is still pending.
 
-## Focused manual acceptance
+## Accepted browser scope
 
 1. Start normal development Compose, log in as the host with `admin123`, join from a second browser as a player, and confirm normal lobby/game controls plus the private question card.
 2. Reload the host browser and confirm the role, controls, pack info, and current private question are restored without another password prompt.
 3. Log in as the host from a second browser/profile. The original host must return to login with the replacement-session message; its old token must not restore on reload.
 4. Log out from the current host, reload, and confirm the browser remains logged out.
 5. Restart with `ADMIN_TOKEN_TTL_SECONDS=60 docker compose up --build`, log in as the host, and do not click anything. After 60 seconds the browser must automatically return to login, clear private admin UI, and show the expiry message.
-6. Run both CORS preflight commands from `README.md`: port 5173 must be allowed and port 5174 rejected.
-7. Open the sample image question and confirm its inline preview still renders; ordinary Markdown formatting in question/answer/intro must remain intact.
+6. Open the sample image question and confirm its inline preview still renders; ordinary Markdown formatting in question/answer/intro must remain intact.
+
+HTTP preflight and Socket.IO/Engine.IO origin rejection are automated regression tests, not required manual acceptance steps. The `curl` commands in `README.md` remain only as deployment diagnostics.

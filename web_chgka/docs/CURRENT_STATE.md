@@ -4,7 +4,7 @@
 - Latest completed task: `docs/tasks/0013-intro.md`
 - Active task: `docs/tasks/0014-auth-security.md`
 - Branch: `task/auth-security`
-- Status: task 0014 is implemented locally and passes automated verification; focused browser acceptance, publication, and remote CI are pending.
+- Status: task 0014 is implemented locally and passes automated verification plus focused browser acceptance; publication and remote CI are pending.
 
 ## Repository checkpoint
 
@@ -70,12 +70,13 @@ Implemented locally:
 
 - require explicit development/production configuration, an admin password, and exact allowed browser origins; production rejects the development password, short secrets, non-HTTPS origins, and wildcard/path origins;
 - use one opaque admin token with a fixed 12-hour default TTL, replacement/revoke/logout behavior, and role-plus-token validation on every privileged Socket.IO event;
+- keep one active host session intentionally: a new password login revokes the older or stuck host session instead of creating independent parallel admin sessions;
 - carry the original expiry through reconnect and automatically clear the browser's admin role/private data with an explicit re-login message;
 - apply the same exact-origin allowlist to FastAPI CORS and Socket.IO/WebSocket handshakes;
 - sanitize every Markdown-derived question and intro fragment through a pinned `nh3` allowlist while retaining managed media placeholders;
 - document development startup, production env injection, local CORS checks, and the remaining deployment boundary.
 
-Verification: 172 backend tests pass with warnings treated as errors in both the working Python environment and a clean temporary venv; clean-env `pip check`, all 30 frontend assertions after `npm ci`, production build, zero-vulnerability npm audit, sample-pack validation, and Compose configuration pass. Focused browser smoke and remote CI are pending.
+Verification: 173 backend tests pass with warnings treated as errors. The pre-smoke clean temporary venv passed its then-current full suite and `pip check`; all 30 frontend assertions after `npm ci`, production build, zero-vulnerability npm audit, sample-pack validation, and Compose configuration pass. Focused browser smoke passed on `c371ad2`; remote CI is pending. FastAPI preflight and actual Engine.IO allowed/denied-origin handshakes are automated and no longer belong to manual smoke.
 
 ## Completed task: intro
 
@@ -316,9 +317,8 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Commit and publish `task/auth-security`, then confirm remote CI.
-2. Run the focused auth/CORS browser smoke, including a 60-second admin TTL override.
-3. After acceptance, close task 0014 and merge it into `web`; persistence remains the next mandatory public-deployment gate.
+1. Commit the post-smoke origin regression and publish `task/auth-security`, then confirm remote CI.
+2. After remote verification, close task 0014 and merge it into `web`; persistence remains the next mandatory public-deployment gate.
 
 ## Resume checklist
 
