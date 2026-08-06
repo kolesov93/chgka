@@ -1,10 +1,10 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-06
-- Latest completed task: `docs/tasks/0013-intro.md`
-- Active task: `docs/tasks/0014-auth-security.md`
-- Branch: `task/auth-security`
-- Status: task 0014 passes local automated verification and focused browser acceptance; implementation is published, but GitHub did not create a Web CI run for either published task SHA.
+- Latest completed task: `docs/tasks/0014-auth-security.md`
+- Active task: none
+- Branch: `web`
+- Status: task 0014 is accepted and merged locally; publishing `web` and its final remote CI are pending.
 
 ## Repository checkpoint
 
@@ -12,6 +12,9 @@
 - Auth/security planning commit: `00a5d04` (`Plan authentication security task`).
 - Auth/security implementation commit: `c371ad2` (`Implement authentication security layer`), published on `origin/task/auth-security` and browser-accepted.
 - Auth/security origin-regression commit: `dc924bc` (`Automate origin acceptance checks`), published on `origin/task/auth-security`; GitHub reports no check-runs for this SHA.
+- Auth/security acceptance commit: `1d3e257` (`Record auth security acceptance`), published on `origin/task/auth-security`; its push also created no Web CI run.
+- Auth/security closure commit: `e9874ac` (`Close authentication security task`).
+- Auth/security merge commit: `dd8b229` (`Merge authentication security task`).
 - Live Ops merge commit: `1708f1d` (`Merge live ops recovery task`).
 - The task closure commit `8d104f4` and implementation commit `7a1ee91` are both reachable from local `web`.
 - Live Ops implementation commit `7a1ee91` is published on `origin/task/live-ops-recovery` and accepted.
@@ -49,26 +52,18 @@
 
 ## Verified baseline
 
-- Backend: 139 tests pass with warnings treated as errors.
-  - 47 question parser tests;
-  - 5 synchronized sound-control tests;
-  - 10 live-ops recovery tests;
-  - 5 media identity/playback tests;
-  - 6 state helper tests;
-  - 3 wheel-sector/spin-selection tests;
-  - 20 pure transition tests;
-  - 23 handler concurrency/session/media/live-ops/sound-control/game-over/intro tests;
-  - 20 pack-validator CLI, sector-directory, media-path, author-metadata/photo, and intro-file tests.
-- Frontend: 25 pure playback/live-ops/sound-fade/inline-media/game-over/intro tests and the production build pass; the last clean install and full audit reported zero vulnerabilities.
+- Backend: 173 tests pass with warnings treated as errors, including config, admin-token lifecycle, HTML sanitization, FastAPI preflight, and real Engine.IO origin handshakes.
+- A clean temporary Python environment passed the then-current full suite and `pip check` without broken requirements.
+- Frontend: 30 pure playback/live-ops/sound-fade/inline-media/game-over/intro/session assertions pass after `npm ci`; production build and full npm audit pass with zero vulnerabilities.
 - Backend startup loads the sample pack with all 13 questions and reaches application startup completion.
 - `docker compose config --quiet` succeeds without warnings.
 - The last full development-image baseline (before tasks 0011–0012) built successfully: Python 3.14 passed `pip check` and 113 backend tests; Node 24 passed 13 frontend tests and the production build. The current source-only changes pass native tests/build and Compose validation; images were not rebuilt for task 0012.
 
 All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, 0009, 0010, 0011, and 0012.
 
-## Active task: authorization and security
+## Completed task: authorization and security
 
-Implemented locally:
+Implemented:
 
 - require explicit development/production configuration, an admin password, and exact allowed browser origins; production rejects the development password, short secrets, non-HTTPS origins, and wildcard/path origins;
 - use one opaque admin token with a fixed 12-hour default TTL, replacement/revoke/logout behavior, and role-plus-token validation on every privileged Socket.IO event;
@@ -78,7 +73,7 @@ Implemented locally:
 - sanitize every Markdown-derived question and intro fragment through a pinned `nh3` allowlist while retaining managed media placeholders;
 - document development startup, production env injection, local CORS checks, and the remaining deployment boundary.
 
-Verification: 173 backend tests pass with warnings treated as errors. The pre-smoke clean temporary venv passed its then-current full suite and `pip check`; all 30 frontend assertions after `npm ci`, production build, zero-vulnerability npm audit, sample-pack validation, and Compose configuration pass. Focused browser smoke passed on `c371ad2`. FastAPI preflight and actual Engine.IO allowed/denied-origin handshakes are automated and no longer belong to manual smoke. Remote CI still requires a fresh push event because GitHub created no run for the two published implementation SHAs.
+Verification: the full baseline above passes, and focused browser smoke passed on `c371ad2`. FastAPI preflight and actual Engine.IO allowed/denied-origin handshakes are automated and no longer belong to manual smoke. GitHub created no Web CI run for any of the three task-branch pushes despite the matching active workflow; the merged `web` push is the remaining remote gate.
 
 ## Completed task: intro
 
@@ -307,7 +302,7 @@ Additional known gaps:
 - production TLS, reverse proxy, DNS, secret injection, rate limiting, and deployment are not implemented;
 - frontend development uses `localhost:8000`, so it does not yet support browsers running on other machines;
 - video sharing/playback, media queue/next, duration extraction, and automatic ended state remain unimplemented;
-- frontend coverage is limited to pure playback/live-ops/sound-fade/inline-media/game-over/intro helpers; there are no browser/component tests, Socket.IO integration tests, or lint/typecheck.
+- frontend coverage is limited to pure playback/live-ops/sound-fade/inline-media/game-over/intro/session helpers; there are no automated browser/component tests, full Socket.IO session integration tests, or lint/typecheck.
 
 ## Repository artifacts
 
@@ -319,8 +314,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish the acceptance handoff commit on `task/auth-security` and confirm that it creates a Web CI run.
-2. After green remote verification, close task 0014 and merge it into `web`; persistence remains the next mandatory public-deployment gate.
+1. Publish local `web` with merge `dd8b229` and confirm the Web CI run.
+2. After green remote verification, remove the merged local/remote `task/auth-security` branch.
+3. Take roadmap item 6, persistence/recovery, as the next mandatory public-deployment gate.
 
 ## Resume checklist
 
@@ -333,7 +329,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. completed tasks 0013, 0012, 0011, 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
+4. completed tasks 0014, 0013, 0012, 0011, 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:
