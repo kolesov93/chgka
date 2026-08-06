@@ -4,12 +4,14 @@
 - Latest completed task: `docs/tasks/0013-intro.md`
 - Active task: `docs/tasks/0014-auth-security.md`
 - Branch: `task/auth-security`
-- Status: task 0014 is implemented locally and passes automated verification plus focused browser acceptance; publication and remote CI are pending.
+- Status: task 0014 passes local automated verification and focused browser acceptance; implementation is published, but GitHub did not create a Web CI run for either published task SHA.
 
 ## Repository checkpoint
 
 - Base branch: `web`, synchronized with `origin/web` at `3d5dfca` before task work.
 - Auth/security planning commit: `00a5d04` (`Plan authentication security task`).
+- Auth/security implementation commit: `c371ad2` (`Implement authentication security layer`), published on `origin/task/auth-security` and browser-accepted.
+- Auth/security origin-regression commit: `dc924bc` (`Automate origin acceptance checks`), published on `origin/task/auth-security`; GitHub reports no check-runs for this SHA.
 - Live Ops merge commit: `1708f1d` (`Merge live ops recovery task`).
 - The task closure commit `8d104f4` and implementation commit `7a1ee91` are both reachable from local `web`.
 - Live Ops implementation commit `7a1ee91` is published on `origin/task/live-ops-recovery` and accepted.
@@ -76,7 +78,7 @@ Implemented locally:
 - sanitize every Markdown-derived question and intro fragment through a pinned `nh3` allowlist while retaining managed media placeholders;
 - document development startup, production env injection, local CORS checks, and the remaining deployment boundary.
 
-Verification: 173 backend tests pass with warnings treated as errors. The pre-smoke clean temporary venv passed its then-current full suite and `pip check`; all 30 frontend assertions after `npm ci`, production build, zero-vulnerability npm audit, sample-pack validation, and Compose configuration pass. Focused browser smoke passed on `c371ad2`; remote CI is pending. FastAPI preflight and actual Engine.IO allowed/denied-origin handshakes are automated and no longer belong to manual smoke.
+Verification: 173 backend tests pass with warnings treated as errors. The pre-smoke clean temporary venv passed its then-current full suite and `pip check`; all 30 frontend assertions after `npm ci`, production build, zero-vulnerability npm audit, sample-pack validation, and Compose configuration pass. Focused browser smoke passed on `c371ad2`. FastAPI preflight and actual Engine.IO allowed/denied-origin handshakes are automated and no longer belong to manual smoke. Remote CI still requires a fresh push event because GitHub created no run for the two published implementation SHAs.
 
 ## Completed task: intro
 
@@ -317,8 +319,8 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Commit the post-smoke origin regression and publish `task/auth-security`, then confirm remote CI.
-2. After remote verification, close task 0014 and merge it into `web`; persistence remains the next mandatory public-deployment gate.
+1. Publish the acceptance handoff commit on `task/auth-security` and confirm that it creates a Web CI run.
+2. After green remote verification, close task 0014 and merge it into `web`; persistence remains the next mandatory public-deployment gate.
 
 ## Resume checklist
 

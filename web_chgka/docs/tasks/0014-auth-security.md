@@ -86,7 +86,7 @@ ADMIN_TOKEN_TTL_SECONDS=43200
 - The sample pack validator reports 13 valid questions, 19 authors, 6 parts, and 9 media files.
 - `docker compose config --quiet` succeeds.
 
-Focused browser acceptance passed on implementation commit `c371ad2`; remote CI is still pending.
+Focused browser acceptance passed on implementation commit `c371ad2`. Implementation and origin-regression commits `c371ad2`/`dc924bc` are published, but GitHub created no Web CI run for either SHA; a fresh acceptance-handoff push is required before merge.
 
 ## Accepted browser scope
 
