@@ -1,6 +1,7 @@
 import socketio
 import random
 import asyncio
+import hmac
 import logging
 import secrets
 import os
@@ -14,6 +15,8 @@ from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from auth import AdminTokenStore
+from config import load_app_config
 from live_ops import (
     live_ops_cancel_spin,
     live_ops_force_phase,
@@ -72,7 +75,8 @@ from transitions import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-DEBUG = True
+APP_CONFIG = load_app_config()
+DEBUG = APP_CONFIG.is_development
 MIN_SPIN_DURATION = 5.0 if DEBUG else 10.0
 MAX_SPIN_DURATION = 10.0 if DEBUG else 20.0
 SECTORS_COUNT = 13
@@ -85,7 +89,10 @@ TEN_SECONDS = 10
 # Media access
 MEDIA_TOKEN_TTL_SECONDS = 10 * 60  # 10 minutes
 
-sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
+sio = socketio.AsyncServer(
+    async_mode="asgi",
+    cors_allowed_origins=list(APP_CONFIG.allowed_origins),
+)
 
 
 @asynccontextmanager
@@ -99,45 +106,97 @@ fastapi_app = FastAPI(lifespan=lifespan)
 
 fastapi_app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=list(APP_CONFIG.allowed_origins),
+    allow_credentials=False,
+    allow_methods=["GET"],
+    allow_headers=["Content-Type"],
 )
 
 app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
 
 # --- СИСТЕМА АВТОРИЗАЦИИ ---
-# Хранилище активных админских токенов (в памяти)
-# В продакшене можно использовать Redis для персистентности
-admin_tokens = {}  # {token: True}
+# Хранилище единственного активного admin token (в памяти).
+admin_tokens = AdminTokenStore(APP_CONFIG.admin_token_ttl_seconds)
 
 def generate_admin_token():
     """Генерирует безопасный токен для админа"""
-    token = secrets.token_urlsafe(32)
-    admin_tokens[token] = True
+    token = admin_tokens.issue()
     logger.info(f"Generated admin token (total active: {len(admin_tokens)})")
     return token
 
 def validate_admin_token(token):
     """Проверяет, валиден ли токен"""
-    return token is not None and token in admin_tokens
+    return admin_tokens.validate(token)
+
+
+def revoke_admin_token(token) -> None:
+    admin_tokens.revoke(token)
+
+
+def _admin_password_matches(password: object) -> bool:
+    if not isinstance(password, str):
+        return False
+    return hmac.compare_digest(
+        password.encode("utf-8"),
+        APP_CONFIG.admin_password.encode("utf-8"),
+    )
+
+
+def _admin_record_is_authorized(player: dict) -> bool:
+    return (
+        player.get("role") == "admin"
+        and player.get("online", False)
+        and validate_admin_token(player.get("token"))
+    )
 
 async def get_client_role(sid):
     """Получает роль клиента из сессии Socket.IO"""
     try:
         session = await sio.get_session(sid)
-        return session.get('role', 'player')
-    except:
+    except Exception:
         return 'player'
+    role = session.get("role", "player")
+    if role == "admin" and not validate_admin_token(session.get("admin_token")):
+        return "player"
+    return role
+
+
+async def _expire_admin_session(sid: str, token: object) -> None:
+    """Downgrade an expired/revoked admin socket and clear its public record."""
+    global players_list
+
+    revoke_admin_token(token)
+    players_list = [
+        player
+        for player in players_list
+        if not (player.get("role") == "admin" and player.get("sid") == sid)
+    ]
+    try:
+        await sio.save_session(sid, {"role": "player"})
+    except Exception:
+        pass
+    await sio.emit("role_update", {"role": "player"}, to=sid)
+    await sio.emit(
+        "auth_expired",
+        {"message": "Сессия ведущего истекла. Введите пароль ещё раз."},
+        to=sid,
+    )
+    await broadcast_players()
 
 async def require_admin(sid):
-    """Проверяет, является ли клиент админом. Возвращает True/False"""
-    role = await get_client_role(sid)
-    if role != 'admin':
-        logger.warning(f"Unauthorized admin action attempt from {sid} (role: {role})")
-        return False
-    return True
+    """Validate role plus the non-expired token for every privileged action."""
+    try:
+        session = await sio.get_session(sid)
+    except Exception:
+        session = {"role": "player"}
+    role = session.get("role", "player")
+    token = session.get("admin_token")
+    if role == "admin" and validate_admin_token(token):
+        return True
+    if role == "admin":
+        await _expire_admin_session(sid, token)
+    logger.warning(f"Unauthorized admin action attempt from {sid} (role: {role})")
+    return False
 
 global_settings = {
     "volume": 1.0,
@@ -352,14 +411,14 @@ async def _emit_current_question_to_admins() -> None:
     ]
 
     for p in players_list:
-        if p.get("role") == "admin" and p.get("online", False):
+        if _admin_record_is_authorized(p):
             await sio.emit("admin_question", payload, to=p["sid"])
 
 
 async def _clear_admin_question_for_admins() -> None:
     """Remove stale admin-only question content after recovery clears a round."""
     for player in players_list:
-        if player.get("role") == "admin" and player.get("online", False):
+        if _admin_record_is_authorized(player):
             await sio.emit("admin_question", None, to=player["sid"])
 
 
@@ -484,7 +543,7 @@ async def broadcast_players(target_sid=None):
     else:
         # Рассылаем всем админам
         for p in players_list:
-            if p['role'] == 'admin' and p.get('online', False):
+            if _admin_record_is_authorized(p):
                 await sio.emit('players_update', {'players': public_list}, to=p['sid'])
 
 @fastapi_app.get("/")
@@ -547,14 +606,16 @@ async def connect(sid, environ):
 @sio.event
 async def restore_session(sid, data):
     """Клиент отправляет токен администратора или игрока при переподключении"""
-    admin_token = data.get('token')
-    player_token = data.get('player_token')
+    payload = data if isinstance(data, dict) else {}
+    admin_token = payload.get('token')
+    player_token = payload.get('player_token')
     
     session_data = {'role': 'player'}
     
     # 1. Проверка админа
     if admin_token and validate_admin_token(admin_token):
         session_data['role'] = 'admin'
+        session_data['admin_token'] = admin_token
         await sio.save_session(sid, session_data)
         logger.info(f"Session restored for {sid}: admin")
         
@@ -575,8 +636,24 @@ async def restore_session(sid, data):
         await emit_state_update(to=sid)
         await _emit_pack_info_to_admin(sid)
         await _emit_current_question_to_admins()
-        await sio.emit('auth_restored', {}, to=sid)
+        expires_at = admin_tokens.expires_at(admin_token)
+        await sio.emit(
+            'auth_restored',
+            {
+                'expires_at_ms': int(expires_at * 1000) if expires_at is not None else None,
+            },
+            to=sid,
+        )
         await broadcast_players()
+        return
+    if admin_token:
+        await sio.save_session(sid, session_data)
+        await sio.emit('role_update', {'role': 'player'}, to=sid)
+        await sio.emit(
+            'auth_expired',
+            {'message': 'Сессия ведущего недействительна. Введите пароль ещё раз.'},
+            to=sid,
+        )
         return
     
     # 2. Проверка игрока по токену
@@ -612,13 +689,35 @@ async def restore_session(sid, data):
 @sio.event
 async def authenticate_admin(sid, data):
     """Проверка пароля и выдача токена"""
-    password = data.get('password')
-    correct_password = os.getenv('ADMIN_PASSWORD', 'admin123')
-    
-    if password == correct_password:
+    payload = data if isinstance(data, dict) else {}
+    password = payload.get('password')
+
+    if _admin_password_matches(password):
+        previous_admins = [
+            player.copy()
+            for player in players_list
+            if player.get('role') == 'admin'
+        ]
         token = generate_admin_token()
-        await sio.save_session(sid, {'role': 'admin'})
+        await sio.save_session(
+            sid,
+            {'role': 'admin', 'admin_token': token},
+        )
         logger.info(f"Admin authenticated: {sid}")
+
+        for previous in previous_admins:
+            previous_sid = previous.get('sid')
+            if previous_sid and previous_sid != sid and previous.get('online', False):
+                try:
+                    await sio.save_session(previous_sid, {'role': 'player'})
+                except Exception:
+                    pass
+                await sio.emit('role_update', {'role': 'player'}, to=previous_sid)
+                await sio.emit(
+                    'auth_expired',
+                    {'message': 'Выполнен новый вход ведущего. Войдите повторно при необходимости.'},
+                    to=previous_sid,
+                )
         
         # Добавляем/обновляем админа
         admin_record = next((p for p in players_list if p['role'] == 'admin'), None)
@@ -632,7 +731,15 @@ async def authenticate_admin(sid, data):
 
         await broadcast_players()
         
-        await sio.emit('auth_success', {'token': token}, to=sid)
+        expires_at = admin_tokens.expires_at(token)
+        await sio.emit(
+            'auth_success',
+            {
+                'token': token,
+                'expires_at_ms': int(expires_at * 1000) if expires_at is not None else None,
+            },
+            to=sid,
+        )
         
         await sio.emit('role_update', {'role': 'admin'}, to=sid)
         await emit_state_update(to=sid)
@@ -698,7 +805,7 @@ async def join_game(sid, data):
 async def notify_admin(event_type, data):
     """Отправляет уведомление всем онлайн админам"""
     for p in players_list:
-        if p['role'] == 'admin' and p.get('online', False):
+        if _admin_record_is_authorized(p):
             await sio.emit('admin_notification', {'type': event_type, **data}, to=p['sid'])
 
 @sio.event
@@ -774,7 +881,13 @@ async def admin_advance_intro(sid, data):
 async def leave_game(sid):
     """Явный выход игрока (кнопка Выход). Освобождает имя."""
     global players_list
-    
+
+    try:
+        session = await sio.get_session(sid)
+    except Exception:
+        session = {}
+    session_admin_token = session.get("admin_token")
+
     player = next((p for p in players_list if p['sid'] == sid), None)
     if player:
         player_name = player['name']
@@ -785,16 +898,18 @@ async def leave_game(sid):
         
         if player_role == 'admin':
             add_log("Администратор вышел")
-            # Инвалидируем токен админа (если хранили)
-            token = player.get('token')
-            if token and token in admin_tokens:
-                del admin_tokens[token]
+            revoke_admin_token(player.get('token'))
         else:
             add_log(f"{player_name} вышел из игры")
         
         logger.info(f"Player {player_name} left the game (explicit logout)")
         await broadcast_players()
         await emit_state_update()
+    revoke_admin_token(session_admin_token)
+    try:
+        await sio.save_session(sid, {"role": "player"})
+    except Exception:
+        pass
 
 @sio.event
 async def disconnect(sid):

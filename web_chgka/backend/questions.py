@@ -14,6 +14,8 @@ from typing import Optional
 
 import markdown
 
+from safe_html import sanitize_html
+
 
 class QuestionType(Enum):
     NORMAL = "normal"
@@ -376,9 +378,11 @@ def _parse_one_question_folder(folder: Path) -> Question:
         )
         media_links_from_md.update(used_rel)
         media_all.extend(media)
-        # Full-featured Markdown -> HTML converter.
-        # NOTE: admin-only content; raw HTML is allowed by default in Python-Markdown.
-        return markdown.markdown(md_with_ph, extensions=["extra", "sane_lists"])
+        rendered = markdown.markdown(
+            md_with_ph,
+            extensions=["extra", "sane_lists"],
+        )
+        return sanitize_html(rendered)
 
     question_html = _render_section(sections.get("Вопрос"), "question")
     if question_html is None:
@@ -554,7 +558,9 @@ def parse_question_pack(pack_folder: Path) -> QuestionPack:
             raise QuestionParseError(
                 "Media in intro.md is not supported yet; use the temporary intro assets"
             )
-        intro_html = markdown.markdown(intro_md, extensions=["extra", "sane_lists"])
+        intro_html = sanitize_html(
+            markdown.markdown(intro_md, extensions=["extra", "sane_lists"])
+        )
 
     questions: list[Question] = []
     for sector in range(1, 14):

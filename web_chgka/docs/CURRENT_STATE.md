@@ -2,12 +2,16 @@
 
 - Snapshot date: 2026-08-06
 - Latest completed task: `docs/tasks/0013-intro.md`
-- Branch: `web`
-- Status: accepted task 0013 is merged locally into `web`; publishing `web` and confirming remote CI are the current handoff point.
+- Active task: `docs/tasks/0014-auth-security.md`
+- Branch: `task/auth-security`
+- Status: task 0014 passes local automated verification and focused browser acceptance; implementation is published, but GitHub did not create a Web CI run for either published task SHA.
 
 ## Repository checkpoint
 
-- Base branch: `web`, synchronized with `origin/web` at `ad10ac8` before task work.
+- Base branch: `web`, synchronized with `origin/web` at `3d5dfca` before task work.
+- Auth/security planning commit: `00a5d04` (`Plan authentication security task`).
+- Auth/security implementation commit: `c371ad2` (`Implement authentication security layer`), published on `origin/task/auth-security` and browser-accepted.
+- Auth/security origin-regression commit: `dc924bc` (`Automate origin acceptance checks`), published on `origin/task/auth-security`; GitHub reports no check-runs for this SHA.
 - Live Ops merge commit: `1708f1d` (`Merge live ops recovery task`).
 - The task closure commit `8d104f4` and implementation commit `7a1ee91` are both reachable from local `web`.
 - Live Ops implementation commit `7a1ee91` is published on `origin/task/live-ops-recovery` and accepted.
@@ -33,7 +37,7 @@
 - Intro implementation commits: `1b417a4`, `e7b7ad8`, `d18a57a`, `c6b0e70`, and `de4e847`; the latest commit includes accepted pack-backed normal/blitz author presentation.
 - Intro closure commit: `3f3632a` (`Close managed intro task`).
 - Intro merge commit: `e16f8c9` (`Merge managed intro task`).
-- Local `web` contains the accepted game-over and intro merges and is ahead of the locally known `origin/web`; publishing and remote CI are pending.
+- `origin/web` contains the accepted intro merge and handoff at `3d5dfca`.
 
 ## Product decisions
 
@@ -61,6 +65,20 @@
 - The last full development-image baseline (before tasks 0011–0012) built successfully: Python 3.14 passed `pip check` and 113 backend tests; Node 24 passed 13 frontend tests and the production build. The current source-only changes pass native tests/build and Compose validation; images were not rebuilt for task 0012.
 
 All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, 0009, 0010, 0011, and 0012.
+
+## Active task: authorization and security
+
+Implemented locally:
+
+- require explicit development/production configuration, an admin password, and exact allowed browser origins; production rejects the development password, short secrets, non-HTTPS origins, and wildcard/path origins;
+- use one opaque admin token with a fixed 12-hour default TTL, replacement/revoke/logout behavior, and role-plus-token validation on every privileged Socket.IO event;
+- keep one active host session intentionally: a new password login revokes the older or stuck host session instead of creating independent parallel admin sessions;
+- carry the original expiry through reconnect and automatically clear the browser's admin role/private data with an explicit re-login message;
+- apply the same exact-origin allowlist to FastAPI CORS and Socket.IO/WebSocket handshakes;
+- sanitize every Markdown-derived question and intro fragment through a pinned `nh3` allowlist while retaining managed media placeholders;
+- document development startup, production env injection, local CORS checks, and the remaining deployment boundary.
+
+Verification: 173 backend tests pass with warnings treated as errors. The pre-smoke clean temporary venv passed its then-current full suite and `pip check`; all 30 frontend assertions after `npm ci`, production build, zero-vulnerability npm audit, sample-pack validation, and Compose configuration pass. Focused browser smoke passed on `c371ad2`. FastAPI preflight and actual Engine.IO allowed/denied-origin handshakes are automated and no longer belong to manual smoke. Remote CI still requires a fresh push event because GitHub created no run for the two published implementation SHAs.
 
 ## Completed task: intro
 
@@ -283,10 +301,10 @@ The first three scenarios were reproduced against the old handlers and now have 
 
 Additional known gaps:
 
-- admin tokens have no TTL and older generated tokens are not centrally revoked;
 - all runtime state is lost on backend restart;
-- wildcard CORS and the default admin password are development-only security;
-- raw Markdown HTML is unsafe for untrusted question packs;
+- admin/player/media tokens and game state remain process-local and support only one backend worker;
+- player reconnect tokens still have no TTL/rotation;
+- production TLS, reverse proxy, DNS, secret injection, rate limiting, and deployment are not implemented;
 - frontend development uses `localhost:8000`, so it does not yet support browsers running on other machines;
 - video sharing/playback, media queue/next, duration extraction, and automatic ended state remain unimplemented;
 - frontend coverage is limited to pure playback/live-ops/sound-fade/inline-media/game-over/intro helpers; there are no browser/component tests, Socket.IO integration tests, or lint/typecheck.
@@ -301,9 +319,8 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish only `web` and confirm remote CI for merge `e16f8c9`.
-2. Remove local `task/intro` after the merged `web` result is remotely verified.
-3. Take authorization/security as the recommended next task; persistence remains another mandatory gate before public deployment.
+1. Publish the acceptance handoff commit on `task/auth-security` and confirm that it creates a Web CI run.
+2. After green remote verification, close task 0014 and merge it into `web`; persistence remains the next mandatory public-deployment gate.
 
 ## Resume checklist
 

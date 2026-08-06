@@ -28,6 +28,7 @@ function App() {
     isConnected,
     hasJoined,
     isPending,
+    sessionNotice,
     notifications,
     addNotification,
     dismissNotification,
@@ -68,7 +69,13 @@ function App() {
   );
 
   if (!isAdmin && !hasJoined) {
-    return <LoginScreen socket={socket} gameState={gameState} />;
+    return (
+      <LoginScreen
+        socket={socket}
+        gameState={gameState}
+        sessionNotice={sessionNotice}
+      />
+    );
   }
 
   if (!isAdmin && isPending) {

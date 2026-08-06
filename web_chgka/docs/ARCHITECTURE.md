@@ -41,6 +41,9 @@ UI components may emit existing user actions through the shared socket, but they
 ### Backend
 
 - `backend/main.py` creates the FastAPI/Socket.IO application and currently contains authentication, player lifecycle, phase handlers, scoring, spin orchestration, media access, logging, and emits.
+- `backend/config.py` validates the explicit development/production environment, admin password, exact browser-origin allowlist, and admin-token TTL before the application starts.
+- `backend/auth.py` owns the single active opaque admin token and its fixed in-memory expiry/revocation lifecycle; every privileged Socket.IO action validates the role plus current token.
+- `backend/safe_html.py` owns the `nh3` allowlist used after Markdown conversion for question sections and intro speech.
 - `backend/state.py` defines the typed internal `AppState` and serializes it to the flat public payload expected by the frontend.
 - `backend/transitions.py` owns synchronous intro, phase, spin, scoring, blitz, round-end, and reset rules. It mutates `AppState` before network awaits and returns transport effects such as logs, sounds, media-token cleanup, and admin-question refresh.
 - `backend/live_ops.py` owns exceptional admin recovery rules: exact score/sector edits, direct round opening, normalized phase forcing, stuck-spin cancellation, and timer repair. It uses the same transport effects without weakening normal transition guards.
@@ -112,7 +115,7 @@ Supported question kinds are `normal`, `blitz`, and `superblitz`. Blitz variants
 
 The parser validates required sectors and sections, section order, media existence and usage, supported extensions, local media-path containment, and blitz structure. Extra two-digit numeric sector directories are rejected; named root-level auxiliary directories are ignored. It intentionally supports only simple `key: value` frontmatter rather than the full YAML language. The authoring contract and validator usage are documented in `docs/QUESTION_PACKS.md`.
 
-Markdown is converted to HTML on the backend. Media references become placeholders for the admin UI. Raw HTML is currently possible and therefore assumes a trusted pack.
+Markdown is converted to HTML on the backend and then sanitized through a strict allowlist. Safe formatting and links remain available; executable/embedded content, event/style attributes, unsafe URL schemes, and raw image elements are removed. Generated `span.media-placeholder[data-media-ref]` elements remain available to the managed admin media flow.
 
 ## Media flow
 
@@ -135,8 +138,12 @@ Players receive no native playback controls. Browser autoplay restrictions are h
 
 All mutable runtime data is process-local. A backend restart loses the game, players, sessions, logs, media tokens, volume, and sound-control generation.
 
+Admin authentication is also process-local. The backend accepts one active opaque token with a fixed, non-sliding TTL (12 hours by default); a new password login, explicit logout, expiry, or backend restart revokes the old session. The browser stores it in `localStorage` for reconnect, but the backend validates the token again for every privileged event. Player reconnect tokens keep their previous untimed in-memory lifecycle and never grant admin rights.
+
 Socket.IO handlers are asynchronous and can overlap. UI button disabling is not a concurrency boundary. Core game and recovery handlers therefore call synchronous transitions before their first network await. Repeated scoring is rejected by the changed phase, intro navigation validates the expected slide index, and spin completion is accepted only for the current `spin_id`; reset and recovery cancellation both advance that generation.
 
 ## Deployment status
 
 `docker-compose.yml` is development-only: it bind-mounts source code and both Dockerfiles run development servers. There is no reverse proxy, TLS configuration, persistent store, health check, production image, or CI deployment workflow yet.
+
+Backend startup nevertheless has an explicit security mode. Development Compose supplies its local password and exact `http://localhost:5173` origin. Production requires an externally injected password and exact HTTPS origins; the same allowlist protects FastAPI CORS and Socket.IO/WebSocket handshakes. The production frontend still assumes same-origin HTTP and WebSocket routing through a future TLS reverse proxy.

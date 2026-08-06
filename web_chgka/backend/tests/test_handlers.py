@@ -1,10 +1,12 @@
 import asyncio
+from dataclasses import replace
 import shutil
 from pathlib import Path
 
 import pytest
 
 import main
+from auth import AdminTokenStore
 from questions import parse_question_pack
 from sound_control import begin_fade, create_sound_control_state
 from state import (
@@ -46,6 +48,26 @@ async def _allow_admin(_sid):
 
 async def _deny_admin(_sid):
     return False
+
+
+def _authorized_admin(monkeypatch, fake_sio, *, sid="admin"):
+    store = AdminTokenStore(
+        60,
+        token_factory=lambda: "valid-admin-token",
+    )
+    token = store.issue()
+    monkeypatch.setattr(main, "admin_tokens", store)
+    fake_sio.sessions[sid] = {
+        "role": "admin",
+        "admin_token": token,
+    }
+    return {
+        "sid": sid,
+        "name": main.ADMIN_NAME,
+        "role": "admin",
+        "token": token,
+        "online": True,
+    }
 
 
 @pytest.fixture(autouse=True)
@@ -180,11 +202,9 @@ def test_intro_author_photo_is_pack_backed_and_current_slide_only(tmp_path, monk
 
 def test_pack_info_includes_intro_speech_for_admin_only(monkeypatch):
     fake_sio = FakeSio(yield_on_emit=False)
-    fake_sio.sessions = {
-        "admin": {"role": "admin"},
-        "player": {"role": "player"},
-    }
+    fake_sio.sessions = {"player": {"role": "player"}}
     monkeypatch.setattr(main, "sio", fake_sio)
+    _authorized_admin(monkeypatch, fake_sio)
     monkeypatch.setattr(
         main,
         "pack_admin_info",
@@ -258,7 +278,7 @@ def test_end_round_at_six_broadcasts_final_state_and_sound(monkeypatch):
     monkeypatch.setattr(
         main,
         "players_list",
-        [{"sid": "admin", "role": "admin", "online": True}],
+        [_authorized_admin(monkeypatch, fake_sio)],
     )
 
     asyncio.run(main.admin_end_round("admin"))
@@ -334,6 +354,172 @@ def test_pending_player_stays_pending_after_restore(monkeypatch):
     assert player["pending"] is True
 
 
+def test_admin_login_replaces_previous_token_and_session(monkeypatch):
+    now = [100.0]
+    tokens = iter(("old-admin-token", "new-admin-token"))
+    store = AdminTokenStore(
+        60,
+        clock=lambda: now[0],
+        token_factory=lambda: next(tokens),
+    )
+    old_token = store.issue()
+    fake_sio = FakeSio(yield_on_emit=False)
+    fake_sio.sessions["old-admin"] = {
+        "role": "admin",
+        "admin_token": old_token,
+    }
+    old_record = {
+        "sid": "old-admin",
+        "name": main.ADMIN_NAME,
+        "role": "admin",
+        "token": old_token,
+        "online": True,
+    }
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "admin_tokens", store)
+    monkeypatch.setattr(main, "players_list", [old_record])
+    monkeypatch.setattr(
+        main,
+        "APP_CONFIG",
+        replace(main.APP_CONFIG, admin_password="correct-password"),
+    )
+
+    asyncio.run(
+        main.authenticate_admin("new-admin", {"password": "correct-password"})
+    )
+
+    assert store.validate(old_token) is False
+    assert store.validate("new-admin-token") is True
+    assert fake_sio.sessions["old-admin"] == {"role": "player"}
+    assert fake_sio.sessions["new-admin"] == {
+        "role": "admin",
+        "admin_token": "new-admin-token",
+    }
+    assert main.players_list == [
+        {
+            "sid": "new-admin",
+            "name": main.ADMIN_NAME,
+            "role": "admin",
+            "token": "new-admin-token",
+            "online": True,
+        }
+    ]
+    success = next(
+        data for event, data, _kwargs in fake_sio.events if event == "auth_success"
+    )
+    assert success == {
+        "token": "new-admin-token",
+        "expires_at_ms": 160_000,
+    }
+    assert any(
+        event == "auth_expired" and kwargs == {"to": "old-admin"}
+        for event, _data, kwargs in fake_sio.events
+    )
+
+
+def test_admin_password_comparison_supports_unicode(monkeypatch):
+    monkeypatch.setattr(
+        main,
+        "APP_CONFIG",
+        replace(main.APP_CONFIG, admin_password="надёжный-пароль"),
+    )
+
+    assert main._admin_password_matches("надёжный-пароль") is True
+    assert main._admin_password_matches("другой-пароль") is False
+    assert main._admin_password_matches(None) is False
+
+
+def test_expired_admin_token_denies_action_and_downgrades_socket(monkeypatch):
+    now = [100.0]
+    store = AdminTokenStore(
+        60,
+        clock=lambda: now[0],
+        token_factory=lambda: "admin-token",
+    )
+    token = store.issue()
+    fake_sio = FakeSio(yield_on_emit=False)
+    fake_sio.sessions["admin"] = {
+        "role": "admin",
+        "admin_token": token,
+    }
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "admin_tokens", store)
+    monkeypatch.setattr(
+        main,
+        "players_list",
+        [
+            {
+                "sid": "admin",
+                "name": main.ADMIN_NAME,
+                "role": "admin",
+                "token": token,
+                "online": True,
+            }
+        ],
+    )
+    now[0] = 160.0
+
+    allowed = asyncio.run(main.require_admin("admin"))
+
+    assert allowed is False
+    assert fake_sio.sessions["admin"] == {"role": "player"}
+    assert main.players_list == []
+    assert any(event == "auth_expired" for event, _data, _kwargs in fake_sio.events)
+
+
+def test_restore_rejects_revoked_admin_token(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    store = AdminTokenStore(60)
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "admin_tokens", store)
+    monkeypatch.setattr(main, "players_list", [])
+
+    asyncio.run(main.restore_session("browser", {"token": "revoked-token"}))
+
+    assert fake_sio.sessions["browser"] == {"role": "player"}
+    assert any(event == "auth_expired" for event, _data, _kwargs in fake_sio.events)
+
+
+def test_restore_reports_the_original_admin_expiry(monkeypatch):
+    now = [100.0]
+    store = AdminTokenStore(
+        60,
+        clock=lambda: now[0],
+        token_factory=lambda: "admin-token",
+    )
+    token = store.issue()
+    now[0] = 120.0
+    fake_sio = FakeSio(yield_on_emit=False)
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "admin_tokens", store)
+    monkeypatch.setattr(main, "players_list", [])
+
+    asyncio.run(main.restore_session("browser", {"token": token}))
+
+    restored = next(
+        data for event, data, _kwargs in fake_sio.events if event == "auth_restored"
+    )
+    assert restored == {"expires_at_ms": 160_000}
+    assert fake_sio.sessions["browser"] == {
+        "role": "admin",
+        "admin_token": token,
+    }
+
+
+def test_admin_logout_revokes_token(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    admin = _authorized_admin(monkeypatch, fake_sio)
+    store = main.admin_tokens
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "players_list", [admin])
+
+    asyncio.run(main.leave_game("admin"))
+
+    assert store.validate(admin["token"]) is False
+    assert fake_sio.sessions["admin"] == {"role": "player"}
+    assert main.players_list == []
+
+
 def test_audio_resolve_share_play_pause_stop_and_http_context(monkeypatch):
     fake_sio = FakeSio(yield_on_emit=False)
     state = create_initial_app_state(phase=PHASE_QUESTION_READING)
@@ -350,7 +536,7 @@ def test_audio_resolve_share_play_pause_stop_and_http_context(monkeypatch):
     monkeypatch.setattr(
         main,
         "players_list",
-        [{"sid": "admin", "role": "admin", "online": True}],
+        [_authorized_admin(monkeypatch, fake_sio)],
     )
     monkeypatch.setattr(main.time, "time", lambda: now[0])
 
@@ -504,7 +690,7 @@ def test_live_ops_open_round_force_phase_timer_and_clear_question(monkeypatch):
     monkeypatch.setattr(
         main,
         "players_list",
-        [{"sid": "admin", "role": "admin", "online": True}],
+        [_authorized_admin(monkeypatch, fake_sio)],
     )
     monkeypatch.setattr(main.time, "time", lambda: now[0])
 
@@ -559,7 +745,7 @@ def test_live_ops_reset_to_intro_stops_audio_and_waits_for_manual_music(monkeypa
     monkeypatch.setattr(
         main,
         "players_list",
-        [{"sid": "admin", "role": "admin", "online": True}],
+        [_authorized_admin(monkeypatch, fake_sio)],
     )
 
     response = asyncio.run(main.admin_reset_to_intro("admin"))

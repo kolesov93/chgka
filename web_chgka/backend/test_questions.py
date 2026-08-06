@@ -142,6 +142,30 @@ class TestValidQuestions:
         assert q.sources_html is not None
         assert "Атлас мира" in q.sources_html
 
+    def test_raw_html_is_sanitized_after_markdown_conversion(self, tmp_path):
+        question_path = tmp_path / "safe-question"
+        question_path.mkdir()
+        (question_path / "question.md").write_text(
+            """---
+title: Sanitization
+---
+
+# Вопрос
+
+<script>alert('x')</script><p onclick="alert(1)">Безопасный текст</p>
+
+# Ответ
+
+<a href="javascript:alert(1)">Ответ</a>
+""",
+            encoding="utf-8",
+        )
+
+        question = parse_question(question_path)
+
+        assert question.question_html == "<p>Безопасный текст</p>"
+        assert question.answer_html == '<p><a rel="noopener noreferrer">Ответ</a></p>'
+
 
 class TestSampleQuestions:
     """Tests for sample questions from sample_questions folder."""

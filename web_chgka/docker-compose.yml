@@ -8,7 +8,11 @@ services:
       - ./fixtures:/fixtures:ro
     environment:
       - PYTHONUNBUFFERED=1
+      - CHGKA_ENV=development
       - QUESTIONS_PACK_PATH=/fixtures/sample_questions
+      - ADMIN_PASSWORD=admin123
+      - ALLOWED_ORIGINS=http://localhost:5173
+      - ADMIN_TOKEN_TTL_SECONDS=${ADMIN_TOKEN_TTL_SECONDS:-43200}
 
   frontend:
     build: ./frontend
@@ -20,4 +24,3 @@ services:
     # Прокидываем изменения кода в реальном времени
     environment:
       - CHOKIDAR_USEPOLLING=true
-
