@@ -2,12 +2,15 @@
 
 - Snapshot date: 2026-08-06
 - Latest completed task: `docs/tasks/0014-auth-security.md`
-- Active task: none
-- Branch: `web`
-- Status: task 0014 is accepted and merged locally; publishing `web` and its final remote CI are pending.
+- Active task: `docs/tasks/0015-media-video-sequence.md`
+- Branch: `task/media-video-sequence`
+- Status: media/video/sequence task is in planning; implementation decisions have not yet been accepted.
 
 ## Repository checkpoint
 
+- `web` and `origin/web` were synchronized at `2e48860` before the next task was prepared.
+- Played-question history is recorded as a problem without a chosen solution in local `web` commit `343af00`; runtime recovery is no longer P0.
+- The media task starts from `343af00` on `task/media-video-sequence`.
 - Base branch: `web`, synchronized with `origin/web` at `3d5dfca` before task work.
 - Auth/security planning commit: `00a5d04` (`Plan authentication security task`).
 - Auth/security implementation commit: `c371ad2` (`Implement authentication security layer`), published on `origin/task/auth-security` and browser-accepted.
