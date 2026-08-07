@@ -73,6 +73,8 @@ class SharedMediaState(TypedDict):
     playback_state: MediaPlaybackState
     position_ms: int
     started_at_ms: Optional[int]
+    playback_generation: int
+    has_next: bool
 
 
 class PublicSharedMediaState(TypedDict):
@@ -84,6 +86,8 @@ class PublicSharedMediaState(TypedDict):
     position_ms: int
     started_at_ms: Optional[int]
     server_now_ms: int
+    playback_generation: int
+    has_next: bool
 
 
 class GameProgressState(TypedDict):
@@ -319,6 +323,8 @@ def public_game_state(
             "position_ms": internal_media["position_ms"],
             "started_at_ms": internal_media["started_at_ms"],
             "server_now_ms": timestamp_ms,
+            "playback_generation": int(internal_media.get("playback_generation", 0)),
+            "has_next": bool(internal_media.get("has_next", False)),
         }
 
     return deepcopy(

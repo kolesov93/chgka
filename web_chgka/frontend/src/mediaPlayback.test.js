@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   normalizedVolume,
+  playbackEndedPayload,
   playbackPositionSeconds,
   shouldSeek,
 } from './mediaPlayback.js';
@@ -41,4 +42,31 @@ test('playback position and volume are clamped', () => {
 test('seek tolerance avoids unnecessary playback jumps', () => {
   assert.equal(shouldSeek(5, 5.2), false);
   assert.equal(shouldSeek(5, 5.5), true);
+});
+
+
+test('ended payload identifies only a valid playing generation', () => {
+  assert.deepEqual(
+    playbackEndedPayload({
+      media_id: 'video-token',
+      playback_state: 'playing',
+      playback_generation: 4,
+    }),
+    { media_id: 'video-token', playback_generation: 4 },
+  );
+  assert.equal(
+    playbackEndedPayload({
+      media_id: 'video-token',
+      playback_state: 'paused',
+      playback_generation: 4,
+    }),
+    null,
+  );
+  assert.equal(
+    playbackEndedPayload({
+      media_id: 'video-token',
+      playback_state: 'playing',
+    }),
+    null,
+  );
 });

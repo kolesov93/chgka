@@ -28,3 +28,20 @@ export function normalizedVolume(volume) {
   if (!Number.isFinite(numeric)) return 1;
   return Math.max(0, Math.min(1, numeric));
 }
+
+export function playbackEndedPayload(media) {
+  if (
+    media?.playback_state !== 'playing'
+    || typeof media.media_id !== 'string'
+    || !media.media_id
+    || !Number.isInteger(media.playback_generation)
+    || media.playback_generation < 0
+  ) {
+    return null;
+  }
+
+  return {
+    media_id: media.media_id,
+    playback_generation: media.playback_generation,
+  };
+}
