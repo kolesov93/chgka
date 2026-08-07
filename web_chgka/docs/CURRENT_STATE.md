@@ -3,8 +3,8 @@
 - Snapshot date: 2026-08-07
 - Latest completed task: `docs/tasks/0015-media-video-sequence.md`
 - Active task: none
-- Branch: `task/media-video-sequence`
-- Status: media/video/sequence implementation and browser smoke are accepted; the task is ready to merge into `web`.
+- Branch: `web`
+- Status: media/video/sequence task is accepted and merged locally; publishing `web` and remote CI are pending.
 
 ## Repository checkpoint
 
@@ -14,6 +14,8 @@
 - Media decisions are `1B + 2A + 3B + 4C`: explicit shared Next, host-reported completion, reset-to-start on end, and shared-token validity tied to the active context.
 - Local media verification: 177 backend tests pass with warnings as errors; all 7 frontend test files and the production build pass. Native Compose validation is currently blocked by a broken snap-confine capability in this environment, not by a reported Compose configuration error.
 - Media implementation commit `2415f5f` passed the focused two-browser smoke and is accepted.
+- Media closure commit: `f60e6ac` (`Close video media sequence task`).
+- Media merge commit: `aa91be0` (`Merge video media sequence task`).
 - Base branch: `web`, synchronized with `origin/web` at `3d5dfca` before task work.
 - Auth/security planning commit: `00a5d04` (`Plan authentication security task`).
 - Auth/security implementation commit: `c371ad2` (`Implement authentication security layer`), published on `origin/task/auth-security` and browser-accepted.
