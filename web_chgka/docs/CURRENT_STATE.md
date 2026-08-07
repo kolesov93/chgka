@@ -1,13 +1,19 @@
 # CHGKA Web Current State
 
-- Snapshot date: 2026-08-06
-- Latest completed task: `docs/tasks/0014-auth-security.md`
+- Snapshot date: 2026-08-07
+- Latest completed task: `docs/tasks/0015-media-video-sequence.md`
 - Active task: none
-- Branch: `web`
-- Status: task 0014 is accepted and merged locally; publishing `web` and its final remote CI are pending.
+- Branch: `task/media-video-sequence`
+- Status: media/video/sequence implementation and browser smoke are accepted; the task is ready to merge into `web`.
 
 ## Repository checkpoint
 
+- `web` and `origin/web` were synchronized at `2e48860` before the next task was prepared.
+- Played-question history is recorded as a problem without a chosen solution in local `web` commit `343af00`; runtime recovery is no longer P0.
+- The media task starts from `343af00` on `task/media-video-sequence`.
+- Media decisions are `1B + 2A + 3B + 4C`: explicit shared Next, host-reported completion, reset-to-start on end, and shared-token validity tied to the active context.
+- Local media verification: 177 backend tests pass with warnings as errors; all 7 frontend test files and the production build pass. Native Compose validation is currently blocked by a broken snap-confine capability in this environment, not by a reported Compose configuration error.
+- Media implementation commit `2415f5f` passed the focused two-browser smoke and is accepted.
 - Base branch: `web`, synchronized with `origin/web` at `3d5dfca` before task work.
 - Auth/security planning commit: `00a5d04` (`Plan authentication security task`).
 - Auth/security implementation commit: `c371ad2` (`Implement authentication security layer`), published on `origin/task/auth-security` and browser-accepted.
@@ -52,14 +58,27 @@
 
 ## Verified baseline
 
-- Backend: 173 tests pass with warnings treated as errors, including config, admin-token lifecycle, HTML sanitization, FastAPI preflight, and real Engine.IO origin handshakes.
+- Backend: 177 tests pass with warnings treated as errors, including config, admin-token lifecycle, HTML sanitization, FastAPI preflight, real Engine.IO origin handshakes, video playback, bounded media sequencing, stale completion, and shared-token lifetime.
 - A clean temporary Python environment passed the then-current full suite and `pip check` without broken requirements.
-- Frontend: 30 pure playback/live-ops/sound-fade/inline-media/game-over/intro/session assertions pass after `npm ci`; production build and full npm audit pass with zero vulnerabilities.
+- Frontend: 31 pure playback/live-ops/sound-fade/inline-media/game-over/intro/session assertions pass after `npm ci`; production build and the previous full npm audit pass with zero vulnerabilities.
 - Backend startup loads the sample pack with all 13 questions and reaches application startup completion.
 - `docker compose config --quiet` succeeds without warnings.
 - The last full development-image baseline (before tasks 0011–0012) built successfully: Python 3.14 passed `pip check` and 113 backend tests; Node 24 passed 13 frontend tests and the production build. The current source-only changes pass native tests/build and Compose validation; images were not rebuilt for task 0012.
 
 All three GitHub Actions jobs and the focused admin/player browser smoke passed for tasks 0007, 0008, 0009, 0010, 0011, and 0012.
+
+## Completed task: video media and sequence control
+
+Implemented:
+
+- resolve and privately preview pack-backed video, then share it through the existing context-bound media flow;
+- render synchronized shared video with host-only Play/Pause/Stop and no native player controls;
+- let the host explicitly replace shared media with the next ordered item without crossing a section, round scope, or blitz part;
+- accept natural completion only from the authenticated host and only for the current playback generation, then reset the visible item to stopped position zero;
+- keep an expired token usable only while it remains the exact active shared item, revoking it on Hide, replacement, or context change;
+- restore shared media rendering and host controls after reconnect.
+
+Verification: 177 backend tests with warnings as errors, 31 frontend assertions, and the production build pass. The focused sectors 02/06/08 two-browser smoke, playback completion, Next behavior, and reconnect passed. Remote CI remains the publication gate.
 
 ## Completed task: authorization and security
 

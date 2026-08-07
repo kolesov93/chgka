@@ -28,10 +28,12 @@ from live_ops import (
 )
 from media import (
     MediaPlaybackError,
+    complete_shared_media,
     create_media_token_info,
     create_shared_media,
     current_media_catalog as build_current_media_catalog,
     media_token_is_current,
+    next_media_in_section,
     pause_shared_media,
     play_shared_media,
     stop_shared_media,
@@ -271,7 +273,13 @@ def _get_round_kind_and_part_index(round_ctx: dict) -> tuple[str, int]:
 
 def _cleanup_expired_media_tokens(now_ts: Optional[float] = None) -> None:
     now = now_ts if now_ts is not None else time.time()
-    expired = [mid for mid, info in media_tokens.items() if info.get("expires_at", 0) <= now]
+    shared_media = app_state["presentation"].get("shared_media")
+    active_shared_id = shared_media.get("media_id") if shared_media else None
+    expired = [
+        mid
+        for mid, info in media_tokens.items()
+        if mid != active_shared_id and info.get("expires_at", 0) <= now
+    ]
     for mid in expired:
         media_tokens.pop(mid, None)
 
@@ -284,12 +292,18 @@ def _get_current_media_catalog() -> dict:
     return build_current_media_catalog(loaded_pack, app_state)
 
 
-def _media_token_is_current(info: dict, now_ts: Optional[float] = None) -> bool:
+def _media_token_is_current(
+    info: dict,
+    now_ts: Optional[float] = None,
+    *,
+    allow_expired: bool = False,
+) -> bool:
     return media_token_is_current(
         info,
         loaded_pack,
         app_state,
         now_ts=now_ts if now_ts is not None else time.time(),
+        allow_expired=allow_expired,
     )
 
 def _load_question_pack_on_startup() -> None:
@@ -555,7 +569,14 @@ async def root():
 async def get_media(media_id: str):
     _cleanup_expired_media_tokens()
     info = media_tokens.get(media_id)
-    if not info or not _media_token_is_current(info):
+    shared_media = app_state["presentation"].get("shared_media")
+    is_active_shared = bool(
+        shared_media and shared_media.get("media_id") == media_id
+    )
+    if not info or not _media_token_is_current(
+        info,
+        allow_expired=is_active_shared,
+    ):
         media_tokens.pop(media_id, None)
         raise HTTPException(status_code=404, detail="Media not found")
     path = info.get("path")
@@ -1091,6 +1112,23 @@ async def admin_end_round(sid, data=None):
     await _apply_transition_effects(effects)
 
 
+def _store_current_media_token(media) -> tuple[str, dict]:
+    media_id = secrets.token_urlsafe(16)
+    info = create_media_token_info(
+        media,
+        app_state,
+        expires_at=time.time() + MEDIA_TOKEN_TTL_SECONDS,
+    )
+    media_tokens[media_id] = info
+    return media_id, info
+
+
+def _create_current_shared_media(media_id: str, info: dict) -> dict:
+    catalog = _get_current_media_catalog()
+    has_next = next_media_in_section(catalog, info["media_ref"]) is not None
+    return create_shared_media(media_id, info, has_next=has_next)
+
+
 @sio.event
 async def admin_resolve_media(sid, data):
     """
@@ -1116,18 +1154,12 @@ async def admin_resolve_media(sid, data):
     media = _get_current_media_catalog().get(media_ref)
     if media is None:
         return {"ok": False, "error": "media_not_allowed"}
-    if media.type not in ("image", "audio"):
+    if media.type not in ("image", "audio", "video"):
         return {"ok": False, "error": "unsupported_media_type"}
 
     # Create token bound to the current round context.
     _cleanup_expired_media_tokens()
-    media_id = secrets.token_urlsafe(16)
-    info = create_media_token_info(
-        media,
-        app_state,
-        expires_at=time.time() + MEDIA_TOKEN_TTL_SECONDS,
-    )
-    media_tokens[media_id] = info
+    media_id, _info = _store_current_media_token(media)
     return {
         "ok": True,
         "media_id": media_id,
@@ -1139,19 +1171,19 @@ async def admin_resolve_media(sid, data):
 async def admin_share_media(sid, data):
     """Share resolved media_id to all clients (rendered instead of the table)."""
     if not await require_admin(sid):
-        return
+        return {"ok": False, "error": "not_admin"}
     data = data if isinstance(data, dict) else {}
     phase = app_state["game"]["phase"]
     if phase not in (PHASE_QUESTION_READING, PHASE_DISCUSSION, PHASE_TEAM_ANSWER, PHASE_POST_ROUND):
-        return
+        return {"ok": False, "error": f"bad_phase:{phase}"}
     if app_state["wheel"]["is_spinning"]:
-        return
+        return {"ok": False, "error": "spinning"}
     if not app_state["game"]["round"]:
-        return
+        return {"ok": False, "error": "no_round"}
 
     media_id = (data.get("media_id") or "").strip()
     if not media_id:
-        return
+        return {"ok": False, "error": "missing_media_id"}
 
     _cleanup_expired_media_tokens()
     info = media_tokens.get(media_id)
@@ -1161,7 +1193,7 @@ async def admin_share_media(sid, data):
             {"type": "warning", "message": "Медиа устарело. Нажми превью ещё раз."},
             to=sid,
         )
-        return
+        return {"ok": False, "error": "media_expired"}
 
     if not _media_token_is_current(info):
         media_tokens.pop(media_id, None)
@@ -1170,11 +1202,61 @@ async def admin_share_media(sid, data):
             {"type": "warning", "message": "Медиа больше не относится к текущему вопросу."},
             to=sid,
         )
-        return
+        return {"ok": False, "error": "media_not_current"}
 
-    app_state["presentation"]["shared_media"] = create_shared_media(media_id, info)
+    previous = app_state["presentation"].get("shared_media")
+    previous_id = previous.get("media_id") if previous else None
+    app_state["presentation"]["shared_media"] = _create_current_shared_media(media_id, info)
+    if previous_id and previous_id != media_id:
+        media_tokens.pop(previous_id, None)
     add_log(f"Медиа показано игрокам: {info.get('name', info.get('type'))}")
     await emit_state_update()
+    return {"ok": True}
+
+
+@sio.event
+async def admin_share_next_media(sid, data=None):
+    """Replace shared media with the next item in the same source section."""
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+    data = data if isinstance(data, dict) else {}
+
+    phase = app_state["game"]["phase"]
+    if phase not in (PHASE_QUESTION_READING, PHASE_DISCUSSION, PHASE_TEAM_ANSWER, PHASE_POST_ROUND):
+        return {"ok": False, "error": f"bad_phase:{phase}"}
+    if app_state["wheel"]["is_spinning"]:
+        return {"ok": False, "error": "spinning"}
+
+    shared_media = app_state["presentation"].get("shared_media")
+    expected_media_id = data.get("expected_media_id")
+    if not isinstance(expected_media_id, str) or not expected_media_id:
+        return {"ok": False, "error": "missing_expected_media_id"}
+    if shared_media is None or shared_media.get("media_id") != expected_media_id:
+        return {"ok": False, "error": "stale_current_media"}
+    info = _get_current_shared_media_token_info()
+    if info is None:
+        return {"ok": False, "error": "no_current_media"}
+
+    catalog = _get_current_media_catalog()
+    next_media = next_media_in_section(catalog, info["media_ref"])
+    if next_media is None:
+        shared_media["has_next"] = False
+        return {"ok": False, "error": "no_next_media"}
+
+    next_id, next_info = _store_current_media_token(next_media)
+    previous_id = shared_media["media_id"]
+    app_state["presentation"]["shared_media"] = _create_current_shared_media(
+        next_id,
+        next_info,
+    )
+    media_tokens.pop(previous_id, None)
+    add_log(f"Следующее медиа показано игрокам: {next_info['name']}")
+    await emit_state_update()
+    return {
+        "ok": True,
+        "media_id": next_id,
+        **next_media.public_descriptor(),
+    }
 
 
 def _get_current_shared_media_token_info() -> Optional[dict]:
@@ -1183,7 +1265,7 @@ def _get_current_shared_media_token_info() -> Optional[dict]:
         return None
     media_id = shared_media.get("media_id")
     info = media_tokens.get(media_id)
-    if not info or not _media_token_is_current(info):
+    if not info or not _media_token_is_current(info, allow_expired=True):
         return None
     if info.get("media_ref") != shared_media.get("media_ref"):
         return None
@@ -1200,7 +1282,7 @@ async def _admin_media_playback_action(sid: str, action: str) -> None:
         app_state["presentation"]["shared_media"] = None
         await sio.emit(
             "admin_notification",
-            {"type": "warning", "message": "Сначала покажи актуальное аудио игрокам."},
+            {"type": "warning", "message": "Сначала покажи актуальное медиа игрокам."},
             to=sid,
         )
         await emit_state_update()
@@ -1237,7 +1319,7 @@ async def _admin_media_playback_action(sid: str, action: str) -> None:
     await emit_settings_update()
     if changed:
         labels = {"play": "запущено", "pause": "на паузе", "stop": "остановлено"}
-        add_log(f"Аудио {labels[action]}: {info.get('name', 'media')}")
+        add_log(f"Медиа {labels[action]}: {info.get('name', 'media')}")
         await emit_state_update()
 
 
@@ -1257,13 +1339,53 @@ async def admin_stop_media(sid, data=None):
 
 
 @sio.event
+async def admin_media_ended(sid, data):
+    """Accept natural completion from the host for the current play generation."""
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+    data = data if isinstance(data, dict) else {}
+
+    media_id = data.get("media_id")
+    generation = data.get("playback_generation")
+    if not isinstance(media_id, str) or not media_id:
+        return {"ok": False, "error": "missing_media_id"}
+    if not isinstance(generation, int) or isinstance(generation, bool) or generation < 0:
+        return {"ok": False, "error": "invalid_generation"}
+
+    shared_media = app_state["presentation"].get("shared_media")
+    if shared_media is None or shared_media.get("media_id") != media_id:
+        return {"ok": False, "error": "stale_media"}
+    info = _get_current_shared_media_token_info()
+    if info is None:
+        return {"ok": False, "error": "media_not_current"}
+
+    try:
+        changed = complete_shared_media(
+            shared_media,
+            expected_generation=generation,
+        )
+    except MediaPlaybackError:
+        return {"ok": False, "error": "unsupported_media_type"}
+    if not changed:
+        return {"ok": False, "error": "stale_playback"}
+
+    add_log(f"Медиа завершено: {info.get('name', 'media')}")
+    await emit_state_update()
+    return {"ok": True}
+
+
+@sio.event
 async def admin_hide_media(sid, data=None):
     """Hide shared media for all clients."""
     if not await require_admin(sid):
-        return
+        return {"ok": False, "error": "not_admin"}
+    shared_media = app_state["presentation"].get("shared_media")
     app_state["presentation"]["shared_media"] = None
+    if shared_media:
+        media_tokens.pop(shared_media.get("media_id"), None)
     add_log("Медиа скрыто")
     await emit_state_update()
+    return {"ok": True}
 
 
 @sio.event

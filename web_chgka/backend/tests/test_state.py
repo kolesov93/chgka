@@ -17,6 +17,8 @@ def _shared_image():
         "playback_state": "stopped",
         "position_ms": 0,
         "started_at_ms": None,
+        "playback_generation": 0,
+        "has_next": False,
     }
 
 
@@ -157,6 +159,8 @@ def test_public_game_state_flattens_app_state_for_current_frontend():
             "position_ms": 0,
             "started_at_ms": None,
             "server_now_ms": 999_000,
+            "playback_generation": 0,
+            "has_next": False,
         },
     }
     assert payload["score"] is not state["game"]["score"]
@@ -219,10 +223,14 @@ def test_public_game_state_serializes_server_time_for_audio_reconnect():
         "playback_state": "playing",
         "position_ms": 0,
         "started_at_ms": 10_000,
+        "playback_generation": 3,
+        "has_next": True,
     }
 
     payload = public_game_state(state, now_ms=13_750)
 
     assert payload["shared_media"]["server_now_ms"] == 13_750
     assert payload["shared_media"]["started_at_ms"] == 10_000
+    assert payload["shared_media"]["playback_generation"] == 3
+    assert payload["shared_media"]["has_next"] is True
     assert "server_now_ms" not in state["presentation"]["shared_media"]

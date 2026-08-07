@@ -3,32 +3,33 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { mediaUrl } from '../socket';
 import {
   normalizedVolume,
+  playbackEndedPayload,
   playbackPositionSeconds,
   shouldSeek,
 } from '../mediaPlayback';
 
 
-export function SynchronizedAudio({ media, volume = 1 }) {
-  const audioRef = useRef(null);
+export function SynchronizedMedia({ media, volume = 1, onEnded }) {
+  const elementRef = useRef(null);
   const snapshotReceivedAtRef = useRef(Date.now());
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
 
   const synchronize = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio || !media) return;
+    const element = elementRef.current;
+    if (!element || !media) return;
 
     const elapsedSinceSnapshotMs = Date.now() - snapshotReceivedAtRef.current;
     const targetSeconds = playbackPositionSeconds(media, elapsedSinceSnapshotMs);
-    if (shouldSeek(audio.currentTime, targetSeconds)) {
+    if (shouldSeek(element.currentTime, targetSeconds)) {
       try {
-        audio.currentTime = targetSeconds;
+        element.currentTime = targetSeconds;
       } catch {
         // Metadata may not be available yet; onLoadedMetadata retries the sync.
       }
     }
 
     if (media.playback_state === 'playing') {
-      const playPromise = audio.play();
+      const playPromise = element.play();
       if (playPromise) {
         playPromise
           .then(() => setPlaybackBlocked(false))
@@ -37,15 +38,15 @@ export function SynchronizedAudio({ media, volume = 1 }) {
       return;
     }
 
-    audio.pause();
+    element.pause();
     setPlaybackBlocked(false);
-    if (media.playback_state === 'stopped' && audio.currentTime !== 0) {
-      audio.currentTime = 0;
+    if (media.playback_state === 'stopped' && element.currentTime !== 0) {
+      element.currentTime = 0;
     }
   }, [media]);
 
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = normalizedVolume(volume);
+    if (elementRef.current) elementRef.current.volume = normalizedVolume(volume);
   }, [volume]);
 
   useEffect(() => {
@@ -57,15 +58,31 @@ export function SynchronizedAudio({ media, volume = 1 }) {
     if (media?.playback_state === 'playing') synchronize();
   };
 
+  const reportEnded = () => {
+    const payload = playbackEndedPayload(media);
+    if (payload && onEnded) onEnded(payload);
+  };
+
+  const commonProps = {
+    ref: elementRef,
+    src: mediaUrl(media.media_id),
+    preload: 'auto',
+    onLoadedMetadata: synchronize,
+    onEnded: reportEnded,
+  };
+
   return (
-    <div className="flex flex-col items-center gap-3">
-      <audio
-        key={media.media_id}
-        ref={audioRef}
-        src={mediaUrl(media.media_id)}
-        preload="auto"
-        onLoadedMetadata={synchronize}
-      />
+    <div className="flex w-full flex-col items-center gap-3">
+      {media.type === 'video' ? (
+        <video
+          key={media.media_id}
+          {...commonProps}
+          playsInline
+          className="max-h-[520px] w-full rounded bg-black object-contain"
+        />
+      ) : (
+        <audio key={media.media_id} {...commonProps} />
+      )}
       {playbackBlocked && (
         <button
           type="button"

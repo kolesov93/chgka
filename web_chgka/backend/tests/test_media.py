@@ -4,10 +4,12 @@ import pytest
 
 from media import (
     MediaPlaybackError,
+    complete_shared_media,
     create_media_token_info,
     create_shared_media,
     current_media_catalog,
     media_token_is_current,
+    next_media_in_section,
     pause_shared_media,
     play_shared_media,
     stop_shared_media,
@@ -117,6 +119,13 @@ def test_token_rejects_expiry_and_reused_round_after_new_spin():
     token["section"] = "question"
 
     assert not media_token_is_current(token, pack, state, now_ts=200.0)
+    assert media_token_is_current(
+        token,
+        pack,
+        state,
+        now_ts=200.0,
+        allow_expired=True,
+    )
 
     state["wheel"]["spin_id"] = 5
     assert not media_token_is_current(token, pack, state, now_ts=100.0)
@@ -136,19 +145,51 @@ def test_audio_play_pause_resume_and_stop_use_server_time():
     assert play_shared_media(shared, now_ms=1_000)
     assert shared["playback_state"] == "playing"
     assert shared["started_at_ms"] == 1_000
+    assert shared["playback_generation"] == 1
 
     assert pause_shared_media(shared, now_ms=2_250)
     assert shared["playback_state"] == "paused"
     assert shared["position_ms"] == 1_250
     assert shared["started_at_ms"] is None
+    assert shared["playback_generation"] == 2
 
     assert play_shared_media(shared, now_ms=5_000)
     assert shared["started_at_ms"] == 3_750
+    assert shared["playback_generation"] == 3
+
+    assert not complete_shared_media(shared, expected_generation=1)
+    assert shared["playback_state"] == "playing"
+
+    assert complete_shared_media(shared, expected_generation=3)
+    assert shared["playback_state"] == "stopped"
+    assert shared["position_ms"] == 0
+    assert shared["playback_generation"] == 4
+
+    assert play_shared_media(shared, now_ms=6_000)
 
     assert stop_shared_media(shared)
     assert shared["playback_state"] == "stopped"
     assert shared["position_ms"] == 0
     assert shared["started_at_ms"] is None
+
+
+def test_next_media_stays_in_the_same_section_and_does_not_wrap():
+    pack = parse_question_pack(SAMPLE_PACK)
+    state = _active_state(sector=2)
+    catalog = current_media_catalog(pack, state)
+    question_media = sorted(
+        (media for media in catalog.values() if media.section == "question"),
+        key=lambda media: media.order,
+    )
+    answer_media = next(
+        media for media in catalog.values() if media.section == "answer"
+    )
+
+    assert len(question_media) == 2
+    assert next_media_in_section(catalog, question_media[0].media_ref) == question_media[1]
+    assert next_media_in_section(catalog, question_media[1].media_ref) is None
+    assert next_media_in_section(catalog, answer_media.media_ref) is None
+    assert next_media_in_section(catalog, "unknown") is None
 
 
 def test_image_cannot_use_playback_actions():

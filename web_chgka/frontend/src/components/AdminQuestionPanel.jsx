@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { inlineImagePreviews } from '../inlineMedia';
 import { mediaUrl, socket } from '../socket';
-import { SynchronizedAudio } from './SynchronizedAudio';
+import { SynchronizedMedia } from './SynchronizedMedia';
 
 function QuestionSection({ title, children, highlight = false, accentClass = '' }) {
   return (
@@ -29,6 +29,22 @@ function previewFromResponse(response, fallbackSection) {
   };
 }
 
+function previewFromSharedMedia(media) {
+  const fallbackNames = {
+    image: 'Текущее изображение',
+    audio: 'Текущее аудио',
+    video: 'Текущее видео',
+  };
+  return {
+    media_id: media.media_id,
+    type: media.type,
+    url: mediaUrl(media.media_id),
+    section: 'текущая',
+    name: fallbackNames[media.type] || 'Текущее медиа',
+    media_ref: null,
+  };
+}
+
 export function AdminQuestionPanel({
   adminQuestion,
   phase,
@@ -40,7 +56,33 @@ export function AdminQuestionPanel({
   const [resolvedImages, setResolvedImages] = useState({});
   const resolutionGenerationRef = useRef(0);
   const sharedMediaIdRef = useRef(sharedMedia?.media_id);
+  const previousSharedMediaIdRef = useRef(sharedMedia?.media_id);
   sharedMediaIdRef.current = sharedMedia?.media_id;
+
+  useEffect(() => {
+    const previousId = previousSharedMediaIdRef.current;
+    const currentId = sharedMedia?.media_id;
+    previousSharedMediaIdRef.current = currentId;
+    if (!previousId || previousId === currentId) return;
+
+    setMediaPreview((current) => (
+      current?.media_id === previousId ? null : current
+    ));
+    setResolvedImages((current) => Object.fromEntries(
+      Object.entries(current).filter(([, resolved]) => (
+        resolved?.preview?.media_id !== previousId
+      )),
+    ));
+  }, [sharedMedia?.media_id]);
+
+  useEffect(() => {
+    if (!sharedMedia?.media_id) return;
+    setMediaPreview((current) => (
+      current?.media_id === sharedMedia.media_id
+        ? current
+        : previewFromSharedMedia(sharedMedia)
+    ));
+  }, [sharedMedia?.media_id, sharedMedia?.type]);
 
   useEffect(() => {
     const generation = resolutionGenerationRef.current + 1;
@@ -109,14 +151,6 @@ export function AdminQuestionPanel({
       const descriptor = mediaByRef[mediaRef];
       if (!descriptor) {
         addNotification({ type: 'warning', message: 'Медиа не найдено в текущей секции' });
-        return;
-      }
-
-      if (descriptor.type === 'video') {
-        addNotification({
-          type: 'warning',
-          message: 'Видео будет поддержано на следующем этапе media flow',
-        });
         return;
       }
 
@@ -197,6 +231,35 @@ export function AdminQuestionPanel({
     socket.emit('admin_share_media', { media_id: mediaPreview.media_id });
   };
 
+  const shareNextMedia = () => {
+    socket.emit('admin_share_next_media', {
+      expected_media_id: sharedMedia?.media_id,
+    }, (response) => {
+      if (!response?.ok) {
+        addNotification({
+          type: 'warning',
+          message: response?.error === 'no_next_media'
+            ? 'В этой секции больше нет медиа'
+            : `Не удалось показать следующее медиа: ${response?.error || 'unknown'}`,
+        });
+        return;
+      }
+
+      const preview = previewFromResponse(response, response.section);
+      if (preview.type === 'image') {
+        setResolvedImages((current) => ({
+          ...current,
+          [preview.media_ref]: { status: 'ready', preview },
+        }));
+      }
+      setMediaPreview(preview);
+    });
+  };
+
+  const reportMediaEnded = (payload) => {
+    socket.emit('admin_media_ended', payload);
+  };
+
   const highlightQuestion = phase === 'QUESTION_READING' || phase === 'DISCUSSION';
   const highlightAnswer = phase === 'TEAM_ANSWER' || phase === 'POST_ROUND';
   const previewIsShared = mediaPreview?.media_id === sharedMedia?.media_id;
@@ -267,10 +330,22 @@ export function AdminQuestionPanel({
                 />
               </div>
             )}
-            {mediaPreview.type === 'audio' && (
+            {(mediaPreview.type === 'audio' || mediaPreview.type === 'video') && (
               <div className="rounded border border-slate-700 bg-slate-900/40 p-3">
                 {previewIsShared ? (
-                  <SynchronizedAudio media={sharedMedia} volume={volume} />
+                  <SynchronizedMedia
+                    media={sharedMedia}
+                    volume={volume}
+                    onEnded={reportMediaEnded}
+                  />
+                ) : mediaPreview.type === 'video' ? (
+                  <video
+                    src={mediaPreview.url}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    className="max-h-[320px] w-full rounded bg-black object-contain"
+                  />
                 ) : (
                   <audio
                     src={mediaPreview.url}
@@ -289,7 +364,7 @@ export function AdminQuestionPanel({
               >
                 {previewIsShared ? 'Показано игрокам' : 'Показать игрокам'}
               </button>
-              {mediaPreview.type === 'audio' && previewIsShared && (
+              {(mediaPreview.type === 'audio' || mediaPreview.type === 'video') && previewIsShared && (
                 <>
                   <button
                     onClick={() => socket.emit('admin_play_media')}
@@ -310,6 +385,14 @@ export function AdminQuestionPanel({
                     Stop
                   </button>
                 </>
+              )}
+              {previewIsShared && sharedMedia?.has_next && (
+                <button
+                  onClick={shareNextMedia}
+                  className="bg-blue-800 hover:bg-blue-700 text-white py-2 px-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
+                >
+                  Следующее медиа
+                </button>
               )}
               <button
                 onClick={() => socket.emit('admin_hide_media')}

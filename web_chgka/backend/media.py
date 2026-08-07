@@ -116,6 +116,25 @@ def current_media_catalog(
     return catalog
 
 
+def next_media_in_section(
+    catalog: dict[str, CurrentMedia],
+    current_ref: str,
+) -> Optional[CurrentMedia]:
+    """Return the next ordered item without crossing scope or source section."""
+    current = catalog.get(current_ref)
+    if current is None:
+        return None
+
+    candidates = (
+        media
+        for media in catalog.values()
+        if media.scope == current.scope
+        and media.source_section == current.source_section
+        and media.order > current.order
+    )
+    return min(candidates, key=lambda media: media.order, default=None)
+
+
 def create_media_token_info(
     media: CurrentMedia,
     state: dict,
@@ -143,9 +162,10 @@ def media_token_is_current(
     state: dict,
     *,
     now_ts: float,
+    allow_expired: bool = False,
 ) -> bool:
     """Validate expiry plus every current-round identity field of a token."""
-    if info.get("expires_at", 0) <= now_ts:
+    if not allow_expired and info.get("expires_at", 0) <= now_ts:
         return False
     if info.get("round_key") != current_round_key(state):
         return False
@@ -169,7 +189,7 @@ def media_token_is_current(
     )
 
 
-def create_shared_media(media_id: str, info: dict) -> dict:
+def create_shared_media(media_id: str, info: dict, *, has_next: bool = False) -> dict:
     return {
         "media_id": media_id,
         "media_ref": info["media_ref"],
@@ -179,6 +199,8 @@ def create_shared_media(media_id: str, info: dict) -> dict:
         "playback_state": "stopped",
         "position_ms": 0,
         "started_at_ms": None,
+        "playback_generation": 0,
+        "has_next": has_next,
     }
 
 
@@ -197,6 +219,7 @@ def play_shared_media(shared_media: Optional[dict], *, now_ms: int) -> bool:
     position_ms = max(0, int(media.get("position_ms", 0)))
     media["playback_state"] = "playing"
     media["started_at_ms"] = now_ms - position_ms
+    media["playback_generation"] = int(media.get("playback_generation", 0)) + 1
     return True
 
 
@@ -209,6 +232,7 @@ def pause_shared_media(shared_media: Optional[dict], *, now_ms: int) -> bool:
     media["position_ms"] = max(0, now_ms - started_at_ms)
     media["started_at_ms"] = None
     media["playback_state"] = "paused"
+    media["playback_generation"] = int(media.get("playback_generation", 0)) + 1
     return True
 
 
@@ -221,4 +245,20 @@ def stop_shared_media(shared_media: Optional[dict]) -> bool:
     media["playback_state"] = "stopped"
     media["position_ms"] = 0
     media["started_at_ms"] = None
+    if changed:
+        media["playback_generation"] = int(media.get("playback_generation", 0)) + 1
     return changed
+
+
+def complete_shared_media(
+    shared_media: Optional[dict],
+    *,
+    expected_generation: int,
+) -> bool:
+    """Accept a natural end only for the exact currently playing generation."""
+    media = _require_playable(shared_media)
+    if media.get("playback_state") != "playing":
+        return False
+    if int(media.get("playback_generation", 0)) != expected_generation:
+        return False
+    return stop_shared_media(media)
