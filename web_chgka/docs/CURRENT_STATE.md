@@ -1,16 +1,24 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-08
-- Latest completed task: `docs/tasks/0017-separate-login-entrypoints.md`
+- Latest completed task: `docs/tasks/0018-transparent-table-background.md`
 - Active task: none
-- Branch: `web`
-- Status: separate player/admin entrypoints are accepted and merged locally; publishing `web` and remote CI are pending. No remote task branch was created.
+- Branch: `task/transparent-table-background` (ready for local merge into `web`)
+- Status: both transparent table assets, local verification, and browser acceptance are complete; local integration is in progress and no remote task branch will be published.
 
 ## Repository checkpoint
 
+- `web` and `origin/web` are synchronized at `68edc87` before task 0018.
+- Task 0018 preserves both 2000×2000 table canvases and runtime paths, replacing only the white exterior with a clean alpha edge.
+- The final assets contain no generated pixels: an image-model draft was rejected for geometry drift, then the installed alpha helper plus an original-pixel protection mask produced the accepted candidates.
+- Task 0018 planning commit: `6d55db3` (`Plan transparent table background task`).
+- Task 0018 implementation commit: `f22727d` (`Remove table image backgrounds`).
+- Task 0018 local verification: both RGBA assets have transparent corners and identical `1940×1940+30+30` content bounds, protected interiors have zero pixel difference, dark-background previews are clean, and frontend tests/build pass.
+- Focused player/host browser smoke for the normal and post-sector-13 table variants is accepted.
+- Roadmap item 16 records full user-facing UI localization as a separate future task; internal event/API/code identifiers remain out of scope for translation.
+
 - `web` and `origin/web` are synchronized at `7db38dc` before task 0017.
 - Login-entrypoint decisions: `/play` is player-only, `/admin` is host-only, every host screen uses a distinct indigo page background, `/` defaults to `/play`, route-scoped restore ignores the other role's stored token, forms have no redundant visible labels, user-facing copy says «ведущий», and backend authorization remains unchanged.
-- Roadmap item 15 records removal of the baked-in background from both table image variants; no table asset is changed in task 0017.
 - Login-entrypoint implementation commits: `8e0bbd8`, `74ec133`, `64219dc`, and `39aadbd`.
 - Login-entrypoint closure commit: `1aa198c` (`Close separate login entrypoints task`).
 - Login-entrypoint merge commit: `ff341d6` (`Merge separate login entrypoints task`).
@@ -351,9 +359,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish local `web` with merge `ff341d6` plus this handoff and confirm the Web CI run.
+1. Complete the local merge of `task/transparent-table-background` into `web`, then publish only `web` and confirm the Web CI run.
 2. After green remote verification, remove the merged local task branch; no remote task branch was created.
-3. Choose the next roadmap item; played-question history still needs a product decision, while personal questions and transparent table assets are already bounded implementation candidates.
+3. Choose the next roadmap item; played-question history needs a product decision, while personal questions and full UI localization are bounded candidates.
 
 ## Resume checklist
 
@@ -366,7 +374,7 @@ Then read, in order:
 1. `AGENTS.md`;
 2. this file;
 3. the next item in `ROADMAP.md`;
-4. completed tasks 0014, 0013, 0012, 0011, 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
+4. completed tasks 0018, 0017, 0016, 0015, 0014, 0013, 0012, 0011, 0010, 0009, 0008, 0007, 0006, 0005, 0004, 0003, and 0002 for the latest work;
 5. `backend/state.py` and the game handlers in `backend/main.py`.
 
 Before changing code, rerun:
