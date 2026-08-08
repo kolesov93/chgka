@@ -57,6 +57,8 @@ def test_create_initial_app_state_defaults():
     assert state["timer"]["discussion_deadline_ms"] is None
     assert state["presentation"]["intro"] is None
     assert state["presentation"]["shared_media"] is None
+    assert state["presentation"]["blackbox"] is None
+    assert state["presentation"]["blackbox_generation"] == 0
     assert state["pack"]["question_types"] is None
     assert state["pack"]["intro_authors"] is None
     assert state["logs"] == []
@@ -100,6 +102,11 @@ def test_reset_app_state_clears_runtime_fields_and_preserves_pack_metadata():
         "duration_ms": 87_757,
     }
     state["presentation"]["shared_media"] = _shared_image()
+    state["presentation"]["blackbox"] = {
+        "started_at_ms": 10_000,
+        "playback_generation": 4,
+    }
+    state["presentation"]["blackbox_generation"] = 4
     state["logs"] = ["old log"]
 
     reset_app_state(state)
@@ -117,6 +124,8 @@ def test_reset_app_state_clears_runtime_fields_and_preserves_pack_metadata():
     assert state["timer"]["discussion_deadline_ms"] is None
     assert state["presentation"]["intro"] is None
     assert state["presentation"]["shared_media"] is None
+    assert state["presentation"]["blackbox"] is None
+    assert state["presentation"]["blackbox_generation"] == 5
     assert state["pack"]["question_types"] == ["normal", "blitz"]
     assert state["pack"]["intro_authors"] == _intro_authors()
     assert state["logs"] == []
@@ -162,6 +171,7 @@ def test_public_game_state_flattens_app_state_for_current_frontend():
             "playback_generation": 0,
             "has_next": False,
         },
+        "blackbox": None,
     }
     assert payload["score"] is not state["game"]["score"]
     assert payload["used_questions"] is not state["game"]["used_questions"]
@@ -234,3 +244,21 @@ def test_public_game_state_serializes_server_time_for_audio_reconnect():
     assert payload["shared_media"]["playback_generation"] == 3
     assert payload["shared_media"]["has_next"] is True
     assert "server_now_ms" not in state["presentation"]["shared_media"]
+
+
+def test_public_game_state_serializes_blackbox_timeline_for_reconnect():
+    state = create_initial_app_state()
+    state["presentation"]["blackbox"] = {
+        "started_at_ms": 10_000,
+        "playback_generation": 3,
+    }
+    state["presentation"]["blackbox_generation"] = 3
+
+    payload = public_game_state(state, now_ms=13_750)
+
+    assert payload["blackbox"] == {
+        "started_at_ms": 10_000,
+        "playback_generation": 3,
+        "server_now_ms": 13_750,
+    }
+    assert "server_now_ms" not in state["presentation"]["blackbox"]

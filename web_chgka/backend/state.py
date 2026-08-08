@@ -167,6 +167,19 @@ class PublicIntroState(IntroState):
     authors: list[IntroAuthorState]
 
 
+class BlackboxState(TypedDict):
+    """Active synchronized black-box music presentation."""
+
+    started_at_ms: int
+    playback_generation: int
+
+
+class PublicBlackboxState(BlackboxState):
+    """Black-box timeline serialized for reconnect-aware browser playback."""
+
+    server_now_ms: int
+
+
 class PresentationState(TypedDict):
     """Shared presentation state shown to players."""
 
@@ -175,6 +188,10 @@ class PresentationState(TypedDict):
 
     # Media currently shown to all clients instead of the game table.
     shared_media: Optional[SharedMediaState]
+
+    # Static black-box presentation and its monotonic stale-event guard.
+    blackbox: Optional[BlackboxState]
+    blackbox_generation: int
 
 
 class PackUiState(TypedDict):
@@ -205,6 +222,7 @@ class PublicGameState(TypedDict):
     round: Optional[RoundState]
     intro: Optional[PublicIntroState]
     shared_media: Optional[PublicSharedMediaState]
+    blackbox: Optional[PublicBlackboxState]
 
 
 class AppState(TypedDict):
@@ -247,6 +265,8 @@ def create_initial_app_state(
         "presentation": {
             "intro": None,
             "shared_media": None,
+            "blackbox": None,
+            "blackbox_generation": 0,
         },
         "pack": {
             "question_types": list(question_types) if question_types is not None else None,
@@ -272,6 +292,9 @@ def reset_app_state(
     question_types = state["pack"]["question_types"]
     intro_authors = state["pack"]["intro_authors"]
     next_spin_id = state["wheel"].get("spin_id", 0) + 1
+    next_blackbox_generation = (
+        state["presentation"].get("blackbox_generation", 0) + 1
+    )
     state.clear()
     state.update(
         create_initial_app_state(
@@ -283,6 +306,7 @@ def reset_app_state(
     # Invalidate completion callbacks belonging to the pre-reset state. This
     # field is internal and intentionally absent from PublicGameState.
     state["wheel"]["spin_id"] = next_spin_id
+    state["presentation"]["blackbox_generation"] = next_blackbox_generation
 
 
 def public_game_state(
@@ -326,6 +350,13 @@ def public_game_state(
             "playback_generation": int(internal_media.get("playback_generation", 0)),
             "has_next": bool(internal_media.get("has_next", False)),
         }
+    internal_blackbox = state["presentation"].get("blackbox")
+    blackbox: Optional[PublicBlackboxState] = None
+    if internal_blackbox is not None:
+        blackbox = {
+            **internal_blackbox,
+            "server_now_ms": timestamp_ms,
+        }
 
     return deepcopy(
         {
@@ -343,5 +374,6 @@ def public_game_state(
             "round": state["game"]["round"],
             "intro": intro,
             "shared_media": shared_media,
+            "blackbox": blackbox,
         }
     )

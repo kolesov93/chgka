@@ -149,6 +149,70 @@ def transition_advance_intro(
     )
 
 
+def clear_blackbox_presentation(state: AppState) -> bool:
+    """End the active black-box presentation and invalidate stale commands."""
+    if state["presentation"].get("blackbox") is None:
+        return False
+    state["presentation"]["blackbox"] = None
+    state["presentation"]["blackbox_generation"] = (
+        state["presentation"].get("blackbox_generation", 0) + 1
+    )
+    return True
+
+
+def transition_start_blackbox(
+    state: AppState,
+    *,
+    enabled: bool,
+    now_ms: int,
+) -> TransitionEffects:
+    _require_phase(state, PHASE_QUESTION_READING)
+    if not enabled:
+        raise TransitionError(
+            "blackbox_unavailable",
+            "Текущий вопрос не отмечен как чёрный ящик",
+        )
+    if not isinstance(now_ms, int) or isinstance(now_ms, bool) or now_ms < 0:
+        raise TransitionError("invalid_time", "Некорректное время запуска чёрного ящика")
+    if state["presentation"].get("blackbox") is not None:
+        raise TransitionError("blackbox_active", "Чёрный ящик уже запущен")
+
+    generation = state["presentation"].get("blackbox_generation", 0) + 1
+    state["presentation"]["blackbox_generation"] = generation
+    state["presentation"]["shared_media"] = None
+    state["presentation"]["blackbox"] = {
+        "started_at_ms": now_ms,
+        "playback_generation": generation,
+    }
+    return TransitionEffects(
+        logs=("Чёрный ящик: музыка запущена",),
+        start_sound_output=True,
+    )
+
+
+def transition_end_blackbox(
+    state: AppState,
+    *,
+    expected_generation: int,
+    natural: bool = False,
+) -> TransitionEffects:
+    active = state["presentation"].get("blackbox")
+    if active is None:
+        raise TransitionError("blackbox_inactive", "Чёрный ящик сейчас не запущен")
+    if (
+        not isinstance(expected_generation, int)
+        or isinstance(expected_generation, bool)
+        or expected_generation < 0
+    ):
+        raise TransitionError("invalid_generation", "Некорректная версия чёрного ящика")
+    if active["playback_generation"] != expected_generation:
+        raise TransitionError("stale_blackbox", "Команда относится к прошлому запуску чёрного ящика")
+
+    clear_blackbox_presentation(state)
+    ending = "музыка завершилась" if natural else "остановлен ведущим"
+    return TransitionEffects(logs=(f"Чёрный ящик: {ending}",))
+
+
 def validate_spin_start(state: AppState) -> None:
     _require_phase(state, PHASE_PRE_ROUND)
     if state["wheel"]["is_spinning"]:
@@ -193,6 +257,7 @@ def transition_start_spin(
     spin_id = state["wheel"].get("spin_id", 0) + 1
 
     state["presentation"]["shared_media"] = None
+    clear_blackbox_presentation(state)
     state["wheel"]["target_angle"] = raw_angle
     state["wheel"]["playing_sector"] = playing_sector
     state["wheel"]["spin_duration"] = duration
@@ -261,6 +326,11 @@ def transition_complete_spin(state: AppState, *, spin_id: int) -> TransitionEffe
 
 def transition_start_discussion(state: AppState, *, deadline_ms: int) -> TransitionEffects:
     _require_phase(state, PHASE_QUESTION_READING)
+    if state["presentation"].get("blackbox") is not None:
+        raise TransitionError(
+            "blackbox_active",
+            "Сначала дождитесь окончания чёрного ящика или остановите его",
+        )
     state["game"]["phase"] = PHASE_DISCUSSION
     state["timer"]["discussion_deadline_ms"] = deadline_ms
     return TransitionEffects(logs=("Фаза: обсуждение",))

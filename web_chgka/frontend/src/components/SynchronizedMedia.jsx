@@ -9,7 +9,7 @@ import {
 } from '../mediaPlayback';
 
 
-export function SynchronizedMedia({ media, volume = 1, onEnded }) {
+export function SynchronizedMedia({ media, volume = 1, onEnded, source = null }) {
   const elementRef = useRef(null);
   const snapshotReceivedAtRef = useRef(Date.now());
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
@@ -65,7 +65,7 @@ export function SynchronizedMedia({ media, volume = 1, onEnded }) {
 
   const commonProps = {
     ref: elementRef,
-    src: mediaUrl(media.media_id),
+    src: source || mediaUrl(media.media_id),
     preload: 'auto',
     onLoadedMetadata: synchronize,
     onEnded: reportEnded,

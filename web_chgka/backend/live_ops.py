@@ -22,6 +22,7 @@ from transitions import (
     SECTORS_COUNT,
     TransitionEffects,
     TransitionError,
+    clear_blackbox_presentation,
 )
 
 
@@ -206,6 +207,7 @@ def live_ops_open_round(
     state["game"]["phase"] = PHASE_QUESTION_READING
     state["timer"]["discussion_deadline_ms"] = None
     state["presentation"]["shared_media"] = None
+    clear_blackbox_presentation(state)
     if sector_id not in state["game"]["used_questions"]:
         state["game"]["used_questions"].append(sector_id)
 
@@ -235,6 +237,7 @@ def live_ops_force_phase(
     old_phase = state["game"]["phase"]
     round_ctx = None if new_phase == PHASE_PRE_ROUND else _require_round(state)
     was_spinning = _invalidate_spin(state)
+    had_blackbox = clear_blackbox_presentation(state)
 
     if new_phase == PHASE_PRE_ROUND:
         state["game"]["round"] = None
@@ -277,7 +280,7 @@ def live_ops_force_phase(
         logs=(f"Live Ops: фаза {old_phase} -> {new_phase}",),
         clear_media_tokens=clear_media,
         refresh_admin_question=clear_media,
-        stop_sounds=was_spinning or clear_media,
+        stop_sounds=was_spinning or clear_media or had_blackbox,
         spin_id=state["wheel"]["spin_id"],
     )
 
@@ -314,6 +317,7 @@ def live_ops_cancel_spin(state: AppState) -> TransitionEffects:
     state["game"]["round"] = None
     state["timer"]["discussion_deadline_ms"] = None
     state["presentation"]["shared_media"] = None
+    clear_blackbox_presentation(state)
     return TransitionEffects(
         logs=(
             f"Live Ops: вращение {old_spin_id} отменено, фаза -> {PHASE_PRE_ROUND}",

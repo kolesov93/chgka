@@ -172,6 +172,47 @@ def test_pack_parses_optional_city_and_author_photo(tmp_path):
     assert question.author_photo == photo_path.resolve()
 
 
+def test_pack_parses_blackbox_for_question_and_blitz_part(tmp_path):
+    pack_path = _copy_sample_pack(tmp_path)
+    top_level = pack_path / "04" / "question.md"
+    top_level.write_text(
+        top_level.read_text(encoding="utf-8").replace(
+            "type: blitz\n",
+            "type: blitz\nblackbox: true\n",
+        ),
+        encoding="utf-8",
+    )
+    part = pack_path / "04" / "02" / "question.md"
+    part.write_text(
+        part.read_text(encoding="utf-8").replace(
+            "author: Ольга Петрова\n",
+            "author: Ольга Петрова\nblackbox: true\n",
+        ),
+        encoding="utf-8",
+    )
+
+    pack = parse_question_pack(pack_path)
+
+    assert pack.get_by_sector(4).blackbox is True
+    assert [item.blackbox for item in pack.get_by_sector(4).parts] == [False, True, False]
+
+
+@pytest.mark.parametrize("value", ["yes", "1", "", "null"])
+def test_pack_rejects_non_boolean_blackbox(tmp_path, value):
+    pack_path = _copy_sample_pack(tmp_path)
+    question_path = pack_path / "01" / "question.md"
+    question_path.write_text(
+        question_path.read_text(encoding="utf-8").replace(
+            "author: Михаил Савченко\n",
+            f"author: Михаил Савченко\nblackbox: {value}\n",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(QuestionParseError, match="blackbox.*true or false"):
+        parse_question_pack(pack_path)
+
+
 @pytest.mark.parametrize(
     ("photo_value", "message"),
     [
