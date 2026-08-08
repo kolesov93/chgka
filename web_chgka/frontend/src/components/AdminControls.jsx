@@ -69,7 +69,7 @@ export function AdminControls({
     <div className="w-full lg:w-[600px] flex flex-col gap-4">
       <div className="bg-slate-800 p-4 rounded-xl shadow-2xl border border-slate-700 flex flex-col gap-6 sticky top-4">
         <div className="flex justify-between items-center border-b border-slate-700 pb-2">
-          <span className="text-sm font-bold text-slate-400 uppercase">Admin Panel</span>
+          <span className="text-sm font-bold text-slate-400 uppercase">Панель ведущего</span>
           <div className="flex gap-2">
             <button
               onClick={resetGame}

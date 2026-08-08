@@ -768,7 +768,7 @@ async def authenticate_admin(sid, data):
         admin_record = next((p for p in players_list if p['role'] == 'admin'), None)
         if not admin_record:
             players_list.append({'sid': sid, 'name': ADMIN_NAME, 'role': 'admin', 'token': token, 'online': True})
-            add_log("Администратор присоединился")
+            add_log("Ведущий присоединился")
         else:
              admin_record['sid'] = sid
              admin_record['token'] = token
@@ -942,7 +942,7 @@ async def leave_game(sid):
         players_list = [p for p in players_list if p['sid'] != sid]
         
         if player_role == 'admin':
-            add_log("Администратор вышел")
+            add_log("Ведущий вышел")
             revoke_admin_token(player.get('token'))
         else:
             add_log(f"{player_name} вышел из игры")
@@ -1630,12 +1630,12 @@ async def admin_kick(sid, data):
     # Удаляем из списка
     players_list = [p for p in players_list if p['name'] != player_name or p['role'] == 'admin']
     
-    add_log(f"{player_name} был отключён администратором")
+    add_log(f"{player_name} был отключён ведущим")
     logger.info(f"Player {player_name} kicked by admin")
     
     # Отправляем игроку событие что его кикнули
     # Не отключаем сокет программно — пусть клиент сам переподключится
-    await sio.emit('kicked', {'message': 'Вы были отключены администратором'}, to=player_sid)
+    await sio.emit('kicked', {'message': 'Вы были отключены ведущим'}, to=player_sid)
     
     await broadcast_players()
 

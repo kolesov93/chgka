@@ -17,7 +17,7 @@ import { useSocketSoundEvents } from './hooks/useSocketSoundEvents';
 import { useSoundFade } from './hooks/useSoundFade';
 import { socket } from './socket';
 
-function App() {
+function App({ entrypoint }) {
   const {
     gameState,
     gameSettings,
@@ -34,7 +34,7 @@ function App() {
     addNotification,
     dismissNotification,
     logout,
-  } = useGameSession();
+  } = useGameSession(entrypoint);
 
   const soundFadeMultiplier = useSoundFade(gameSettings?.sound_control);
   const effectiveMediaVolume = (gameSettings?.volume ?? 1) * soundFadeMultiplier;
@@ -74,7 +74,7 @@ function App() {
     return (
       <LoginScreen
         socket={socket}
-        gameState={gameState}
+        entrypoint={entrypoint}
         sessionNotice={sessionNotice}
       />
     );
@@ -88,7 +88,6 @@ function App() {
           <div className="text-6xl mb-6">⏳</div>
           <h1 className="text-3xl font-bold mb-4 text-yellow-500">Ожидание одобрения</h1>
           <p className="text-slate-400 mb-2">Игра уже началась</p>
-          <p className="text-slate-500 text-sm">Администратор должен разрешить вам присоединиться</p>
         </div>
       </div>
     );
@@ -110,21 +109,24 @@ function App() {
         {userHeader}
         <div className="text-center">
           <h1 className="text-4xl font-bold mb-4 text-yellow-500">Ожидание начала игры</h1>
-          <p className="text-slate-400">Администратор запустит игру, когда все будут готовы</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white p-4 flex flex-col lg:flex-row lg:items-start lg:justify-center gap-8 relative">
+    <div
+      className={`min-h-screen p-4 text-white flex flex-col lg:flex-row lg:items-start lg:justify-center gap-8 relative ${
+        isAdmin ? 'bg-indigo-950' : 'bg-slate-900'
+      }`}
+    >
       {notificationsPanel}
       {userHeader}
 
       <div className="flex-1 flex flex-col items-center w-full max-w-3xl">
         <div className="w-full flex justify-between items-center mb-4">
           <h1 className="text-xl font-bold text-slate-400 flex items-center gap-2">
-            CHGKA
+            Что? Где? Когда?
             <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
           </h1>
           {isAdmin && (

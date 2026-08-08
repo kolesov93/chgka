@@ -25,22 +25,40 @@ function createStorage(initial = {}) {
   };
 }
 
-test('session restore prefers an admin token and emits only one payload', () => {
+test('admin entrypoint restores only an admin token', () => {
   const storage = createStorage({
     [ADMIN_TOKEN_KEY]: 'admin-token',
     [PLAYER_TOKEN_KEY]: 'player-token',
   });
 
-  assert.deepEqual(getSessionRestorePayload(storage), { token: 'admin-token' });
+  assert.deepEqual(getSessionRestorePayload(storage, 'admin'), { token: 'admin-token' });
+  assert.equal(
+    getSessionRestorePayload(
+      createStorage({ [PLAYER_TOKEN_KEY]: 'player-token' }),
+      'admin',
+    ),
+    null,
+  );
 });
 
-test('session restore falls back to the player token', () => {
-  const storage = createStorage({ [PLAYER_TOKEN_KEY]: 'player-token' });
+test('player entrypoint restores only a player token', () => {
+  const storage = createStorage({
+    [ADMIN_TOKEN_KEY]: 'admin-token',
+    [PLAYER_TOKEN_KEY]: 'player-token',
+  });
 
-  assert.deepEqual(getSessionRestorePayload(storage), {
+  assert.deepEqual(getSessionRestorePayload(storage, 'player'), {
     player_token: 'player-token',
   });
-  assert.equal(getSessionRestorePayload(createStorage()), null);
+  assert.equal(
+    getSessionRestorePayload(
+      createStorage({ [ADMIN_TOKEN_KEY]: 'admin-token' }),
+      'player',
+    ),
+    null,
+  );
+  assert.equal(getSessionRestorePayload(createStorage(), 'player'), null);
+  assert.equal(getSessionRestorePayload(storage, 'unknown'), null);
 });
 
 test('admin login removes an obsolete player token', () => {

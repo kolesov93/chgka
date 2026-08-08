@@ -25,6 +25,7 @@ FastAPI + python-socketio (backend/main.py)
 ### Frontend
 
 - `frontend/src/App.jsx` owns only top-level phase routing and the main page layout.
+- `frontend/src/entrypoint.js` resolves the exact `/play` and `/admin` entrypoints before React renders. `/`, trailing-slash aliases, and unknown paths are canonicalized without adding a routing dependency.
 - `frontend/src/socket.js` owns the single Socket.IO client plus backend/media URL construction.
 - `frontend/src/hooks/useGameSession.js` owns session restore, shared server state, players, pack/admin data, notifications, logout, and non-audio socket listeners.
 - `frontend/src/hooks/useDiscussionTimer.js` owns the admin countdown and one-shot local ten-second notification; `useSocketSoundEvents.js` bridges sound events to `useGameSound.js`.
@@ -36,6 +37,8 @@ FastAPI + python-socketio (backend/main.py)
 - Development connects Socket.IO and media requests directly to `http://localhost:8000`. A production build uses the current origin (`/`).
 
 The frontend receives the shared game snapshot through `state_update`. Admin-only data uses separate events such as `players_update`, `pack_info`, and `admin_question`.
+
+`/play` renders only the player-name form and restores only `chgka_player_token`; `/admin` renders only the host-password form and restores only `chgka_admin_token`. The other stored token is ignored rather than treated as a fallback. Logout and expiry stay on the current path. These paths are a UX boundary only: both use the same Socket.IO connection and all privileged events still require backend role-plus-token authorization.
 
 UI components may emit existing user actions through the shared socket, but they do not create connections or own session restoration. The decomposition preserves the existing Socket.IO event names, payloads, and flat `state_update` contract.
 
@@ -157,4 +160,4 @@ Socket.IO handlers are asynchronous and can overlap. UI button disabling is not 
 
 `docker-compose.yml` is development-only: it bind-mounts source code and both Dockerfiles run development servers. There is no reverse proxy, TLS configuration, persistent store, health check, production image, or CI deployment workflow yet.
 
-Backend startup nevertheless has an explicit security mode. Development Compose supplies its local password and exact `http://localhost:5173` origin. Production requires an externally injected password and exact HTTPS origins; the same allowlist protects FastAPI CORS and Socket.IO/WebSocket handshakes. The production frontend still assumes same-origin HTTP and WebSocket routing through a future TLS reverse proxy.
+Backend startup nevertheless has an explicit security mode. Development Compose supplies its local password and exact `http://localhost:5173` origin. Production requires an externally injected password and exact HTTPS origins; the same allowlist protects FastAPI CORS and Socket.IO/WebSocket handshakes. The production frontend still assumes same-origin HTTP and WebSocket routing through a future TLS reverse proxy. That frontend server must use SPA fallback for `/`, `/play`, and `/admin`; pathname separation itself grants no access.

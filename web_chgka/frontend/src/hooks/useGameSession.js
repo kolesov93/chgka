@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { ENTRYPOINT_ADMIN } from '../entrypoint';
 import { socket } from '../socket';
 import {
   ADMIN_TOKEN_KEY,
@@ -9,7 +10,7 @@ import {
   saveAdminToken,
 } from '../session';
 
-export function useGameSession() {
+export function useGameSession(entrypoint) {
   const [gameState, setGameState] = useState(null);
   const [gameSettings, setGameSettings] = useState({ volume: 1.0, sound_control: null });
   const [players, setPlayers] = useState([]);
@@ -58,19 +59,20 @@ export function useGameSession() {
   }, []);
 
   useEffect(() => {
+    if (entrypoint !== ENTRYPOINT_ADMIN) return undefined;
     window.authenticateAdmin = (password) => {
       socket.emit('authenticate_admin', { password });
     };
     return () => {
       delete window.authenticateAdmin;
     };
-  }, []);
+  }, [entrypoint]);
 
   useEffect(() => {
     function onConnect() {
       setIsConnected(true);
 
-      const restorePayload = getSessionRestorePayload(localStorage);
+      const restorePayload = getSessionRestorePayload(localStorage, entrypoint);
       if (restorePayload) socket.emit('restore_session', restorePayload);
     }
 
@@ -212,7 +214,7 @@ export function useGameSession() {
       socket.off('pack_info', onPackInfo);
       socket.off('admin_question', onAdminQuestion);
     };
-  }, [addNotification, expireAdminSession]);
+  }, [addNotification, entrypoint, expireAdminSession]);
 
   const logout = useCallback(() => {
     if (!confirm('Вы действительно хотите выйти?')) return;
