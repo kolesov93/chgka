@@ -1,7 +1,7 @@
 # 0016: Чёрный ящик
 
 Branch: `task/blackbox`
-Status: Implemented; awaiting browser acceptance
+Status: Completed
 
 ## Goal
 
@@ -23,12 +23,12 @@ Status: Implemented; awaiting browser acceptance
 
 - Pack-backed музыка/изображение, пауза, ручная перемотка, повторное восстановление скрытого shared media, scoring/timer changes и отдельный тип игрового раунда.
 
-## Verification plan
+## Implementation
 
-- Parser и pack-validation tests для normal/top-level blitz/part flags и неверных значений.
-- Pure transition и handler tests для start/stop/natural end, generation guards, authorization, reconnect payload, Silence/Fade и запрета начала обсуждения.
-- Frontend pure tests для статичных assets и playback snapshot/payload.
-- Полные backend tests, frontend tests/build и pack CLI validation.
+- Parser и pack metadata поддерживают normal/top-level blitz/part flags и отдают эффективный флаг только ведущему.
+- Отдельное server-authoritative presentation state синхронизирует статичный трек, player-заставку, reconnect и generation guards.
+- Ведущий получил явные Start/Stop, индикатор режима и reconnect-aware countdown; Discussion и новый share блокируются до завершения заставки.
+- Natural end, Stop, Silence, completed Fade, reset и Live Ops корректно завершают/инвалидируют presentation без восстановления прежнего media.
 
 ## Local verification
 
@@ -37,3 +37,4 @@ Status: Implemented; awaiting browser acceptance
 - `npm run build`: passed.
 - `python3 -m validate_pack ../fixtures/sample_questions`: passed.
 - `docker compose config --quiet`: locally blocked before parsing by the installed `snap-confine` capability error; remote Compose CI remains the configuration gate.
+- Focused browser behavior was accepted by the user; the branch is approved for local integration into `web` without publishing a remote task branch.
