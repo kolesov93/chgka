@@ -115,7 +115,11 @@ function App({ entrypoint }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white p-4 flex flex-col lg:flex-row lg:items-start lg:justify-center gap-8 relative">
+    <div
+      className={`min-h-screen p-4 text-white flex flex-col lg:flex-row lg:items-start lg:justify-center gap-8 relative ${
+        isAdmin ? 'bg-indigo-950' : 'bg-slate-900'
+      }`}
+    >
       {notificationsPanel}
       {userHeader}
 

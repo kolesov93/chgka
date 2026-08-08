@@ -9,7 +9,7 @@
 ## Repository checkpoint
 
 - `web` and `origin/web` are synchronized at `7db38dc` before task 0017.
-- Login-entrypoint decisions: `/play` is player-only, `/admin` is host-only with a distinct indigo background, `/` defaults to `/play`, route-scoped restore ignores the other role's stored token, forms have no redundant visible labels, and backend authorization remains unchanged.
+- Login-entrypoint decisions: `/play` is player-only, `/admin` is host-only, every host screen uses a distinct indigo page background, `/` defaults to `/play`, route-scoped restore ignores the other role's stored token, forms have no redundant visible labels, user-facing copy says «ведущий», and backend authorization remains unchanged.
 - Roadmap item 15 records removal of the baked-in background from both table image variants; no table asset is changed in task 0017.
 - Task 0017 local verification: 189 backend tests, 39 frontend tests across 9 files, production build, and direct Vite SPA responses for root/player/admin/trailing-slash/unknown paths pass.
 

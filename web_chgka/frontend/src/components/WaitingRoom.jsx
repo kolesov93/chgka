@@ -21,7 +21,7 @@ export function WaitingRoom({ socket, gameState, players = [] }) {
   const playerCount = regularPlayers.length;
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center p-4">
+    <div className="min-h-screen bg-indigo-950 text-white flex items-center justify-center p-4">
       <div className="w-full max-w-2xl bg-slate-800 p-8 rounded-xl shadow-2xl border border-slate-700">
         <h1 className="text-3xl font-bold text-center mb-2 text-yellow-500">
           Ожидание игроков
@@ -80,5 +80,4 @@ export function WaitingRoom({ socket, gameState, players = [] }) {
     </div>
   );
 }
-
 

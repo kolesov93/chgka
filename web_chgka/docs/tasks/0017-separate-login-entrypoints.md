@@ -18,7 +18,8 @@ Status: In progress
 - Для двух статичных routes не добавляется router dependency. Pure route helper выбирает entrypoint и canonical path до рендера `App`.
 - Vite development/preview должны поддерживать прямое открытие/refresh SPA routes. Будущий production reverse proxy обязан направлять `/`, `/play` и `/admin` на frontend `index.html`.
 - Обе формы оставлены без поясняющего подзаголовка и видимых field labels: назначение поля понятно из placeholder, а скрытые labels сохранены для accessibility.
-- Admin-login визуально отличается от player-login тёмно-индиговым фоном, но использует ту же структуру и не получает дополнительных навигационных элементов.
+- Все экраны ведущего — login, lobby и основная игра — визуально отличаются от player-view тёмно-индиговым фоном; структура и навигация при этом остаются общими.
+- В пользовательских сообщениях и заголовках используется игровая роль «ведущий», а не техническое «администратор»/`Admin`.
 
 ## Out of scope
 
