@@ -3,8 +3,8 @@
 - Snapshot date: 2026-08-08
 - Latest completed task: `docs/tasks/0017-separate-login-entrypoints.md`
 - Active task: none
-- Branch: `task/separate-login-entrypoints` (ready for local merge into `web`)
-- Status: separate player/admin entrypoints, local verification, and browser acceptance are complete; local integration is in progress and no remote task branch will be published.
+- Branch: `web`
+- Status: separate player/admin entrypoints are accepted and merged locally; publishing `web` and remote CI are pending. No remote task branch was created.
 
 ## Repository checkpoint
 
@@ -12,6 +12,8 @@
 - Login-entrypoint decisions: `/play` is player-only, `/admin` is host-only, every host screen uses a distinct indigo page background, `/` defaults to `/play`, route-scoped restore ignores the other role's stored token, forms have no redundant visible labels, user-facing copy says «ведущий», and backend authorization remains unchanged.
 - Roadmap item 15 records removal of the baked-in background from both table image variants; no table asset is changed in task 0017.
 - Login-entrypoint implementation commits: `8e0bbd8`, `74ec133`, `64219dc`, and `39aadbd`.
+- Login-entrypoint closure commit: `1aa198c` (`Close separate login entrypoints task`).
+- Login-entrypoint merge commit: `ff341d6` (`Merge separate login entrypoints task`).
 - Task 0017 local verification: 189 backend tests, 39 frontend tests across 9 files, production build, and direct Vite SPA responses for root/player/admin/trailing-slash/unknown paths pass.
 
 - `web` and `origin/web` are synchronized at `8673c25` before black-box work.
@@ -349,7 +351,7 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Complete the local merge of `task/separate-login-entrypoints` into `web`, then publish only `web` and confirm the Web CI run.
+1. Publish local `web` with merge `ff341d6` plus this handoff and confirm the Web CI run.
 2. After green remote verification, remove the merged local task branch; no remote task branch was created.
 3. Choose the next roadmap item; played-question history still needs a product decision, while personal questions and transparent table assets are already bounded implementation candidates.
 
