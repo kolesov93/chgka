@@ -33,7 +33,7 @@ function PlayerLoginForm({ socket }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="player-name" className="mb-2 block text-sm font-bold uppercase text-slate-400">
+        <label htmlFor="player-name" className="sr-only">
           Ваше имя
         </label>
         <input
@@ -107,7 +107,7 @@ function AdminLoginForm({ socket }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="admin-password" className="mb-2 block text-sm font-bold uppercase text-slate-400">
+        <label htmlFor="admin-password" className="sr-only">
           Пароль ведущего
         </label>
         <input
@@ -143,14 +143,21 @@ export function LoginScreen({ socket, entrypoint, sessionNotice = '' }) {
   const isAdmin = entrypoint === ENTRYPOINT_ADMIN;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-900 p-4 text-white">
-      <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-800 p-8 shadow-2xl">
-        <h1 className="mb-2 text-center text-3xl font-bold text-yellow-500">
+    <div
+      className={`flex min-h-screen items-center justify-center p-4 text-white ${
+        isAdmin ? 'bg-indigo-950' : 'bg-slate-900'
+      }`}
+    >
+      <div
+        className={`w-full max-w-md rounded-xl border p-8 shadow-2xl ${
+          isAdmin
+            ? 'border-indigo-700 bg-indigo-900/80'
+            : 'border-slate-700 bg-slate-800'
+        }`}
+      >
+        <h1 className="mb-8 text-center text-3xl font-bold text-yellow-500">
           Что? Где? Когда?
         </h1>
-        <p className="mb-8 text-center text-xs font-bold uppercase tracking-widest text-slate-500">
-          {isAdmin ? 'Вход для ведущего' : 'Вход для игроков'}
-        </p>
 
         {sessionNotice && (
           <p

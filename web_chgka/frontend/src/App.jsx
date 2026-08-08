@@ -110,7 +110,6 @@ function App({ entrypoint }) {
         {userHeader}
         <div className="text-center">
           <h1 className="text-4xl font-bold mb-4 text-yellow-500">Ожидание начала игры</h1>
-          <p className="text-slate-400">Администратор запустит игру, когда все будут готовы</p>
         </div>
       </div>
     );
@@ -124,7 +123,7 @@ function App({ entrypoint }) {
       <div className="flex-1 flex flex-col items-center w-full max-w-3xl">
         <div className="w-full flex justify-between items-center mb-4">
           <h1 className="text-xl font-bold text-slate-400 flex items-center gap-2">
-            CHGKA
+            Что? Где? Когда?
             <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
           </h1>
           {isAdmin && (
