@@ -3,8 +3,8 @@
 - Snapshot date: 2026-08-08
 - Latest completed task: `docs/tasks/0018-transparent-table-background.md`
 - Active task: none
-- Branch: `task/transparent-table-background` (ready for local merge into `web`)
-- Status: both transparent table assets, local verification, and browser acceptance are complete; local integration is in progress and no remote task branch will be published.
+- Branch: `web`
+- Status: both transparent table assets are accepted and merged locally; publishing `web` and remote CI are pending. No remote task branch was created.
 
 ## Repository checkpoint
 
@@ -13,6 +13,8 @@
 - The final assets contain no generated pixels: an image-model draft was rejected for geometry drift, then the installed alpha helper plus an original-pixel protection mask produced the accepted candidates.
 - Task 0018 planning commit: `6d55db3` (`Plan transparent table background task`).
 - Task 0018 implementation commit: `f22727d` (`Remove table image backgrounds`).
+- Task 0018 closure commit: `79a0d9f` (`Close transparent table background task`).
+- Task 0018 merge commit: `9ff59ab` (`Merge transparent table background task`).
 - Task 0018 local verification: both RGBA assets have transparent corners and identical `1940×1940+30+30` content bounds, protected interiors have zero pixel difference, dark-background previews are clean, and frontend tests/build pass.
 - Focused player/host browser smoke for the normal and post-sector-13 table variants is accepted.
 - Roadmap item 16 records full user-facing UI localization as a separate future task; internal event/API/code identifiers remain out of scope for translation.
@@ -359,7 +361,7 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Complete the local merge of `task/transparent-table-background` into `web`, then publish only `web` and confirm the Web CI run.
+1. Publish local `web` with merge `9ff59ab` plus this handoff and confirm the Web CI run.
 2. After green remote verification, remove the merged local task branch; no remote task branch was created.
 3. Choose the next roadmap item; played-question history needs a product decision, while personal questions and full UI localization are bounded candidates.
 
