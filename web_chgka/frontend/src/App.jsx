@@ -17,7 +17,7 @@ import { useSocketSoundEvents } from './hooks/useSocketSoundEvents';
 import { useSoundFade } from './hooks/useSoundFade';
 import { socket } from './socket';
 
-function App() {
+function App({ entrypoint }) {
   const {
     gameState,
     gameSettings,
@@ -34,7 +34,7 @@ function App() {
     addNotification,
     dismissNotification,
     logout,
-  } = useGameSession();
+  } = useGameSession(entrypoint);
 
   const soundFadeMultiplier = useSoundFade(gameSettings?.sound_control);
   const effectiveMediaVolume = (gameSettings?.volume ?? 1) * soundFadeMultiplier;
@@ -74,7 +74,7 @@ function App() {
     return (
       <LoginScreen
         socket={socket}
-        gameState={gameState}
+        entrypoint={entrypoint}
         sessionNotice={sessionNotice}
       />
     );

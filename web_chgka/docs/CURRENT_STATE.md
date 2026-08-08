@@ -2,11 +2,15 @@
 
 - Snapshot date: 2026-08-08
 - Latest completed task: `docs/tasks/0016-blackbox.md`
-- Active task: none
-- Branch: `web`
-- Status: black-box implementation is accepted and merged locally; publishing `web` and remote CI are pending. No remote task branch was created.
+- Active task: `docs/tasks/0017-separate-login-entrypoints.md`
+- Branch: `task/separate-login-entrypoints`
+- Status: separate player/admin entrypoints are implemented and locally verified from synchronized `web` at `7db38dc`; focused browser acceptance is pending.
 
 ## Repository checkpoint
+
+- `web` and `origin/web` are synchronized at `7db38dc` before task 0017.
+- Login-entrypoint decisions: `/play` is player-only, `/admin` is host-only, `/` defaults to `/play`, route-scoped restore ignores the other role's stored token, and backend authorization remains unchanged.
+- Task 0017 local verification: 189 backend tests, 39 frontend tests across 9 files, production build, and direct Vite SPA responses for root/player/admin/trailing-slash/unknown paths pass.
 
 - `web` and `origin/web` are synchronized at `8673c25` before black-box work.
 - Black-box decisions are `1B + 2A`: show the static black-box image while its static music plays; dedicated Stop, Silence, natural completion, and completed Fade end the presentation; every ending returns to the table without restoring prior shared media. The host card also shows a reconnect-aware countdown for the measured 31.488-second track.

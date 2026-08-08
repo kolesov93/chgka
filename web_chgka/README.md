@@ -18,7 +18,9 @@ docker compose up --build
 
 После запуска:
 
-- frontend: `http://localhost:5173`
+- игроки: `http://localhost:5173/play`
+- ведущий: `http://localhost:5173/admin`
+- корневой `http://localhost:5173/` перенаправляет на player-entrypoint
 - backend: `http://localhost:8000`
 
 Что уже настроено в `docker-compose.yml`:
@@ -75,7 +77,9 @@ npm run build
 
 После запуска:
 
-- frontend: `http://localhost:5173`
+- игроки: `http://localhost:5173/play`
+- ведущий: `http://localhost:5173/admin`
+- корневой `http://localhost:5173/` перенаправляет на player-entrypoint
 - backend: `http://localhost:8000`
 
 ## Примечания
@@ -84,6 +88,8 @@ npm run build
 - `--reload` следит за исходниками и перезапускает development-процесс Uvicorn после изменений. В production этот флаг не используется.
 - Production допускает только `CHGKA_ENV=production`, пароль длиной не менее 12 символов (не `admin123`) и точные HTTPS origins. Пример полного набора переменных есть в [`.env.example`](.env.example); сам backend `.env`-файлы не загружает.
 - `ADMIN_TOKEN_TTL_SECONDS` необязателен: по умолчанию admin-сессия действует 12 часов без продления при reconnect; допустимый диапазон — от 60 секунд до 24 часов.
+- `/play` восстанавливает только player token, а `/admin` — только admin token. Разделение форм улучшает UX, но не является границей безопасности: backend по-прежнему проверяет пароль, роль и токен для каждой привилегированной операции.
+- Прямое открытие и refresh `/play` и `/admin` работают в Vite development/preview. Будущий production frontend server/reverse proxy должен отдавать `index.html` для обоих SPA-путей.
 
 ## Диагностика CORS локально
 
