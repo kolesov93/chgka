@@ -88,7 +88,6 @@ function App({ entrypoint }) {
           <div className="text-6xl mb-6">⏳</div>
           <h1 className="text-3xl font-bold mb-4 text-yellow-500">Ожидание одобрения</h1>
           <p className="text-slate-400 mb-2">Игра уже началась</p>
-          <p className="text-slate-500 text-sm">Администратор должен разрешить вам присоединиться</p>
         </div>
       </div>
     );
