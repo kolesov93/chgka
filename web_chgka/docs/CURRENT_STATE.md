@@ -2,11 +2,15 @@
 
 - Snapshot date: 2026-08-08
 - Latest completed task: `docs/tasks/0018-transparent-table-background.md`
-- Active task: none
-- Branch: `web`
-- Status: both transparent table assets are accepted and merged locally; publishing `web` and remote CI are pending. No remote task branch was created.
+- Active task: `docs/tasks/0019-ui-russian-localization.md`
+- Branch: `task/ui-russian-localization`
+- Status: user-facing copy inventory and glossary are defined from synchronized `web` at `e086f39`; implementation is in progress.
 
 ## Repository checkpoint
+
+- `web` and `origin/web` are synchronized at `e086f39` before task 0019.
+- Task 0019 translates rendered copy, display labels, server messages and logs while preserving all internal English identifiers and wire contracts.
+- Accepted terminology includes «Восстановление игры», «Отключить», «Затухание 3 с», «Выключить звук» and explicit Russian mappings for phases, question kinds and media sections.
 
 - `web` and `origin/web` are synchronized at `68edc87` before task 0018.
 - Task 0018 preserves both 2000×2000 table canvases and runtime paths, replacing only the white exterior with a clean alpha edge.
