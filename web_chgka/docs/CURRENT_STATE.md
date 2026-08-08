@@ -9,9 +9,10 @@
 ## Repository checkpoint
 
 - `web` and `origin/web` are synchronized at `8673c25` before black-box work.
-- Black-box decisions are `1B + 2A`: show the static black-box image while its static music plays; dedicated Stop, Silence, natural completion, and completed Fade end the presentation; every ending returns to the table without restoring prior shared media.
+- Black-box decisions are `1B + 2A`: show the static black-box image while its static music plays; dedicated Stop, Silence, natural completion, and completed Fade end the presentation; every ending returns to the table without restoring prior shared media. The host card also shows a reconnect-aware countdown for the measured 31.488-second track.
+- The next task is now roadmap item 12: separate `/admin` password-only and `/play` player-name entrypoints, with `/` leading to the player route; route separation is UX isolation and does not replace backend authorization.
 - The implementation working tree adds strict pack metadata, admin-only effective flags, a reconnect-aware generation-guarded presentation timeline, host Start/Stop, natural-end reporting, global Silence/Fade integration, the static transparent PNG, and sample sector 09 coverage.
-- Full local verification passes: 189 backend tests with warnings as errors, 34 frontend assertions across 8 test files, production build, and sample-pack CLI validation. Native Compose validation remains blocked by the installed `snap-confine` capability failure.
+- Full local verification passes: 189 backend tests with warnings as errors, 36 frontend assertions across 8 test files, production build, and sample-pack CLI validation. Native Compose validation remains blocked by the installed `snap-confine` capability failure.
 
 - `web` and `origin/web` were synchronized at `2e48860` before the next task was prepared.
 - Played-question history is recorded as a problem without a chosen solution in local `web` commit `343af00`; runtime recovery is no longer P0.

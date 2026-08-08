@@ -88,7 +88,10 @@ export function useGameSession() {
       const intro = newState.intro
         ? { ...newState.intro, received_at_ms: Date.now() }
         : null;
-      setGameState({ ...newState, intro });
+      const blackbox = newState.blackbox
+        ? { ...newState.blackbox, received_at_ms: Date.now() }
+        : null;
+      setGameState({ ...newState, intro, blackbox });
     }
 
     function onRoleUpdate(data) {

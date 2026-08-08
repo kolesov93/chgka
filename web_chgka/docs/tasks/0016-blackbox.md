@@ -17,6 +17,7 @@ Status: Implemented; awaiting browser acceptance
 - Естественное окончание подтверждает авторизованный host для текущего playback generation. Принудительное окончание происходит по отдельному Stop, по Silence или после полного трёхсекундного Fade.
 - После любого окончания показывается обычный игровой стол; ранее показанное shared media не восстанавливается.
 - Отдельный Stop завершает только чёрный ящик. Silence и Fade сохраняют своё глобальное действие на остальные игровые звуки.
+- В карточке ведущего идёт reconnect-aware обратный отсчёт от измеренной длительности статичного трека `31.488` сек., по той же server-snapshot модели, что у intro.
 
 ## Out of scope
 
@@ -32,7 +33,7 @@ Status: Implemented; awaiting browser acceptance
 ## Local verification
 
 - `python3 -W error -m pytest -q`: 189 tests passed.
-- `npm test`: 34 assertions across 8 test files passed.
+- `npm test`: 36 assertions across 8 test files passed.
 - `npm run build`: passed.
 - `python3 -m validate_pack ../fixtures/sample_questions`: passed.
 - `docker compose config --quiet`: locally blocked before parsing by the installed `snap-confine` capability error; remote Compose CI remains the configuration gate.

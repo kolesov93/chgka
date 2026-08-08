@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BLACKBOX_IMAGE_SOURCE } from '../blackbox';
 import { inlineImagePreviews } from '../inlineMedia';
 import { mediaUrl, socket } from '../socket';
+import { BlackboxCountdown } from './BlackboxPresentation';
 import { SynchronizedMedia } from './SynchronizedMedia';
 
 function QuestionSection({ title, children, highlight = false, accentClass = '' }) {
@@ -306,8 +307,18 @@ export function AdminQuestionPanel({
           />
           <div className="flex min-w-0 flex-1 flex-col gap-2">
             <div>
-              <div className="text-xs font-black uppercase tracking-widest text-red-300">
-                Чёрный ящик
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs font-black uppercase tracking-widest text-red-300">
+                  Чёрный ящик
+                </div>
+                {blackboxActive && (
+                  <div className="text-right">
+                    <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500">
+                      Осталось
+                    </div>
+                    <BlackboxCountdown blackbox={blackbox} />
+                  </div>
+                )}
               </div>
               <div className="mt-1 text-xs text-slate-400">
                 {blackboxActive

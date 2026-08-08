@@ -1,10 +1,12 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   BLACKBOX_IMAGE_SOURCE,
   BLACKBOX_SOUND_SOURCE,
   blackboxEndedPayload,
   blackboxPlayback,
+  blackboxRemainingMs,
+  formatBlackboxRemaining,
 } from '../blackbox';
 import { SynchronizedMedia } from './SynchronizedMedia';
 
@@ -45,5 +47,23 @@ export function BlackboxScreen() {
         className="max-h-[520px] max-w-full object-contain"
       />
     </div>
+  );
+}
+
+
+export function BlackboxCountdown({ blackbox }) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!blackbox) return undefined;
+    setNowMs(Date.now());
+    const interval = setInterval(() => setNowMs(Date.now()), 250);
+    return () => clearInterval(interval);
+  }, [blackbox?.started_at_ms, blackbox?.playback_generation]);
+
+  return (
+    <span className="font-black tabular-nums text-yellow-400">
+      {formatBlackboxRemaining(blackboxRemainingMs(blackbox, nowMs))}
+    </span>
   );
 }
