@@ -55,7 +55,7 @@ def test_start_game_enters_silent_intro_and_music_starts_once_on_command():
     }
     assert effects.logs == ("Интро началось",)
     assert effects.sounds == ()
-    with pytest.raises(TransitionError, match="INTRO"):
+    with pytest.raises(TransitionError, match="Интро"):
         transition_start_game(state)
 
     music = transition_start_intro_music(state, now_ms=10_000)

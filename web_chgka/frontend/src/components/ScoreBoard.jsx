@@ -10,11 +10,10 @@ export function ScoreBoard({ score }) {
     <div className="w-full max-w-[300px] mb-4">
       <img 
         src={fileName} 
-        alt={`Score ${znatoki}:${tv}`}
+        alt={`Счёт ${znatoki}:${tv}`}
         className="w-full h-auto object-contain drop-shadow-2xl"
         onError={(e) => { e.target.style.display = 'none' }} // Скрыть, если картинки нет
       />
     </div>
   );
 }
-

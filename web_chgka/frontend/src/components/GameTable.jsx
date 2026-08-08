@@ -100,7 +100,7 @@ export function GameTable({ gameState, isAdmin = false, questionTitles = null })
         >
            <img 
              src={envelopeSrc} 
-             alt={`Sector ${i}`}
+             alt={`Сектор ${i}`}
              className="w-full h-full object-contain drop-shadow-lg"
            />
            {isAdmin && title && (
@@ -128,7 +128,7 @@ export function GameTable({ gameState, isAdmin = false, questionTitles = null })
     <div className="relative w-full max-w-[800px] aspect-square mx-auto">
       <img 
         src={tableImage} 
-        alt="Game Table" 
+        alt="Игровой стол"
         className="w-full h-full object-contain"
       />
 
@@ -147,7 +147,7 @@ export function GameTable({ gameState, isAdmin = false, questionTitles = null })
       >
         <img 
           src={IMAGES.arrow} 
-          alt="Arrow" 
+          alt="Стрелка"
           className="w-full h-full object-contain"
         />
       </div>
@@ -156,7 +156,7 @@ export function GameTable({ gameState, isAdmin = false, questionTitles = null })
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[20%] h-[20%]">
         <img 
           src={IMAGES.volchok} 
-          alt="Volchok" 
+          alt="Волчок"
           className="w-full h-full object-contain"
         />
       </div>

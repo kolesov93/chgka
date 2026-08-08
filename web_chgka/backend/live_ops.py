@@ -24,6 +24,7 @@ from transitions import (
     TransitionError,
     clear_blackbox_presentation,
 )
+from ui_text import phase_label, played_label, question_kind_label, timer_label
 
 
 MAX_SCORE = 6
@@ -80,7 +81,7 @@ def _require_round(state: AppState) -> dict:
     )
     kind = round_ctx.get("kind", "normal")
     if kind not in ("normal", "blitz", "superblitz"):
-        raise TransitionError("invalid_round", f"Неизвестный тип раунда: {kind}")
+        raise TransitionError("invalid_round", "Неизвестный тип активного раунда")
     if kind in ("blitz", "superblitz"):
         _require_int(
             round_ctx.get("part_index"),
@@ -117,8 +118,8 @@ def live_ops_set_score(
     state["game"]["score"] = new_score
     return TransitionEffects(
         logs=(
-            "Live Ops: счёт "
-            f"{old_score['znatoki']}:{old_score['tv']} -> {new_znatoki}:{new_tv}",
+            "Восстановление: счёт "
+            f"{old_score['znatoki']}:{old_score['tv']} → {new_znatoki}:{new_tv}",
         ),
     )
 
@@ -137,7 +138,10 @@ def live_ops_set_sector_used(
         label="Сектор",
     )
     if not isinstance(used, bool):
-        raise TransitionError("invalid_used", "Флаг played должен быть boolean")
+        raise TransitionError(
+            "invalid_used",
+            "Признак сыгранного сектора должен быть логическим значением",
+        )
 
     used_questions = state["game"]["used_questions"]
     was_used = sector_id in used_questions
@@ -150,8 +154,8 @@ def live_ops_set_sector_used(
 
     return TransitionEffects(
         logs=(
-            f"Live Ops: сектор {sector_id} played "
-            f"{str(was_used).lower()} -> {str(used).lower()}",
+            f"Восстановление: сектор {sector_id} — "
+            f"{played_label(was_used)} → {played_label(used)}",
         ),
     )
 
@@ -174,7 +178,7 @@ def live_ops_open_round(
         raise TransitionError("pack_unavailable", "Типы вопросов пака недоступны")
     kind = question_types[sector_id - 1]
     if kind not in ("normal", "blitz", "superblitz"):
-        raise TransitionError("invalid_question_type", f"Неизвестный тип вопроса: {kind}")
+        raise TransitionError("invalid_question_type", "Неизвестный тип вопроса")
 
     if kind in ("blitz", "superblitz"):
         normalized_part = _require_int(
@@ -199,7 +203,6 @@ def live_ops_open_round(
         new_round = {"kind": "normal", "sector": sector_id}
         part_label = ""
 
-    old_round = state["game"].get("round")
     _invalidate_spin(state)
     state["wheel"]["current_sector"] = sector_id
     state["wheel"]["playing_sector"] = sector_id
@@ -213,7 +216,8 @@ def live_ops_open_round(
 
     return TransitionEffects(
         logs=(
-            f"Live Ops: раунд {old_round!r} -> сектор {sector_id} ({kind}{part_label})",
+            f"Восстановление: открыт сектор {sector_id} "
+            f"({question_kind_label(kind)}{part_label})",
         ),
         clear_media_tokens=True,
         refresh_admin_question=True,
@@ -232,7 +236,7 @@ def live_ops_force_phase(
     blitz_discussion_seconds: int,
 ) -> TransitionEffects:
     if phase not in FORCEABLE_PHASES:
-        raise TransitionError("invalid_phase", f"Фазу {phase!r} нельзя выставить вручную")
+        raise TransitionError("invalid_phase", "Эту фазу нельзя выставить вручную")
     new_phase: GamePhase = phase
     old_phase = state["game"]["phase"]
     round_ctx = None if new_phase == PHASE_PRE_ROUND else _require_round(state)
@@ -245,7 +249,10 @@ def live_ops_force_phase(
         state["presentation"]["shared_media"] = None
         state["game"]["phase"] = new_phase
         return TransitionEffects(
-            logs=(f"Live Ops: фаза {old_phase} -> {new_phase}",),
+            logs=(
+                f"Восстановление: фаза «{phase_label(old_phase)}» "
+                f"→ «{phase_label(new_phase)}»",
+            ),
             clear_media_tokens=True,
             clear_admin_question=True,
             stop_sounds=True,
@@ -277,7 +284,10 @@ def live_ops_force_phase(
         state["timer"]["discussion_deadline_ms"] = None
 
     return TransitionEffects(
-        logs=(f"Live Ops: фаза {old_phase} -> {new_phase}",),
+        logs=(
+            f"Восстановление: фаза «{phase_label(old_phase)}» "
+            f"→ «{phase_label(new_phase)}»",
+        ),
         clear_media_tokens=clear_media,
         refresh_admin_question=clear_media,
         stop_sounds=was_spinning or clear_media or had_blackbox,
@@ -298,8 +308,9 @@ def live_ops_reset_to_intro(
     }
     return TransitionEffects(
         logs=(
-            "Live Ops: полный сброс "
-            f"из {old_phase} при счёте {old_score['znatoki']}:{old_score['tv']} -> INTRO",
+            "Восстановление: полный сброс "
+            f"из фазы «{phase_label(old_phase)}» при счёте "
+            f"{old_score['znatoki']}:{old_score['tv']} → «{phase_label(PHASE_INTRO)}»",
         ),
         clear_media_tokens=True,
         clear_admin_question=True,
@@ -320,7 +331,8 @@ def live_ops_cancel_spin(state: AppState) -> TransitionEffects:
     clear_blackbox_presentation(state)
     return TransitionEffects(
         logs=(
-            f"Live Ops: вращение {old_spin_id} отменено, фаза -> {PHASE_PRE_ROUND}",
+            f"Восстановление: вращение {old_spin_id} отменено, "
+            f"фаза → «{phase_label(PHASE_PRE_ROUND)}»",
         ),
         clear_media_tokens=True,
         clear_admin_question=True,
@@ -344,7 +356,7 @@ def live_ops_set_timer(
     if state["game"]["phase"] != PHASE_DISCUSSION:
         raise TransitionError(
             "bad_phase",
-            "Таймер Live Ops доступен только в фазе DISCUSSION",
+            f"Таймер восстановления доступен только в фазе «{phase_label(PHASE_DISCUSSION)}»",
         )
     old_seconds = _remaining_seconds(
         state["timer"].get("discussion_deadline_ms"),
@@ -364,5 +376,8 @@ def live_ops_set_timer(
         deadline_ms = now_ms + new_seconds * 1000
     state["timer"]["discussion_deadline_ms"] = deadline_ms
     return TransitionEffects(
-        logs=(f"Live Ops: таймер {old_seconds} -> {new_seconds} сек.",),
+        logs=(
+            f"Восстановление: таймер {timer_label(old_seconds)} "
+            f"→ {timer_label(new_seconds)}",
+        ),
     )

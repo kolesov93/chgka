@@ -79,6 +79,12 @@ def _isolated_global_settings(monkeypatch):
     )
 
 
+def test_public_status_message_is_russian():
+    assert asyncio.run(main.root()) == {
+        "message": "Сервер игры «Что? Где? Когда?» работает",
+    }
+
+
 def test_concurrent_score_handlers_award_only_one_point(monkeypatch):
     fake_sio = FakeSio()
     state = create_initial_app_state(phase=PHASE_TEAM_ANSWER)
@@ -185,6 +191,7 @@ def test_intro_author_photo_is_pack_backed_and_current_slide_only(tmp_path, monk
     with pytest.raises(main.HTTPException) as error:
         asyncio.run(main.get_intro_author_photo(4, 2))
     assert error.value.status_code == 404
+    assert error.value.detail == "Фото автора не найдено"
 
     with pytest.raises(main.HTTPException) as error:
         asyncio.run(main.get_intro_author_photo(4, 4))
@@ -758,6 +765,7 @@ def test_audio_resolve_share_play_pause_stop_and_http_context(monkeypatch):
         with pytest.raises(main.HTTPException) as error:
             await main.get_media(media_id)
         assert error.value.status_code == 404
+        assert error.value.detail == "Медиа не найдено"
         assert media_id not in main.media_tokens
 
     asyncio.run(run_flow())
@@ -984,7 +992,7 @@ def test_live_ops_handlers_apply_authoritative_state_and_reject_invalid_input(mo
     assert state["game"]["used_questions"] == [3]
     assert sum(event == "state_update" for event, _, _ in fake_sio.events) == 2
     assert any(event == "admin_notification" for event, _, _ in fake_sio.events)
-    assert any("Live Ops: счёт" in entry for entry in state["logs"])
+    assert any("Восстановление: счёт" in entry for entry in state["logs"])
 
 
 def test_live_ops_open_round_force_phase_timer_and_clear_question(monkeypatch):

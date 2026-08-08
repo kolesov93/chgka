@@ -1,11 +1,6 @@
 import { mediaUrl } from '../socket';
+import { playbackStateLabel } from '../uiText';
 import { SynchronizedMedia } from './SynchronizedMedia';
-
-const playbackLabels = {
-  stopped: 'Готово к воспроизведению',
-  playing: 'Воспроизводится',
-  paused: 'Пауза',
-};
 
 export function SharedMediaRenderer({ media, volume, children }) {
   if (!media) return children;
@@ -17,7 +12,7 @@ export function SharedMediaRenderer({ media, volume, children }) {
         <div className="text-center">
           <div className="text-sm font-bold text-slate-200">{media.name || 'Аудио'}</div>
           <div className="text-xs text-slate-500 mt-1">
-            {playbackLabels[media.playback_state] || media.playback_state}
+            {playbackStateLabel(media.playback_state)}
           </div>
         </div>
         <SynchronizedMedia media={media} volume={volume} />
@@ -30,7 +25,7 @@ export function SharedMediaRenderer({ media, volume, children }) {
       <div className="w-full bg-slate-800/40 border border-slate-700 rounded-xl p-4 flex flex-col items-center gap-3">
         <SynchronizedMedia media={media} volume={volume} />
         <div className="text-xs text-slate-500">
-          {playbackLabels[media.playback_state] || media.playback_state}
+          {playbackStateLabel(media.playback_state)}
         </div>
       </div>
     );
@@ -42,7 +37,7 @@ export function SharedMediaRenderer({ media, volume, children }) {
     <div className="w-full bg-slate-800/40 border border-slate-700 rounded-xl p-4 flex justify-center">
       <img
         src={mediaUrl(media.media_id)}
-        alt="Shared media"
+        alt="Медиа вопроса"
         className="max-h-[520px] w-auto object-contain"
       />
     </div>

@@ -16,6 +16,7 @@ import { useGameSound } from './hooks/useGameSound';
 import { useSocketSoundEvents } from './hooks/useSocketSoundEvents';
 import { useSoundFade } from './hooks/useSoundFade';
 import { socket } from './socket';
+import { phaseLabel } from './uiText';
 
 function App({ entrypoint }) {
   const {
@@ -130,7 +131,9 @@ function App({ entrypoint }) {
             <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
           </h1>
           {isAdmin && (
-            <div className="text-xs text-slate-500 uppercase font-bold">Phase: {phase}</div>
+            <div className="text-xs text-slate-500 uppercase font-bold">
+              Фаза: {phaseLabel(phase)}
+            </div>
           )}
         </div>
 

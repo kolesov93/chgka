@@ -76,6 +76,7 @@ from transitions import (
     transition_ten_seconds,
     validate_spin_start,
 )
+from ui_text import media_display_name, sound_label
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -586,7 +587,7 @@ async def broadcast_players(target_sid=None):
 
 @fastapi_app.get("/")
 async def root():
-    return {"message": "CHGKA Game Server is running"}
+    return {"message": "Сервер игры «Что? Где? Когда?» работает"}
 
 
 @fastapi_app.get("/media/{media_id}")
@@ -602,13 +603,13 @@ async def get_media(media_id: str):
         allow_expired=is_active_shared,
     ):
         media_tokens.pop(media_id, None)
-        raise HTTPException(status_code=404, detail="Media not found")
+        raise HTTPException(status_code=404, detail="Медиа не найдено")
     path = info.get("path")
     if not path:
-        raise HTTPException(status_code=404, detail="Media not found")
+        raise HTTPException(status_code=404, detail="Медиа не найдено")
     p = Path(path)
     if not p.exists() or not p.is_file():
-        raise HTTPException(status_code=404, detail="Media not found")
+        raise HTTPException(status_code=404, detail="Медиа не найдено")
     # Inline display
     return FileResponse(str(p))
 
@@ -616,21 +617,21 @@ async def get_media(media_id: str):
 @fastapi_app.get("/intro/author-photo/{sector}/{slot}")
 async def get_intro_author_photo(sector: int, slot: int):
     if loaded_pack is None or not 1 <= sector <= 12:
-        raise HTTPException(status_code=404, detail="Author photo not found")
+        raise HTTPException(status_code=404, detail="Фото автора не найдено")
     intro = app_state["presentation"]["intro"]
     if app_state["game"]["phase"] != PHASE_INTRO or intro is None:
-        raise HTTPException(status_code=404, detail="Author photo not found")
+        raise HTTPException(status_code=404, detail="Фото автора не найдено")
     if intro["slide_index"] != sector:
-        raise HTTPException(status_code=404, detail="Author photo not found")
+        raise HTTPException(status_code=404, detail="Фото автора не найдено")
 
     question = loaded_pack.get_by_sector(sector)
     author_questions = question.parts or [question]
     if not 1 <= slot <= len(author_questions):
-        raise HTTPException(status_code=404, detail="Author photo not found")
+        raise HTTPException(status_code=404, detail="Фото автора не найдено")
 
     photo_path = author_questions[slot - 1].author_photo
     if photo_path is None or not photo_path.is_file():
-        raise HTTPException(status_code=404, detail="Author photo not found")
+        raise HTTPException(status_code=404, detail="Фото автора не найдено")
     return FileResponse(
         str(photo_path),
         headers={"Cache-Control": "no-store"},
@@ -1298,7 +1299,7 @@ async def admin_share_media(sid, data):
     app_state["presentation"]["shared_media"] = _create_current_shared_media(media_id, info)
     if previous_id and previous_id != media_id:
         media_tokens.pop(previous_id, None)
-    add_log(f"Медиа показано игрокам: {info.get('name', info.get('type'))}")
+    add_log(f"Медиа показано игрокам: {media_display_name(info)}")
     await emit_state_update()
     return {"ok": True}
 
@@ -1410,7 +1411,7 @@ async def _admin_media_playback_action(sid: str, action: str) -> None:
     await emit_settings_update()
     if changed:
         labels = {"play": "запущено", "pause": "на паузе", "stop": "остановлено"}
-        add_log(f"Медиа {labels[action]}: {info.get('name', 'media')}")
+        add_log(f"Медиа {labels[action]}: {media_display_name(info)}")
         await emit_state_update()
 
 
@@ -1460,7 +1461,7 @@ async def admin_media_ended(sid, data):
     if not changed:
         return {"ok": False, "error": "stale_playback"}
 
-    add_log(f"Медиа завершено: {info.get('name', 'media')}")
+    add_log(f"Медиа завершено: {media_display_name(info)}")
     await emit_state_update()
     return {"ok": True}
 
@@ -1531,7 +1532,7 @@ async def admin_sound(sid, data):
         return
     
     _supersede_sound_fade(mode="normal")
-    add_log(f"Звук: {data.get('sound')}")
+    add_log(f"Звук: {sound_label(data.get('sound'))}")
     await emit_settings_update()
     await sio.emit('play_sound', data)
 

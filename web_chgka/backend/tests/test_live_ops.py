@@ -53,7 +53,7 @@ def test_set_score_uses_exact_validated_values_without_changing_phase():
 
     assert state["game"]["score"] == {"znatoki": 6, "tv": 1}
     assert state["game"]["phase"] == PHASE_POST_ROUND
-    assert effects.logs == ("Live Ops: счёт 2:3 -> 6:1",)
+    assert effects.logs == ("Восстановление: счёт 2:3 → 6:1",)
 
     with pytest.raises(TransitionError) as error:
         live_ops_set_score(state, znatoki=True, tv=0)
@@ -70,8 +70,8 @@ def test_toggle_sector_played_and_available_including_active_sector():
     added = live_ops_set_sector_used(state, sector=3, used=True)
 
     assert state["game"]["used_questions"] == [2, 3]
-    assert "true -> false" in removed.logs[0]
-    assert "false -> true" in added.logs[0]
+    assert "сыгран → доступен" in removed.logs[0]
+    assert "доступен → сыгран" in added.logs[0]
 
 
 def test_open_normal_round_cancels_spin_and_normalizes_runtime_state():
@@ -296,11 +296,11 @@ def test_timer_recovery_supports_custom_value_stop_and_validation():
 
     set_effects = live_ops_set_timer(state, seconds=60, now_ms=10_000)
     assert state["timer"]["discussion_deadline_ms"] == 70_000
-    assert set_effects.logs == ("Live Ops: таймер 5 -> 60 сек.",)
+    assert set_effects.logs == ("Восстановление: таймер 5 с → 60 с",)
 
     stop_effects = live_ops_set_timer(state, seconds=None, now_ms=20_000)
     assert state["timer"]["discussion_deadline_ms"] is None
-    assert stop_effects.logs == ("Live Ops: таймер 50 -> None сек.",)
+    assert stop_effects.logs == ("Восстановление: таймер 50 с → выключен",)
 
     with pytest.raises(TransitionError) as error:
         live_ops_set_timer(state, seconds=601, now_ms=20_000)

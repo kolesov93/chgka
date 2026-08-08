@@ -59,7 +59,7 @@ export function WaitingRoom({ socket, gameState, players = [] }) {
                       onClick={() => handleKickPlayer(player.name)}
                       className="text-xs bg-red-900/50 hover:bg-red-800 text-red-300 hover:text-white px-3 py-1 rounded font-bold uppercase transition-colors"
                     >
-                      Kick
+                      Отключить
                     </button>
                   </div>
                 </div>
@@ -80,4 +80,3 @@ export function WaitingRoom({ socket, gameState, players = [] }) {
     </div>
   );
 }
-

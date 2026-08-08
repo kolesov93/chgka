@@ -1,7 +1,7 @@
 # 0019: Русификация пользовательского интерфейса
 
 Branch: `task/ui-russian-localization`
-Status: In progress
+Status: Implemented locally; awaiting browser smoke and remote CI
 
 ## Goal
 
@@ -26,3 +26,27 @@ Status: In progress
 - Backend tests для русских phase/log/timer mappings и обновлённых публичных сообщений.
 - Статический аудит оставшихся латинских пользовательских строк, полные backend/frontend tests и frontend build.
 - Browser smoke основных player/host экранов, media/black-box controls, ошибок и панели восстановления.
+
+## Implemented
+
+- Добавлен единый frontend-словарь для фаз, типов вопросов, секций и типов медиа, состояний воспроизведения и безопасных сообщений об ошибках.
+- Переведены видимые кнопки, заголовки, подтверждения, статусы, browser title, accessibility-тексты и fallback-состояния.
+- Добавлен backend-словарь для фаз, типов вопросов и медиа, звуков, сыгранности сектора и состояния таймера.
+- Игровой лог и сообщения переходов больше не показывают `Live Ops`, raw phase/kind/sound identifiers, `None`, `boolean`, `played` или `[FORCED]`.
+- Публичные FastAPI status/404 messages переведены; внутренние Socket.IO events, payload fields, roles и error codes не изменены.
+
+## Local verification
+
+- `python3 -m pytest -q`: 191 passed.
+- `npm ci` and `npm test`: 10 test files passed.
+- `npm run build`: passed.
+- `docker compose config --quiet`: passed outside the restricted sandbox required by the local snap package.
+- Static audit found no remaining English text in rendered JSX controls, titles, alt text, or the targeted server log/error paths.
+
+## Browser smoke
+
+1. Open `/admin` and `/play`; check the Russian browser title and the existing separate host/player login presentation.
+2. Start a game and reach the table; check the Russian phase label, host controls and game-log entries after a spin and a score action.
+3. Open «Восстановление игры»; check sector type labels, phase buttons, timer controls and confirmation text. Submit an invalid score and check the Russian warning.
+4. Open sample sector 03 audio; check «Предпросмотр», the Russian section name and «Воспроизвести / Пауза / Остановить» on the host, plus the Russian playback state on the player.
+5. Open sample sector 09 black box; check the Russian start/stop copy and return to the table after stopping.

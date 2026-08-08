@@ -79,7 +79,7 @@ export function IntroScreen({ intro, isAdmin = false, introHtml = null }) {
         )}
         {!slideSource && (!isAuthorSlide || authors.length === 0) && (
           <div className="flex min-h-72 items-center justify-center text-red-300">
-            Intro-слайд недоступен
+            Слайд интро недоступен
           </div>
         )}
       </div>

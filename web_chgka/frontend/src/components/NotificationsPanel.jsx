@@ -11,7 +11,7 @@ export function NotificationsPanel({ notifications, onDismiss }) {
           <span className="font-bold">
             {notification.type === 'player_waiting'
               ? `🔔 ${notification.name} ожидает одобрения`
-              : (notification.message || `🔔 ${notification.type}`)}
+              : (notification.message || '🔔 Новое уведомление')}
           </span>
           <button
             onClick={() => onDismiss(notification.id)}
