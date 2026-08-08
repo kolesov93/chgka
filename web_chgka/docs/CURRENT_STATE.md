@@ -1,21 +1,21 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-08
-- Latest completed task: `docs/tasks/0016-blackbox.md`
-- Active task: `docs/tasks/0017-separate-login-entrypoints.md`
-- Branch: `task/separate-login-entrypoints`
-- Status: separate player/admin entrypoints are implemented and locally verified from synchronized `web` at `7db38dc`; focused browser acceptance is pending.
+- Latest completed task: `docs/tasks/0017-separate-login-entrypoints.md`
+- Active task: none
+- Branch: `task/separate-login-entrypoints` (ready for local merge into `web`)
+- Status: separate player/admin entrypoints, local verification, and browser acceptance are complete; local integration is in progress and no remote task branch will be published.
 
 ## Repository checkpoint
 
 - `web` and `origin/web` are synchronized at `7db38dc` before task 0017.
 - Login-entrypoint decisions: `/play` is player-only, `/admin` is host-only, every host screen uses a distinct indigo page background, `/` defaults to `/play`, route-scoped restore ignores the other role's stored token, forms have no redundant visible labels, user-facing copy says «ведущий», and backend authorization remains unchanged.
 - Roadmap item 15 records removal of the baked-in background from both table image variants; no table asset is changed in task 0017.
+- Login-entrypoint implementation commits: `8e0bbd8`, `74ec133`, `64219dc`, and `39aadbd`.
 - Task 0017 local verification: 189 backend tests, 39 frontend tests across 9 files, production build, and direct Vite SPA responses for root/player/admin/trailing-slash/unknown paths pass.
 
 - `web` and `origin/web` are synchronized at `8673c25` before black-box work.
 - Black-box decisions are `1B + 2A`: show the static black-box image while its static music plays; dedicated Stop, Silence, natural completion, and completed Fade end the presentation; every ending returns to the table without restoring prior shared media. The host card also shows a reconnect-aware countdown for the measured 31.488-second track.
-- The next task is now roadmap item 12: separate `/admin` password-only and `/play` player-name entrypoints, with `/` leading to the player route; route separation is UX isolation and does not replace backend authorization.
 - The implementation working tree adds strict pack metadata, admin-only effective flags, a reconnect-aware generation-guarded presentation timeline, host Start/Stop, natural-end reporting, global Silence/Fade integration, the static transparent PNG, and sample sector 09 coverage.
 - Black-box implementation commits: `dff34b5` (`Implement black box presentation`) and `f5a86dd` (`Add black box countdown`).
 - Black-box closure commit: `f4699c8` (`Close black box task`).
@@ -349,9 +349,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish local `web` with merge `722065a` plus this handoff and confirm the Web CI run.
-2. After green remote verification, remove the merged local `task/blackbox` branch; there is no remote task branch to clean up.
-3. Take roadmap item 12, separate `/admin` and `/play` entrypoints, as the next task.
+1. Complete the local merge of `task/separate-login-entrypoints` into `web`, then publish only `web` and confirm the Web CI run.
+2. After green remote verification, remove the merged local task branch; no remote task branch was created.
+3. Choose the next roadmap item; played-question history still needs a product decision, while personal questions and transparent table assets are already bounded implementation candidates.
 
 ## Resume checklist
 

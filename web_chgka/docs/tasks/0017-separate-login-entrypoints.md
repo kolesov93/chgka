@@ -1,7 +1,7 @@
 # 0017: Раздельные страницы входа
 
 Branch: `task/separate-login-entrypoints`
-Status: In progress
+Status: Completed
 
 ## Goal
 
@@ -25,15 +25,11 @@ Status: In progress
 
 - Backend endpoints для HTML-login, разные frontend bundles/domains, приглашения с секретом в URL, изменение admin/player token lifecycle, production reverse proxy и access control по самому pathname.
 
-## Verification plan
+## Verification
 
-- Pure tests для route resolution/canonicalization и role-scoped session restore.
-- Frontend test suite и production build.
-- Browser smoke: прямой `/play` и `/admin`, `/` redirect, refresh, login, reconnect, logout и отсутствие чужой формы.
-
-## Local verification
-
+- Pure tests покрывают route resolution/canonicalization и role-scoped session restore.
 - `python3 -W error -m pytest -q`: 189 tests passed (backend behavior unchanged).
 - `npm test`: 39 tests across 9 test files passed.
 - `npm run build`: passed.
 - Temporary Vite dev server returned the SPA entry document with HTTP 200 for `/`, `/play`, `/play/`, `/admin`, `/admin/`, and an unknown path; client route tests cover their canonical destinations.
+- User accepted the focused browser smoke, including the final copy, host terminology, and distinct background across host screens.
