@@ -2,6 +2,7 @@
 title: Литературный псевдоним
 author: Мария Кузнецова
 author_photo: author.jpg
+blackbox: true
 ---
 
 # Вопрос

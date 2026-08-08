@@ -49,6 +49,7 @@ class TestValidQuestions:
         assert "2 + 2" in q.question_html
         assert "<strong>4</strong>" in q.answer_html
         assert q.author is None
+        assert q.blackbox is False
         assert q.comment_html is None
         assert q.sources_html is None
         assert q.media == []
@@ -234,6 +235,7 @@ class TestSampleQuestions:
         q = parse_question(SAMPLE_DIR / "09")
         
         assert q.title == "Литературный псевдоним"
+        assert q.blackbox is True
         assert q.type == QuestionType.NORMAL
         assert q.media == []
     

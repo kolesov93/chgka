@@ -20,6 +20,7 @@ export function AdminControls({
   const isTeamAnswer = phase === 'TEAM_ANSWER';
   const isPostRound = phase === 'POST_ROUND';
   const isGameOver = phase === 'GAME_OVER';
+  const blackboxActive = Boolean(gameState?.blackbox);
   const round = gameState?.round || null;
   const roundKind = round?.kind || 'normal';
   const isBlitzRound = roundKind === 'blitz' || roundKind === 'superblitz';
@@ -125,9 +126,10 @@ export function AdminControls({
             {isQuestionReading && (
               <button
                 onClick={() => socket.emit('admin_start_discussion')}
-                className="w-full bg-blue-700 hover:bg-blue-600 text-white py-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-xs"
+                disabled={blackboxActive}
+                className="w-full bg-blue-700 hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40 text-white py-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-xs"
               >
-                Начать обсуждение
+                {blackboxActive ? 'Сначала завершите чёрный ящик' : 'Начать обсуждение'}
               </button>
             )}
             {isDiscussion && (

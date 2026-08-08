@@ -256,6 +256,8 @@ def test_reset_to_intro_clears_progress_and_restarts_timeline():
             "duration_ms": 87_757,
         },
         "shared_media": None,
+        "blackbox": None,
+        "blackbox_generation": 1,
     }
     assert effects.sounds == ()
     assert effects.stop_sounds is True

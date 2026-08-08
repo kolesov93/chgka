@@ -1,12 +1,17 @@
 # CHGKA Web Current State
 
-- Snapshot date: 2026-08-07
+- Snapshot date: 2026-08-08
 - Latest completed task: `docs/tasks/0015-media-video-sequence.md`
-- Active task: none
-- Branch: `web`
-- Status: media/video/sequence task is accepted and merged locally; publishing `web` and remote CI are pending.
+- Active task: `docs/tasks/0016-blackbox.md`
+- Branch: `task/blackbox`
+- Status: black-box implementation and full local verification are complete; focused two-browser acceptance is the remaining gate.
 
 ## Repository checkpoint
+
+- `web` and `origin/web` are synchronized at `8673c25` before black-box work.
+- Black-box decisions are `1B + 2A`: show the static black-box image while its static music plays; dedicated Stop, Silence, natural completion, and completed Fade end the presentation; every ending returns to the table without restoring prior shared media.
+- The implementation working tree adds strict pack metadata, admin-only effective flags, a reconnect-aware generation-guarded presentation timeline, host Start/Stop, natural-end reporting, global Silence/Fade integration, the static transparent PNG, and sample sector 09 coverage.
+- Full local verification passes: 189 backend tests with warnings as errors, 34 frontend assertions across 8 test files, production build, and sample-pack CLI validation. Native Compose validation remains blocked by the installed `snap-confine` capability failure.
 
 - `web` and `origin/web` were synchronized at `2e48860` before the next task was prepared.
 - Played-question history is recorded as a problem without a chosen solution in local `web` commit `343af00`; runtime recovery is no longer P0.

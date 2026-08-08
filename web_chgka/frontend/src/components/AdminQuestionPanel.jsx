@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { BLACKBOX_IMAGE_SOURCE } from '../blackbox';
 import { inlineImagePreviews } from '../inlineMedia';
 import { mediaUrl, socket } from '../socket';
 import { SynchronizedMedia } from './SynchronizedMedia';
@@ -49,6 +50,7 @@ export function AdminQuestionPanel({
   adminQuestion,
   phase,
   sharedMedia,
+  blackbox,
   volume,
   addNotification,
 }) {
@@ -263,6 +265,24 @@ export function AdminQuestionPanel({
   const highlightQuestion = phase === 'QUESTION_READING' || phase === 'DISCUSSION';
   const highlightAnswer = phase === 'TEAM_ANSWER' || phase === 'POST_ROUND';
   const previewIsShared = mediaPreview?.media_id === sharedMedia?.media_id;
+  const blackboxActive = Boolean(blackbox);
+
+  const startBlackbox = () => {
+    socket.emit('admin_start_blackbox', {}, (response) => {
+      if (!response?.ok) {
+        addNotification({
+          type: 'warning',
+          message: response?.message || `Не удалось запустить чёрный ящик: ${response?.error || 'unknown'}`,
+        });
+      }
+    });
+  };
+
+  const stopBlackbox = () => {
+    socket.emit('admin_stop_blackbox', {
+      playback_generation: blackbox?.playback_generation,
+    });
+  };
 
   return (
     <div className="w-full bg-slate-800/70 border border-slate-700 rounded-xl p-4 mb-4">
@@ -275,6 +295,46 @@ export function AdminQuestionPanel({
       <div className="text-lg font-bold text-white mb-2">{adminQuestion.title}</div>
       {adminQuestion.author && (
         <div className="text-xs text-slate-500 mb-3">Автор: {adminQuestion.author}</div>
+      )}
+
+      {adminQuestion.blackbox && (
+        <div className="mb-4 flex items-center gap-4 rounded-lg border border-red-800/70 bg-red-950/20 p-3">
+          <img
+            src={BLACKBOX_IMAGE_SOURCE}
+            alt="Чёрный ящик"
+            className="h-20 w-24 shrink-0 object-contain"
+          />
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <div>
+              <div className="text-xs font-black uppercase tracking-widest text-red-300">
+                Чёрный ящик
+              </div>
+              <div className="mt-1 text-xs text-slate-400">
+                {blackboxActive
+                  ? 'Музыка играет; игрокам показана заставка.'
+                  : 'Запусти музыку перед чтением вопроса.'}
+              </div>
+            </div>
+            {blackboxActive ? (
+              <button
+                type="button"
+                onClick={stopBlackbox}
+                className="self-start rounded bg-red-800 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-red-700"
+              >
+                Stop
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={startBlackbox}
+                disabled={phase !== 'QUESTION_READING'}
+                className="self-start rounded bg-yellow-600 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-black hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Запустить музыку
+              </button>
+            )}
+          </div>
+        </div>
       )}
 
       <div className="flex flex-col gap-3">
@@ -359,10 +419,14 @@ export function AdminQuestionPanel({
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={sharePreview}
-                disabled={previewIsShared}
-                className="flex-1 bg-blue-700 hover:bg-blue-600 text-white py-2 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
+                disabled={previewIsShared || blackboxActive}
+                className="flex-1 bg-blue-700 hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40 text-white py-2 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
               >
-                {previewIsShared ? 'Показано игрокам' : 'Показать игрокам'}
+                {previewIsShared
+                  ? 'Показано игрокам'
+                  : blackboxActive
+                    ? 'Сначала завершите чёрный ящик'
+                    : 'Показать игрокам'}
               </button>
               {(mediaPreview.type === 'audio' || mediaPreview.type === 'video') && previewIsShared && (
                 <>

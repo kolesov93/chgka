@@ -19,6 +19,8 @@ from transitions import (
     transition_reset,
     transition_score,
     transition_start_discussion,
+    transition_start_blackbox,
+    transition_end_blackbox,
     transition_start_game,
     transition_start_intro_music,
     transition_start_spin,
@@ -91,6 +93,56 @@ def test_final_intro_step_stops_music_and_enters_pre_round():
     assert state["presentation"]["intro"] is None
     assert state["game"]["score"] == {"znatoki": 0, "tv": 0}
     assert effects.stop_sounds is True
+
+
+def test_blackbox_start_replaces_media_and_natural_end_returns_table():
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "normal", "sector": 9}
+    state["presentation"]["shared_media"] = _shared_image()
+
+    started = transition_start_blackbox(state, enabled=True, now_ms=10_000)
+
+    active = state["presentation"]["blackbox"]
+    assert active == {"started_at_ms": 10_000, "playback_generation": 1}
+    assert state["presentation"]["shared_media"] is None
+    assert started.start_sound_output is True
+
+    with pytest.raises(TransitionError) as exc_info:
+        transition_start_discussion(state, deadline_ms=70_000)
+    assert exc_info.value.code == "blackbox_active"
+    assert state["game"]["phase"] == PHASE_QUESTION_READING
+
+    ended = transition_end_blackbox(
+        state,
+        expected_generation=active["playback_generation"],
+        natural=True,
+    )
+
+    assert state["presentation"]["blackbox"] is None
+    assert state["presentation"]["shared_media"] is None
+    assert "музыка завершилась" in ended.logs[0]
+    transition_start_discussion(state, deadline_ms=70_000)
+    assert state["game"]["phase"] == PHASE_DISCUSSION
+
+
+def test_blackbox_rejects_unmarked_question_and_stale_stop():
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "normal", "sector": 1}
+
+    with pytest.raises(TransitionError) as exc_info:
+        transition_start_blackbox(state, enabled=False, now_ms=10_000)
+    assert exc_info.value.code == "blackbox_unavailable"
+
+    transition_start_blackbox(state, enabled=True, now_ms=10_000)
+    with pytest.raises(TransitionError) as exc_info:
+        transition_end_blackbox(state, expected_generation=0)
+    assert exc_info.value.code == "stale_blackbox"
+    assert state["presentation"]["blackbox"] is not None
+
+    generation = state["presentation"]["blackbox"]["playback_generation"]
+    stopped = transition_end_blackbox(state, expected_generation=generation)
+    assert "остановлен ведущим" in stopped.logs[0]
+    assert state["presentation"]["blackbox"] is None
 
 
 def test_spin_skips_used_sectors_across_wrap_and_completes_normal_round():

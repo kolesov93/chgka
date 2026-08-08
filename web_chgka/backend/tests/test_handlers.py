@@ -262,6 +262,172 @@ def test_startup_builds_public_intro_authors_from_pack(monkeypatch):
     ]
     assert authors[11][0]["name"] == "Алексей Громов"
     assert all(card["sector"] != 13 for group in authors for card in group)
+    blackbox_flags = main.pack_admin_info["question_blackbox"]
+    assert len(blackbox_flags) == 13
+    assert blackbox_flags[8] == {"question": True, "parts": []}
+    assert blackbox_flags[3] == {"question": False, "parts": [False, False, False]}
+
+
+def test_blackbox_start_natural_end_and_dedicated_stop_are_generation_guarded(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "normal", "sector": 9}
+    state["presentation"]["shared_media"] = {
+        "type": "image",
+        "media_id": "old-media",
+        "media_ref": "old-ref",
+        "section": "question",
+        "name": "old.jpg",
+        "playback_state": "stopped",
+        "position_ms": 0,
+        "started_at_ms": None,
+        "playback_generation": 0,
+        "has_next": False,
+    }
+    pack = parse_question_pack(SAMPLE_PACK)
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", pack)
+    monkeypatch.setattr(
+        main,
+        "players_list",
+        [_authorized_admin(monkeypatch, fake_sio)],
+    )
+    monkeypatch.setattr(main, "_now_ms", lambda: 10_000)
+
+    async def run_flow():
+        await main._emit_current_question_to_admins()
+        assert await main.admin_start_blackbox("admin") == {"ok": True}
+        active = state["presentation"]["blackbox"]
+        assert active == {"started_at_ms": 10_000, "playback_generation": 1}
+        assert state["presentation"]["shared_media"] is None
+        assert await main.admin_share_media("admin", {"media_id": "old-media"}) == {
+            "ok": False,
+            "error": "blackbox_active",
+        }
+
+        repeated = await main.admin_start_blackbox("admin")
+        assert repeated["error"] == "blackbox_active"
+
+        stale = await main.admin_blackbox_ended(
+            "admin",
+            {"playback_generation": 0},
+        )
+        assert stale == {"ok": False, "error": "stale_blackbox"}
+        assert state["presentation"]["blackbox"] is not None
+
+        ended = await main.admin_blackbox_ended(
+            "admin",
+            {"playback_generation": active["playback_generation"]},
+        )
+        assert ended == {"ok": True}
+        assert state["presentation"]["blackbox"] is None
+
+        assert await main.admin_start_blackbox("admin") == {"ok": True}
+        generation = state["presentation"]["blackbox"]["playback_generation"]
+        stopped = await main.admin_stop_blackbox(
+            "admin",
+            {"playback_generation": generation},
+        )
+        assert stopped == {"ok": True}
+
+    asyncio.run(run_flow())
+
+    question_payload = next(
+        data for event, data, _kwargs in fake_sio.events if event == "admin_question"
+    )
+    assert question_payload["blackbox"] is True
+    assert state["presentation"]["blackbox"] is None
+    assert not any(event == "play_sound" for event, _data, _kwargs in fake_sio.events)
+    assert any(
+        event == "state_update" and data["blackbox"] is not None
+        for event, data, _kwargs in fake_sio.events
+    )
+
+
+def test_blackbox_rejects_unmarked_question_and_non_admin(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "normal", "sector": 1}
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", parse_question_pack(SAMPLE_PACK))
+    monkeypatch.setattr(main, "players_list", [])
+    monkeypatch.setattr(main, "_now_ms", lambda: 10_000)
+
+    monkeypatch.setattr(main, "require_admin", _deny_admin)
+    assert asyncio.run(main.admin_start_blackbox("player")) == {
+        "ok": False,
+        "error": "not_admin",
+    }
+
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    response = asyncio.run(main.admin_start_blackbox("admin"))
+    assert response["error"] == "blackbox_unavailable"
+    assert state["presentation"]["blackbox"] is None
+
+
+def test_blackbox_effective_flag_combines_whole_blitz_and_active_part():
+    pack = parse_question_pack(SAMPLE_PACK)
+    blitz = pack.get_by_sector(4)
+
+    assert main._effective_blackbox(
+        blitz,
+        {"kind": "blitz", "sector": 4, "part_index": 1},
+    ) is False
+
+    blitz.parts[1].blackbox = True
+    assert main._effective_blackbox(
+        blitz,
+        {"kind": "blitz", "sector": 4, "part_index": 1},
+    ) is True
+    assert main._effective_blackbox(
+        blitz,
+        {"kind": "blitz", "sector": 4, "part_index": 0},
+    ) is False
+
+    blitz.blackbox = True
+    assert all(
+        main._effective_blackbox(
+            blitz,
+            {"kind": "blitz", "sector": 4, "part_index": part_index},
+        )
+        for part_index in range(3)
+    )
+
+
+def test_silence_and_completed_fade_end_blackbox(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "normal", "sector": 9}
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", parse_question_pack(SAMPLE_PACK))
+    monkeypatch.setattr(main, "players_list", [])
+    monkeypatch.setattr(main, "_now_ms", lambda: 10_000)
+
+    async def no_wait(_duration):
+        return None
+
+    monkeypatch.setattr(main.asyncio, "sleep", no_wait)
+
+    async def run_flow():
+        await main.admin_start_blackbox("admin")
+        await main.admin_stop_sounds("admin")
+        assert state["presentation"]["blackbox"] is None
+
+        await main.admin_start_blackbox("admin")
+        assert main.global_settings["sound_control"]["mode"] == "normal"
+        response = await main.admin_fade_sounds("admin")
+        assert response == {"ok": True, "completed": True}
+
+    asyncio.run(run_flow())
+
+    assert state["presentation"]["blackbox"] is None
+    assert main.global_settings["sound_control"]["mode"] == "stopped"
+    assert sum(event == "stop_sound" for event, _data, _kwargs in fake_sio.events) == 2
 
 
 def test_end_round_at_six_broadcasts_final_state_and_sound(monkeypatch):

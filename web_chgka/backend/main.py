@@ -60,12 +60,15 @@ from state import (
 from transitions import (
     TransitionEffects,
     TransitionError,
+    clear_blackbox_presentation,
     transition_complete_spin,
     transition_advance_intro,
     transition_end_round,
     transition_reset,
+    transition_end_blackbox,
     transition_score,
     transition_start_discussion,
+    transition_start_blackbox,
     transition_start_game,
     transition_start_intro_music,
     transition_start_spin,
@@ -271,6 +274,19 @@ def _get_round_kind_and_part_index(round_ctx: dict) -> tuple[str, int]:
     return kind, part_index
 
 
+def _effective_blackbox(question, round_ctx: dict) -> bool:
+    """Return the pack-backed black-box flag for the active question/part."""
+    kind, part_index = _get_round_kind_and_part_index(round_ctx)
+    if kind in ("blitz", "superblitz"):
+        part = (
+            question.parts[part_index]
+            if 0 <= part_index < len(question.parts)
+            else None
+        )
+        return bool(question.blackbox or (part is not None and part.blackbox))
+    return bool(question.blackbox)
+
+
 def _cleanup_expired_media_tokens(now_ts: Optional[float] = None) -> None:
     now = now_ts if now_ts is not None else time.time()
     shared_media = app_state["presentation"].get("shared_media")
@@ -351,6 +367,13 @@ def _load_question_pack_on_startup() -> None:
         "path": str(pack.path),
         "question_titles": [q.title for q in pack.questions],
         "question_types": types,
+        "question_blackbox": [
+            {
+                "question": question.blackbox,
+                "parts": [part.blackbox for part in question.parts],
+            }
+            for question in pack.questions
+        ],
         "intro_html": pack.intro_html,
     }
     logger.info(f"Loaded question pack: {pack.path} ({len(types)} questions)")
@@ -384,6 +407,7 @@ async def _emit_current_question_to_admins() -> None:
         "sector": sector,
         "kind": kind,
         "phase": app_state["game"]["phase"],
+        "blackbox": _effective_blackbox(q, round_ctx),
     }
 
     if kind in ("blitz", "superblitz"):
@@ -1112,6 +1136,69 @@ async def admin_end_round(sid, data=None):
     await _apply_transition_effects(effects)
 
 
+@sio.event
+async def admin_start_blackbox(sid, data=None):
+    """Start the static black-box presentation for the active pack question."""
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+
+    current = _get_round_ctx_and_sector()
+    if current is None:
+        return {"ok": False, "error": "no_round"}
+    round_ctx, sector = current
+    try:
+        question = loaded_pack.get_by_sector(sector)
+        effects = transition_start_blackbox(
+            app_state,
+            enabled=_effective_blackbox(question, round_ctx),
+            now_ms=_now_ms(),
+        )
+    except TransitionError as error:
+        await _emit_transition_error(sid, error)
+        return {"ok": False, "error": error.code, "message": error.message}
+
+    await _apply_transition_effects(effects)
+    return {"ok": True}
+
+
+@sio.event
+async def admin_stop_blackbox(sid, data=None):
+    """Stop only the active black-box presentation."""
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+    payload = data if isinstance(data, dict) else {}
+    try:
+        effects = transition_end_blackbox(
+            app_state,
+            expected_generation=payload.get("playback_generation"),
+        )
+    except TransitionError as error:
+        await _emit_transition_error(sid, error)
+        return {"ok": False, "error": error.code, "message": error.message}
+
+    await _apply_transition_effects(effects)
+    return {"ok": True}
+
+
+@sio.event
+async def admin_blackbox_ended(sid, data=None):
+    """Accept natural music completion only from the current host generation."""
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+    payload = data if isinstance(data, dict) else {}
+    try:
+        effects = transition_end_blackbox(
+            app_state,
+            expected_generation=payload.get("playback_generation"),
+            natural=True,
+        )
+    except TransitionError as error:
+        return {"ok": False, "error": error.code}
+
+    await _apply_transition_effects(effects)
+    return {"ok": True}
+
+
 def _store_current_media_token(media) -> tuple[str, dict]:
     media_id = secrets.token_urlsafe(16)
     info = create_media_token_info(
@@ -1178,6 +1265,8 @@ async def admin_share_media(sid, data):
         return {"ok": False, "error": f"bad_phase:{phase}"}
     if app_state["wheel"]["is_spinning"]:
         return {"ok": False, "error": "spinning"}
+    if app_state["presentation"].get("blackbox") is not None:
+        return {"ok": False, "error": "blackbox_active"}
     if not app_state["game"]["round"]:
         return {"ok": False, "error": "no_round"}
 
@@ -1226,6 +1315,8 @@ async def admin_share_next_media(sid, data=None):
         return {"ok": False, "error": f"bad_phase:{phase}"}
     if app_state["wheel"]["is_spinning"]:
         return {"ok": False, "error": "spinning"}
+    if app_state["presentation"].get("blackbox") is not None:
+        return {"ok": False, "error": "blackbox_active"}
 
     shared_media = app_state["presentation"].get("shared_media")
     expected_media_id = data.get("expected_media_id")
@@ -1469,12 +1560,13 @@ async def admin_stop_sounds(sid):
         )
     except MediaPlaybackError:
         pass
+    blackbox_stopped = clear_blackbox_presentation(app_state)
 
     _supersede_sound_fade(mode="stopped")
     add_log("Звук остановлен")
     await emit_settings_update()
     await sio.emit('stop_sound')
-    if media_stopped:
+    if media_stopped or blackbox_stopped:
         await emit_state_update()
 
 
@@ -1508,10 +1600,11 @@ async def admin_fade_sounds(sid, data=None):
         )
     except MediaPlaybackError:
         pass
+    blackbox_stopped = clear_blackbox_presentation(app_state)
 
     await sio.emit("stop_sound")
     await emit_settings_update()
-    if media_stopped:
+    if media_stopped or blackbox_stopped:
         await emit_state_update()
     return {"ok": True, "completed": True}
 

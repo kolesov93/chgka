@@ -4,6 +4,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { WaitingRoom } from './components/WaitingRoom';
 import { AdminControls } from './components/AdminControls';
 import { AdminQuestionPanel } from './components/AdminQuestionPanel';
+import { BlackboxAudio, BlackboxScreen } from './components/BlackboxPresentation';
 import { FinalScreen } from './components/FinalScreen';
 import { IntroScreen } from './components/IntroScreen';
 import { NotificationsPanel } from './components/NotificationsPanel';
@@ -53,6 +54,7 @@ function App() {
   const round = gameState?.round || null;
   const showTableForAdmin = isPreRound || !!gameState?.is_spinning;
   const sharedMedia = gameState?.shared_media || null;
+  const blackbox = gameState?.blackbox || null;
   const questionPanelKey = `${round?.sector ?? ''}:${round?.kind ?? ''}:${round?.part_index ?? ''}`;
 
   const { discussionRemaining, markTenSecondsNotified } = useDiscussionTimer({
@@ -132,6 +134,18 @@ function App() {
 
         {!isIntro && <ScoreBoard score={gameState?.score} />}
 
+        {blackbox && (
+          <div className="w-full">
+            <BlackboxAudio
+              blackbox={blackbox}
+              volume={effectiveMediaVolume}
+              onEnded={isAdmin
+                ? (payload) => socket.emit('admin_blackbox_ended', payload)
+                : null}
+            />
+          </div>
+        )}
+
         {isIntro ? (
           <div className="mb-4 flex w-full justify-center">
             <IntroScreen
@@ -152,10 +166,15 @@ function App() {
                 adminQuestion={adminQuestion}
                 phase={phase}
                 sharedMedia={sharedMedia}
+                blackbox={blackbox}
                 volume={effectiveMediaVolume}
                 addNotification={addNotification}
               />
             </div>
+          </div>
+        ) : blackbox ? (
+          <div className="w-full flex justify-center mb-4">
+            <BlackboxScreen />
           </div>
         ) : (
           <div className="w-full flex justify-center mb-4">

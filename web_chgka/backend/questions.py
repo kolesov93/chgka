@@ -59,6 +59,7 @@ class Question:
     author: Optional[str] = None
     city: Optional[str] = None
     author_photo: Optional[Path] = None
+    blackbox: bool = False
     comment_html: Optional[str] = None
     sources_html: Optional[str] = None
     
@@ -337,6 +338,18 @@ def _parse_author_photo(raw_path: Optional[str], folder: Path) -> Optional[Path]
     return photo_path
 
 
+def _parse_optional_bool(fm: dict[str, str], field_name: str) -> bool:
+    raw_value = fm.get(field_name)
+    if raw_value is None:
+        return False
+    value = raw_value.strip().lower()
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    raise QuestionParseError(f"{field_name} must be true or false")
+
+
 def _parse_one_question_folder(folder: Path) -> Question:
     qmd = folder / "question.md"
     if not qmd.exists():
@@ -358,6 +371,7 @@ def _parse_one_question_folder(folder: Path) -> Question:
     author = fm.get("author") or None
     city = fm.get("city") or None
     author_photo = _parse_author_photo(fm.get("author_photo"), folder)
+    blackbox = _parse_optional_bool(fm, "blackbox")
 
     sections, order = _split_sections(body)
     _validate_section_order(order)
@@ -405,6 +419,7 @@ def _parse_one_question_folder(folder: Path) -> Question:
         author=author,
         city=city,
         author_photo=author_photo,
+        blackbox=blackbox,
         comment_html=comment_html,
         sources_html=sources_html,
         media=_validate_media_reference_types(media_all),
