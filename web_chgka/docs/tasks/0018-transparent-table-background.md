@@ -1,7 +1,7 @@
 # 0018: Прозрачный фон игрового стола
 
 Branch: `task/transparent-table-background`
-Status: In progress
+Status: Implemented; awaiting browser acceptance
 
 ## Goal
 
@@ -18,8 +18,17 @@ Status: In progress
 
 - Перерисовка стола, стрелок, сектора 13, конвертов или волчка; изменение layout/анимации; оптимизация остальных изображений.
 
-## Verification plan
+## Implementation
 
-- Проверить формат, alpha channel, размеры, прозрачные углы и границы непустого содержимого обоих PNG.
-- Сравнить варианты до/после и убедиться, что различия внутри стола остались исходными.
-- Запустить frontend tests/build и визуально проверить оба состояния на player/admin фонах.
+- Built-in image edit был проверен и отброшен, потому что менял геометрию исходника; генеративные пиксели в итоговые assets не попали.
+- Белый фон преобразован в мягкий alpha matte штатным `imagegen` helper; защищённая внутренняя окружность затем побитово восстановлена из оригинала.
+- Оба runtime-файла заменены на RGBA PNG под прежними путями; frontend-код не менялся.
+
+## Local verification
+
+- Оба PNG: 2000×2000 RGBA, corner alpha `0`, center alpha `1`, non-empty alpha bounds `1940×1940+30+30`.
+- Максимальная RGB/alpha-разница внутри защищённой окружности для обоих вариантов равна нулю.
+- Композитные preview на `#0f172a` player и `#1e1b4b` host backgrounds не показывают белого ореола.
+- `npm test`: 9 test files passed.
+- `npm run build`: passed.
+- Остался browser smoke обоих runtime-состояний на player/admin экранах.

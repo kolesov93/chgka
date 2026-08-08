@@ -4,12 +4,14 @@
 - Latest completed task: `docs/tasks/0017-separate-login-entrypoints.md`
 - Active task: `docs/tasks/0018-transparent-table-background.md`
 - Branch: `task/transparent-table-background`
-- Status: table-background extraction is planned from synchronized `web` at `68edc87`; asset processing and verification are in progress.
+- Status: both transparent table assets are implemented and locally verified from synchronized `web` at `68edc87`; focused browser acceptance is pending.
 
 ## Repository checkpoint
 
 - `web` and `origin/web` are synchronized at `68edc87` before task 0018.
 - Task 0018 preserves both 2000×2000 table canvases and runtime paths, replacing only the white exterior with a clean alpha edge.
+- The final assets contain no generated pixels: an image-model draft was rejected for geometry drift, then the installed alpha helper plus an original-pixel protection mask produced the accepted candidates.
+- Task 0018 local verification: both RGBA assets have transparent corners and identical `1940×1940+30+30` content bounds, protected interiors have zero pixel difference, dark-background previews are clean, and frontend tests/build pass.
 - Roadmap item 16 records full user-facing UI localization as a separate future task; internal event/API/code identifiers remain out of scope for translation.
 
 - `web` and `origin/web` are synchronized at `7db38dc` before task 0017.
@@ -355,9 +357,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish local `web` with merge `ff341d6` plus this handoff and confirm the Web CI run.
-2. After green remote verification, remove the merged local task branch; no remote task branch was created.
-3. Choose the next roadmap item; played-question history still needs a product decision, while personal questions and transparent table assets are already bounded implementation candidates.
+1. Run focused browser acceptance for both table variants on player and host screens.
+2. If accepted, close task 0018, merge it locally into `web`, publish `web`, and confirm the Web CI run.
+3. Choose the next roadmap item; played-question history needs a product decision, while personal questions and full UI localization are bounded candidates.
 
 ## Resume checklist
 
