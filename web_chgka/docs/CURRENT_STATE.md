@@ -2,11 +2,15 @@
 
 - Snapshot date: 2026-08-08
 - Latest completed task: `docs/tasks/0017-separate-login-entrypoints.md`
-- Active task: none
-- Branch: `web`
-- Status: separate player/admin entrypoints are accepted and merged locally; publishing `web` and remote CI are pending. No remote task branch was created.
+- Active task: `docs/tasks/0018-transparent-table-background.md`
+- Branch: `task/transparent-table-background`
+- Status: table-background extraction is planned from synchronized `web` at `68edc87`; asset processing and verification are in progress.
 
 ## Repository checkpoint
+
+- `web` and `origin/web` are synchronized at `68edc87` before task 0018.
+- Task 0018 preserves both 2000×2000 table canvases and runtime paths, replacing only the white exterior with a clean alpha edge.
+- Roadmap item 16 records full user-facing UI localization as a separate future task; internal event/API/code identifiers remain out of scope for translation.
 
 - `web` and `origin/web` are synchronized at `7db38dc` before task 0017.
 - Login-entrypoint decisions: `/play` is player-only, `/admin` is host-only, every host screen uses a distinct indigo page background, `/` defaults to `/play`, route-scoped restore ignores the other role's stored token, forms have no redundant visible labels, user-facing copy says «ведущий», and backend authorization remains unchanged.
