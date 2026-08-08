@@ -3,8 +3,8 @@
 - Snapshot date: 2026-08-08
 - Latest completed task: `docs/tasks/0016-blackbox.md`
 - Active task: none
-- Branch: `task/blackbox` (ready for local merge into `web`)
-- Status: black-box implementation, local verification, and browser acceptance are complete; local integration is in progress and no remote task branch will be published.
+- Branch: `web`
+- Status: black-box implementation is accepted and merged locally; publishing `web` and remote CI are pending. No remote task branch was created.
 
 ## Repository checkpoint
 
@@ -13,6 +13,8 @@
 - The next task is now roadmap item 12: separate `/admin` password-only and `/play` player-name entrypoints, with `/` leading to the player route; route separation is UX isolation and does not replace backend authorization.
 - The implementation working tree adds strict pack metadata, admin-only effective flags, a reconnect-aware generation-guarded presentation timeline, host Start/Stop, natural-end reporting, global Silence/Fade integration, the static transparent PNG, and sample sector 09 coverage.
 - Black-box implementation commits: `dff34b5` (`Implement black box presentation`) and `f5a86dd` (`Add black box countdown`).
+- Black-box closure commit: `f4699c8` (`Close black box task`).
+- Black-box merge commit: `722065a` (`Merge black box task`).
 - Full local verification passes: 189 backend tests with warnings as errors, 36 frontend assertions across 8 test files, production build, and sample-pack CLI validation. Native Compose validation remains blocked by the installed `snap-confine` capability failure.
 
 - `web` and `origin/web` were synchronized at `2e48860` before the next task was prepared.
@@ -342,9 +344,9 @@ Within `web_chgka`, ignored `frontend/node_modules`, `frontend/dist`, and Python
 
 ## Recommended continuation
 
-1. Publish local `web` with merge `dd8b229` and confirm the Web CI run.
-2. After green remote verification, remove the merged local/remote `task/auth-security` branch.
-3. Take roadmap item 6, persistence/recovery, as the next mandatory public-deployment gate.
+1. Publish local `web` with merge `722065a` plus this handoff and confirm the Web CI run.
+2. After green remote verification, remove the merged local `task/blackbox` branch; there is no remote task branch to clean up.
+3. Take roadmap item 12, separate `/admin` and `/play` entrypoints, as the next task.
 
 ## Resume checklist
 
