@@ -1,7 +1,7 @@
 # 0020: Журнал игр и история сыгранных вопросов
 
 Branch: `task/game-event-journal`
-Status: In progress
+Status: Ready for browser acceptance
 
 ## Goal
 
@@ -24,6 +24,17 @@ Status: In progress
 - Принятое действие журналируется до Socket.IO broadcasts. Ошибка durable write не должна молча выглядеть для клиентов как успешно завершённое действие.
 - `AppState`, игроки и токены по-прежнему не восстанавливаются после рестарта; task сохраняет историю, а не live runtime snapshot.
 
+## Implemented
+
+- `Question.id` обязателен для родителя и каждой части; parser проверяет UUID и pack-wide uniqueness. Sample/valid/invalid fixtures мигрированы, а `python -m assign_question_ids` добавляет только отсутствующие ID после полной предварительной проверки старого пака.
+- `GameJournal` создаёт versioned SQLite schema для сессий и упорядоченных событий. Lobby/active/completed/reset/interrupted, итоговый счёт, pack identity и immediate commits покрыты repository-тестами.
+- Все прежние строки live-лога теперь рождаются из typed transition events либо записываются как typed handler events. In-memory `logs` остаётся совместимой 50-строчной проекцией.
+- `question_opened` обогащается на backend постоянным ID, parent ID, сектором, индексом части, названием и автором. Обычное вращение, Live Ops open и переход к следующей части блица являются авторитетными точками записи; reconnect — нет.
+- Ведущий на waiting screen и в обычной панели видит режим текущей игры, список сессий, regular-only сводку вопросов, точные части блица и полный хронологический лог. Режим текущей и прошлой сессии можно исправить.
+- Development Compose хранит базу в gitignored `./runtime-data/chgka.sqlite3`; production config требует абсолютный durable `CHGKA_DB_PATH`.
+
+Каждая новая development-сессия снова получает безопасный default `debug`, даже если предыдущую игру ведущий пометил regular. В production новый default — `regular`.
+
 ## Out of scope
 
 - Restart recovery/undo всего `AppState`, удаление истории, награды, participant roster, экспорт в сторонние системы и production deployment.
@@ -35,3 +46,12 @@ Status: In progress
 - Handler tests для exact part-level `question_opened`, reset/completion boundaries, authorization and history responses.
 - Frontend pure tests для history formatting plus production build.
 - Full backend/frontend suites, pack validator, Compose validation and focused host smoke.
+
+## Verification
+
+- `python3 -W error -m pytest -q`: 204 passed.
+- `npm test`: 11 test files passed.
+- `npm run build`: passed.
+- `python3 -m validate_pack ../fixtures/sample_questions`: passed, 13 sectors / 19 authored question units / 6 blitz parts.
+- Compose YAML and the `/data` journal mount were parsed and asserted independently. Native `docker compose config --quiet` is blocked before reading the project by the installed Snap `snap-confine` capability error (`cap_dac_override`), the same environment defect recorded for earlier tasks.
+- Focused two-browser host/player smoke: pending.

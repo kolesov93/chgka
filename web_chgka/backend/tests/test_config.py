@@ -8,12 +8,16 @@ def _environment(**overrides):
         "CHGKA_ENV": "development",
         "ADMIN_PASSWORD": "admin123",
         "ALLOWED_ORIGINS": "http://localhost:5173",
+        "CHGKA_DB_PATH": ":memory:",
     }
     values.update(overrides)
     return values
 
 
-@pytest.mark.parametrize("missing", ["CHGKA_ENV", "ADMIN_PASSWORD", "ALLOWED_ORIGINS"])
+@pytest.mark.parametrize(
+    "missing",
+    ["CHGKA_ENV", "ADMIN_PASSWORD", "ALLOWED_ORIGINS", "CHGKA_DB_PATH"],
+)
 def test_required_security_environment_is_explicit(missing):
     environment = _environment()
     environment.pop(missing)
@@ -45,6 +49,7 @@ def test_origins_are_normalized_deduplicated_and_https_in_production():
             CHGKA_ENV="production",
             ADMIN_PASSWORD="a-long-production-password",
             ALLOWED_ORIGINS=" https://GAME.example.com/,https://game.example.com ",
+            CHGKA_DB_PATH="/data/chgka.sqlite3",
         )
     )
 
@@ -86,3 +91,17 @@ def test_development_defaults_to_twelve_hour_admin_token():
 
     assert config.is_development is True
     assert config.admin_token_ttl_seconds == 43_200
+    assert config.database_path == ":memory:"
+
+
+@pytest.mark.parametrize("database_path", [":memory:", "relative.sqlite3"])
+def test_production_requires_absolute_durable_database_path(database_path):
+    with pytest.raises(ConfigError, match="CHGKA_DB_PATH"):
+        load_app_config(
+            _environment(
+                CHGKA_ENV="production",
+                ADMIN_PASSWORD="a-long-production-password",
+                ALLOWED_ORIGINS="https://game.example.com",
+                CHGKA_DB_PATH=database_path,
+            )
+        )

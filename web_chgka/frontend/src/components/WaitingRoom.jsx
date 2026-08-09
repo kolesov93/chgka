@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { GameHistoryPanel } from './GameHistoryPanel';
 
-export function WaitingRoom({ socket, gameState, players = [] }) {
+export function WaitingRoom({ socket, gameState, players = [], addNotification }) {
   const [isStarting, setIsStarting] = useState(false);
 
   const handleStartGame = () => {
@@ -66,6 +67,14 @@ export function WaitingRoom({ socket, gameState, players = [] }) {
               ))}
             </div>
           )}
+        </div>
+
+        <div className="mb-6">
+          <GameHistoryPanel
+            socket={socket}
+            addNotification={addNotification}
+            initiallyOpen
+          />
         </div>
 
         {/* Кнопка "Начать" */}

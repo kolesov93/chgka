@@ -1,4 +1,5 @@
 import { GameLog } from './GameLog';
+import { GameHistoryPanel } from './GameHistoryPanel';
 import { LiveOpsPanel } from './LiveOpsPanel';
 import { socket } from '../socket';
 
@@ -324,6 +325,10 @@ export function AdminControls({
               ))
             )}
           </div>
+        </div>
+
+        <div className="pt-2 border-t border-slate-700">
+          <GameHistoryPanel socket={socket} addNotification={addNotification} />
         </div>
 
         <div className="pt-2 border-t border-slate-700">

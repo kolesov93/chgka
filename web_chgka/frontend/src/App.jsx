@@ -100,7 +100,12 @@ function App({ entrypoint }) {
         <>
           {notificationsPanel}
           {userHeader}
-          <WaitingRoom socket={socket} gameState={gameState} players={players} />
+          <WaitingRoom
+            socket={socket}
+            gameState={gameState}
+            players={players}
+            addNotification={addNotification}
+          />
         </>
       );
     }

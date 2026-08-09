@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+from game_events import game_event
 from state import (
     AppState,
     GamePhase,
@@ -117,9 +118,14 @@ def live_ops_set_score(
     new_score = {"znatoki": new_znatoki, "tv": new_tv}
     state["game"]["score"] = new_score
     return TransitionEffects(
-        logs=(
-            "Восстановление: счёт "
-            f"{old_score['znatoki']}:{old_score['tv']} → {new_znatoki}:{new_tv}",
+        events=(
+            game_event(
+                "live_score_changed",
+                "Восстановление: счёт "
+                f"{old_score['znatoki']}:{old_score['tv']} → {new_znatoki}:{new_tv}",
+                previous_score=old_score,
+                score=new_score,
+            ),
         ),
     )
 
@@ -153,9 +159,15 @@ def live_ops_set_sector_used(
         ]
 
     return TransitionEffects(
-        logs=(
-            f"Восстановление: сектор {sector_id} — "
-            f"{played_label(was_used)} → {played_label(used)}",
+        events=(
+            game_event(
+                "live_sector_usage_changed",
+                f"Восстановление: сектор {sector_id} — "
+                f"{played_label(was_used)} → {played_label(used)}",
+                sector=sector_id,
+                previous_used=was_used,
+                used=used,
+            ),
         ),
     )
 
@@ -215,9 +227,16 @@ def live_ops_open_round(
         state["game"]["used_questions"].append(sector_id)
 
     return TransitionEffects(
-        logs=(
-            f"Восстановление: открыт сектор {sector_id} "
-            f"({question_kind_label(kind)}{part_label})",
+        events=(
+            game_event(
+                "question_opened",
+                f"Восстановление: открыт сектор {sector_id} "
+                f"({question_kind_label(kind)}{part_label})",
+                sector=sector_id,
+                kind=kind,
+                part_index=normalized_part if kind in ("blitz", "superblitz") else None,
+                live_ops=True,
+            ),
         ),
         clear_media_tokens=True,
         refresh_admin_question=True,
@@ -249,9 +268,14 @@ def live_ops_force_phase(
         state["presentation"]["shared_media"] = None
         state["game"]["phase"] = new_phase
         return TransitionEffects(
-            logs=(
-                f"Восстановление: фаза «{phase_label(old_phase)}» "
-                f"→ «{phase_label(new_phase)}»",
+            events=(
+                game_event(
+                    "live_phase_changed",
+                    f"Восстановление: фаза «{phase_label(old_phase)}» "
+                    f"→ «{phase_label(new_phase)}»",
+                    previous_phase=old_phase,
+                    phase=new_phase,
+                ),
             ),
             clear_media_tokens=True,
             clear_admin_question=True,
@@ -284,9 +308,14 @@ def live_ops_force_phase(
         state["timer"]["discussion_deadline_ms"] = None
 
     return TransitionEffects(
-        logs=(
-            f"Восстановление: фаза «{phase_label(old_phase)}» "
-            f"→ «{phase_label(new_phase)}»",
+        events=(
+            game_event(
+                "live_phase_changed",
+                f"Восстановление: фаза «{phase_label(old_phase)}» "
+                f"→ «{phase_label(new_phase)}»",
+                previous_phase=old_phase,
+                phase=new_phase,
+            ),
         ),
         clear_media_tokens=clear_media,
         refresh_admin_question=clear_media,
@@ -307,10 +336,17 @@ def live_ops_reset_to_intro(
         "duration_ms": INTRO_DURATION_MS,
     }
     return TransitionEffects(
-        logs=(
-            "Восстановление: полный сброс "
-            f"из фазы «{phase_label(old_phase)}» при счёте "
-            f"{old_score['znatoki']}:{old_score['tv']} → «{phase_label(PHASE_INTRO)}»",
+        events=(
+            game_event(
+                "game_reset",
+                "Восстановление: полный сброс "
+                f"из фазы «{phase_label(old_phase)}» при счёте "
+                f"{old_score['znatoki']}:{old_score['tv']} → «{phase_label(PHASE_INTRO)}»",
+                previous_phase=old_phase,
+                score=old_score,
+                target_phase=PHASE_INTRO,
+                live_ops=True,
+            ),
         ),
         clear_media_tokens=True,
         clear_admin_question=True,
@@ -330,9 +366,14 @@ def live_ops_cancel_spin(state: AppState) -> TransitionEffects:
     state["presentation"]["shared_media"] = None
     clear_blackbox_presentation(state)
     return TransitionEffects(
-        logs=(
-            f"Восстановление: вращение {old_spin_id} отменено, "
-            f"фаза → «{phase_label(PHASE_PRE_ROUND)}»",
+        events=(
+            game_event(
+                "live_spin_cancelled",
+                f"Восстановление: вращение {old_spin_id} отменено, "
+                f"фаза → «{phase_label(PHASE_PRE_ROUND)}»",
+                spin_id=old_spin_id,
+                phase=PHASE_PRE_ROUND,
+            ),
         ),
         clear_media_tokens=True,
         clear_admin_question=True,
@@ -376,8 +417,13 @@ def live_ops_set_timer(
         deadline_ms = now_ms + new_seconds * 1000
     state["timer"]["discussion_deadline_ms"] = deadline_ms
     return TransitionEffects(
-        logs=(
-            f"Восстановление: таймер {timer_label(old_seconds)} "
-            f"→ {timer_label(new_seconds)}",
+        events=(
+            game_event(
+                "live_timer_changed",
+                f"Восстановление: таймер {timer_label(old_seconds)} "
+                f"→ {timer_label(new_seconds)}",
+                previous_seconds=old_seconds,
+                seconds=new_seconds,
+            ),
         ),
     )

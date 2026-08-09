@@ -7,6 +7,7 @@ import pytest
 
 import main
 from auth import AdminTokenStore
+from game_journal import MODE_DEBUG, MODE_REGULAR, STATUS_COMPLETED, GameJournal
 from questions import parse_question_pack
 from sound_control import begin_fade, create_sound_control_state
 from state import (
@@ -77,6 +78,68 @@ def _isolated_global_settings(monkeypatch):
         "global_settings",
         {"volume": 1.0, "sound_control": create_sound_control_state()},
     )
+    journal = GameJournal(":memory:", default_mode=MODE_DEBUG)
+    journal.initialize()
+    sample_pack = parse_question_pack(SAMPLE_PACK)
+    journal.configure_pack(
+        fingerprint=sample_pack.fingerprint,
+        name="sample_questions",
+        path=SAMPLE_PACK,
+    )
+    monkeypatch.setattr(main, "game_journal", journal)
+    yield
+    journal.close()
+
+
+def test_blitz_open_events_use_each_part_id(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    pack = parse_question_pack(SAMPLE_PACK)
+    state = create_initial_app_state(
+        phase=PHASE_PRE_ROUND,
+        question_types=[question.type.value for question in pack.questions],
+    )
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", pack)
+    monkeypatch.setattr(main, "players_list", [])
+
+    async def run():
+        started = main.transition_start_spin(
+            state,
+            raw_angle=10.0,
+            raw_sector=4,
+            duration=1.0,
+            forced=True,
+        )
+        await main._apply_transition_effects(started)
+        await main._apply_transition_effects(
+            main.transition_complete_spin(state, spin_id=started.spin_id)
+        )
+        await main._apply_transition_effects(
+            main.transition_start_discussion(state, deadline_ms=100_000)
+        )
+        await main._apply_transition_effects(main.transition_team_answer(state))
+        await main._apply_transition_effects(
+            main.transition_score(
+                state,
+                winner="znatoki",
+                correct_sound="yes1",
+                incorrect_sound="no1",
+            )
+        )
+        await main._apply_transition_effects(
+            main.transition_end_round(state, gong_sound="gong1")
+        )
+
+    asyncio.run(run())
+
+    session_id = main.game_journal.list_sessions()[0]["id"]
+    opened = main.game_journal.get_session(session_id)["opened_questions"]
+    assert [item["question_id"] for item in opened] == [
+        pack.get_by_sector(4).parts[0].id,
+        pack.get_by_sector(4).parts[1].id,
+    ]
+    assert [item["part_index"] for item in opened] == [0, 1]
 
 
 def test_public_status_message_is_russian():
@@ -475,6 +538,9 @@ def test_end_round_at_six_broadcasts_final_state_and_sound(monkeypatch):
         event == "admin_question" and data is None
         for event, data, _kwargs in fake_sio.events
     )
+    persisted = main.game_journal.list_sessions()[0]
+    assert persisted["status"] == STATUS_COMPLETED
+    assert persisted["score"] == {"znatoki": 6, "tv": 4}
 
 
 def test_reset_during_spin_keeps_reset_state(monkeypatch):
@@ -1058,6 +1124,98 @@ def test_live_ops_open_round_force_phase_timer_and_clear_question(monkeypatch):
     assert any(event == "stop_sound" for event, _, _ in fake_sio.events)
     assert state["game"]["phase"] == PHASE_PRE_ROUND
     assert state["game"]["round"] is None
+    session_id = main.game_journal.list_sessions()[0]["id"]
+    opened = main.game_journal.get_session(session_id)["opened_questions"]
+    assert opened == [
+        {
+            "author": pack.get_by_sector(3).author,
+            "city": pack.get_by_sector(3).city,
+            "kind": "normal",
+            "live_ops": True,
+            "pack_fingerprint": pack.fingerprint,
+            "parent_question_id": pack.get_by_sector(3).id,
+            "part_index": None,
+            "question_id": pack.get_by_sector(3).id,
+            "sector": 3,
+            "title": pack.get_by_sector(3).title,
+            "opened_at": opened[0]["opened_at"],
+            "open_count": 1,
+            "last_opened_at": opened[0]["last_opened_at"],
+        }
+    ]
+
+
+def test_resending_current_question_does_not_journal_another_open(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    pack = parse_question_pack(SAMPLE_PACK)
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "blitz", "sector": 4, "part_index": 1}
+    state["pack"]["question_types"] = [q.type.value for q in pack.questions]
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", pack)
+    monkeypatch.setattr(
+        main,
+        "players_list",
+        [_authorized_admin(monkeypatch, fake_sio)],
+    )
+    main.game_journal.mark_started()
+    main.game_journal.record_event(
+        "question_opened",
+        "Открыта часть блица",
+        {
+            "question_id": pack.get_by_sector(4).parts[1].id,
+            "title": pack.get_by_sector(4).parts[1].title,
+            "sector": 4,
+            "part_index": 1,
+        },
+    )
+    session_id = main.game_journal.list_sessions()[0]["id"]
+
+    asyncio.run(main._emit_current_question_to_admins())
+
+    detail = main.game_journal.get_session(session_id)
+    assert len(detail["events"]) == 1
+    assert detail["opened_questions"][0]["question_id"] == pack.get_by_sector(4).parts[1].id
+
+
+def test_game_history_handlers_are_admin_only_and_can_reclassify(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    main.game_journal.record_event("player_joined", "Игрок присоединился", {})
+    session_id = main.game_journal.list_sessions()[0]["id"]
+
+    async def run():
+        history = await main.admin_get_game_history("admin")
+        assert history["ok"] is True
+        assert history["history"]["current_mode"] == MODE_DEBUG
+
+        changed = await main.admin_set_game_session_mode(
+            "admin",
+            {"session_id": session_id, "mode": MODE_REGULAR},
+        )
+        assert changed["ok"] is True
+        assert changed["history"]["sessions"][0]["mode"] == MODE_REGULAR
+
+        detail = await main.admin_get_game_session(
+            "admin",
+            {"session_id": session_id},
+        )
+        assert detail["ok"] is True
+        assert detail["detail"]["events"][0]["event_type"] == "player_joined"
+
+        invalid = await main.admin_set_current_game_mode(
+            "admin",
+            {"mode": "production"},
+        )
+        assert invalid["ok"] is False
+
+        monkeypatch.setattr(main, "require_admin", _deny_admin)
+        denied = await main.admin_get_game_history("player")
+        assert denied == {"ok": False, "error": "not_admin"}
+
+    asyncio.run(run())
 
 
 def test_live_ops_reset_to_intro_stops_audio_and_waits_for_manual_music(monkeypatch):

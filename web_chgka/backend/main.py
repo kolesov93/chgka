@@ -7,7 +7,7 @@ import secrets
 import os
 import time
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Mapping, Optional
 from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi import FastAPI
@@ -17,6 +17,13 @@ from fastapi.responses import FileResponse
 
 from auth import AdminTokenStore
 from config import load_app_config
+from game_events import GameEvent
+from game_journal import (
+    MODE_DEBUG,
+    MODE_REGULAR,
+    GameJournal,
+    JournalError,
+)
 from live_ops import (
     live_ops_cancel_spin,
     live_ops_force_phase,
@@ -83,6 +90,10 @@ logger = logging.getLogger(__name__)
 
 APP_CONFIG = load_app_config()
 DEBUG = APP_CONFIG.is_development
+game_journal = GameJournal(
+    APP_CONFIG.database_path,
+    default_mode=MODE_DEBUG if DEBUG else MODE_REGULAR,
+)
 MIN_SPIN_DURATION = 5.0 if DEBUG else 10.0
 MAX_SPIN_DURATION = 10.0 if DEBUG else 20.0
 SECTORS_COUNT = 13
@@ -103,9 +114,16 @@ sio = socketio.AsyncServer(
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    game_journal.initialize()
+    recovered = game_journal.recover_interrupted_sessions()
+    if recovered:
+        logger.info("Marked %s unfinished game session(s) as interrupted", recovered)
     # Load question pack once when the app starts.
     _load_question_pack_on_startup()
-    yield
+    try:
+        yield
+    finally:
+        game_journal.close()
 
 
 fastapi_app = FastAPI(lifespan=lifespan)
@@ -364,6 +382,11 @@ def _load_question_pack_on_startup() -> None:
         for sector, question in enumerate(pack.questions[:12], start=1)
     ]
     loaded_pack = pack
+    game_journal.configure_pack(
+        fingerprint=pack.fingerprint,
+        name=pack.path.name,
+        path=pack.path,
+    )
     pack_admin_info = {
         "path": str(pack.path),
         "question_titles": [q.title for q in pack.questions],
@@ -461,7 +484,55 @@ async def _clear_admin_question_for_admins() -> None:
             await sio.emit("admin_question", None, to=player["sid"])
 
 
-def add_log(message):
+def _journal_payload(event: GameEvent) -> dict[str, object]:
+    """Enrich authoritative question-open events with immutable pack metadata."""
+    payload = dict(event.payload)
+    if event.event_type != "question_opened":
+        return payload
+    if loaded_pack is None:
+        raise JournalError("Question pack is unavailable for question-open event")
+
+    sector = payload.get("sector")
+    if not isinstance(sector, int) or isinstance(sector, bool) or not 1 <= sector <= 13:
+        raise JournalError("Question-open event has an invalid sector")
+    parent = loaded_pack.get_by_sector(sector)
+    kind = payload.get("kind", parent.type.value)
+    part_index = payload.get("part_index")
+    if kind in ("blitz", "superblitz"):
+        if (
+            not isinstance(part_index, int)
+            or isinstance(part_index, bool)
+            or not 0 <= part_index < len(parent.parts)
+        ):
+            raise JournalError("Question-open event has an invalid blitz part")
+        question = parent.parts[part_index]
+    else:
+        question = parent
+        part_index = None
+
+    payload.update(
+        {
+            "pack_fingerprint": loaded_pack.fingerprint,
+            "parent_question_id": parent.id,
+            "question_id": question.id,
+            "title": question.title,
+            "author": question.author,
+            "city": question.city,
+            "sector": sector,
+            "kind": kind,
+            "part_index": part_index,
+        }
+    )
+    return payload
+
+
+def add_log(
+    message: str,
+    *,
+    event_type: str = "admin_note",
+    payload: Optional[Mapping[str, object]] = None,
+):
+    game_journal.record_event(event_type, message, payload)
     time_str = datetime.now().strftime("%H:%M:%S")
     log_entry = f"[{time_str}] {message}"
     app_state["logs"].insert(0, log_entry) # Новые сверху
@@ -492,8 +563,18 @@ async def _apply_transition_effects(effects: TransitionEffects) -> None:
     """Deliver side effects after a transition has atomically mutated state."""
     if effects.clear_media_tokens:
         _clear_all_media_tokens()
-    for message in effects.logs:
-        add_log(message)
+    if any(
+        event.event_type in ("game_started", "spin_started", "question_opened")
+        for event in effects.events
+    ):
+        game_journal.mark_started()
+    for event in effects.events:
+        payload = _journal_payload(event)
+        add_log(event.message, event_type=event.event_type, payload=payload)
+        if event.event_type == "game_completed":
+            game_journal.complete_current(payload.get("score", {}))
+        elif event.event_type == "game_reset":
+            game_journal.rotate_after_reset(payload.get("score", {}))
     if effects.stop_sounds:
         _supersede_sound_fade(mode="stopped")
         await emit_settings_update()
@@ -769,7 +850,7 @@ async def authenticate_admin(sid, data):
         admin_record = next((p for p in players_list if p['role'] == 'admin'), None)
         if not admin_record:
             players_list.append({'sid': sid, 'name': ADMIN_NAME, 'role': 'admin', 'token': token, 'online': True})
-            add_log("Ведущий присоединился")
+            add_log("Ведущий присоединился", event_type="host_joined")
         else:
              admin_record['sid'] = sid
              admin_record['token'] = token
@@ -836,14 +917,22 @@ async def join_game(sid, data):
     })
     
     if needs_approval:
-        add_log(f"{player_name} ожидает одобрения")
+        add_log(
+            f"{player_name} ожидает одобрения",
+            event_type="player_waiting",
+            payload={"name": player_name},
+        )
         await broadcast_players()
         # Уведомляем админа о новом игроке
         await notify_admin('player_waiting', {'name': player_name})
         # Игроку сообщаем, что он ждёт одобрения
         await sio.emit('join_pending', {'token': player_token, 'name': player_name}, to=sid)
     else:
-        add_log(f"{player_name} присоединился к игре")
+        add_log(
+            f"{player_name} присоединился к игре",
+            event_type="player_joined",
+            payload={"name": player_name},
+        )
         await broadcast_players()
         # Отправляем успех клиенту вместе с токеном
         await sio.emit('join_success', {'token': player_token, 'name': player_name}, to=sid)
@@ -871,7 +960,11 @@ async def admin_approve(sid, data):
     
     # Одобряем
     player['pending'] = False
-    add_log(f"{player_name} допущен к игре")
+    add_log(
+        f"{player_name} допущен к игре",
+        event_type="player_approved",
+        payload={"name": player_name},
+    )
     
     await broadcast_players()
     
@@ -943,10 +1036,14 @@ async def leave_game(sid):
         players_list = [p for p in players_list if p['sid'] != sid]
         
         if player_role == 'admin':
-            add_log("Ведущий вышел")
+            add_log("Ведущий вышел", event_type="host_left")
             revoke_admin_token(player.get('token'))
         else:
-            add_log(f"{player_name} вышел из игры")
+            add_log(
+                f"{player_name} вышел из игры",
+                event_type="player_left",
+                payload={"name": player_name},
+            )
         
         logger.info(f"Player {player_name} left the game (explicit logout)")
         await broadcast_players()
@@ -1299,7 +1396,16 @@ async def admin_share_media(sid, data):
     app_state["presentation"]["shared_media"] = _create_current_shared_media(media_id, info)
     if previous_id and previous_id != media_id:
         media_tokens.pop(previous_id, None)
-    add_log(f"Медиа показано игрокам: {media_display_name(info)}")
+    add_log(
+        f"Медиа показано игрокам: {media_display_name(info)}",
+        event_type="media_shared",
+        payload={
+            "media_ref": info.get("media_ref"),
+            "media_type": info.get("type"),
+            "name": info.get("name"),
+            "section": info.get("section"),
+        },
+    )
     await emit_state_update()
     return {"ok": True}
 
@@ -1342,7 +1448,16 @@ async def admin_share_next_media(sid, data=None):
         next_info,
     )
     media_tokens.pop(previous_id, None)
-    add_log(f"Следующее медиа показано игрокам: {next_info['name']}")
+    add_log(
+        f"Следующее медиа показано игрокам: {next_info['name']}",
+        event_type="media_shared",
+        payload={
+            "media_ref": next_info.get("media_ref"),
+            "media_type": next_info.get("type"),
+            "name": next_info.get("name"),
+            "section": next_info.get("section"),
+        },
+    )
     await emit_state_update()
     return {
         "ok": True,
@@ -1411,7 +1526,16 @@ async def _admin_media_playback_action(sid: str, action: str) -> None:
     await emit_settings_update()
     if changed:
         labels = {"play": "запущено", "pause": "на паузе", "stop": "остановлено"}
-        add_log(f"Медиа {labels[action]}: {media_display_name(info)}")
+        add_log(
+            f"Медиа {labels[action]}: {media_display_name(info)}",
+            event_type="media_playback_changed",
+            payload={
+                "action": action,
+                "media_ref": info.get("media_ref"),
+                "media_type": info.get("type"),
+                "name": info.get("name"),
+            },
+        )
         await emit_state_update()
 
 
@@ -1461,7 +1585,15 @@ async def admin_media_ended(sid, data):
     if not changed:
         return {"ok": False, "error": "stale_playback"}
 
-    add_log(f"Медиа завершено: {media_display_name(info)}")
+    add_log(
+        f"Медиа завершено: {media_display_name(info)}",
+        event_type="media_completed",
+        payload={
+            "media_ref": info.get("media_ref"),
+            "media_type": info.get("type"),
+            "name": info.get("name"),
+        },
+    )
     await emit_state_update()
     return {"ok": True}
 
@@ -1475,7 +1607,7 @@ async def admin_hide_media(sid, data=None):
     app_state["presentation"]["shared_media"] = None
     if shared_media:
         media_tokens.pop(shared_media.get("media_id"), None)
-    add_log("Медиа скрыто")
+    add_log("Медиа скрыто", event_type="media_hidden")
     await emit_state_update()
     return {"ok": True}
 
@@ -1532,7 +1664,11 @@ async def admin_sound(sid, data):
         return
     
     _supersede_sound_fade(mode="normal")
-    add_log(f"Звук: {sound_label(data.get('sound'))}")
+    add_log(
+        f"Звук: {sound_label(data.get('sound'))}",
+        event_type="sound_played",
+        payload={"sound": data.get("sound")},
+    )
     await emit_settings_update()
     await sio.emit('play_sound', data)
 
@@ -1564,7 +1700,7 @@ async def admin_stop_sounds(sid):
     blackbox_stopped = clear_blackbox_presentation(app_state)
 
     _supersede_sound_fade(mode="stopped")
-    add_log("Звук остановлен")
+    add_log("Звук остановлен", event_type="sounds_stopped")
     await emit_settings_update()
     await sio.emit('stop_sound')
     if media_stopped or blackbox_stopped:
@@ -1581,7 +1717,11 @@ async def admin_fade_sounds(sid, data=None):
         now_ms=_now_ms(),
         duration_ms=FADE_DURATION_MS,
     )
-    add_log("Затухание звука: 3 сек.")
+    add_log(
+        "Затухание звука: 3 сек.",
+        event_type="sounds_faded",
+        payload={"duration_ms": FADE_DURATION_MS},
+    )
     await emit_settings_update()
     await emit_state_update()
     await asyncio.sleep(FADE_DURATION_MS / 1000)
@@ -1631,7 +1771,11 @@ async def admin_kick(sid, data):
     # Удаляем из списка
     players_list = [p for p in players_list if p['name'] != player_name or p['role'] == 'admin']
     
-    add_log(f"{player_name} был отключён ведущим")
+    add_log(
+        f"{player_name} был отключён ведущим",
+        event_type="player_kicked",
+        payload={"name": player_name},
+    )
     logger.info(f"Player {player_name} kicked by admin")
     
     # Отправляем игроку событие что его кикнули
@@ -1647,8 +1791,64 @@ async def admin_log(sid, data):
     
     msg = data.get('message')
     if msg:
-        add_log(msg)
+        add_log(msg, event_type="admin_note")
         await emit_state_update()
+
+
+def _journal_error_payload(error: JournalError) -> dict:
+    logger.warning("Rejected game journal action: %s", error)
+    return {"ok": False, "error": "invalid_journal_action", "message": str(error)}
+
+
+@sio.event
+async def admin_get_game_history(sid, data=None):
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+    try:
+        return {"ok": True, "history": game_journal.snapshot()}
+    except JournalError as error:
+        return _journal_error_payload(error)
+
+
+@sio.event
+async def admin_get_game_session(sid, data):
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+    payload = data if isinstance(data, dict) else {}
+    try:
+        return {
+            "ok": True,
+            "detail": game_journal.get_session(payload.get("session_id")),
+        }
+    except JournalError as error:
+        return _journal_error_payload(error)
+
+
+@sio.event
+async def admin_set_current_game_mode(sid, data):
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+    payload = data if isinstance(data, dict) else {}
+    try:
+        mode = game_journal.set_current_mode(payload.get("mode"))
+        return {"ok": True, "mode": mode, "history": game_journal.snapshot()}
+    except JournalError as error:
+        return _journal_error_payload(error)
+
+
+@sio.event
+async def admin_set_game_session_mode(sid, data):
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+    payload = data if isinstance(data, dict) else {}
+    try:
+        mode = game_journal.set_session_mode(
+            payload.get("session_id"),
+            payload.get("mode"),
+        )
+        return {"ok": True, "mode": mode, "history": game_journal.snapshot()}
+    except JournalError as error:
+        return _journal_error_payload(error)
 
 @sio.event
 async def admin_reset(sid):

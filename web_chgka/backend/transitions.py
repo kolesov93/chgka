@@ -8,6 +8,7 @@ phase checks and mutations atomic within the asyncio event loop.
 from dataclasses import dataclass
 from typing import Optional
 
+from game_events import GameEvent, game_event
 from state import (
     AppState,
     GamePhase,
@@ -44,7 +45,7 @@ class TransitionError(ValueError):
 class TransitionEffects:
     """Side effects that the async transport layer must deliver."""
 
-    logs: tuple[str, ...] = ()
+    events: tuple[GameEvent, ...] = ()
     sounds: tuple[str, ...] = ()
     clear_media_tokens: bool = False
     refresh_admin_question: bool = False
@@ -53,6 +54,11 @@ class TransitionEffects:
     start_sound_output: bool = False
     spin_id: Optional[int] = None
     playing_sector: Optional[int] = None
+
+    @property
+    def logs(self) -> tuple[str, ...]:
+        """Compatibility view used by transition-level tests and callers."""
+        return tuple(event.message for event in self.events)
 
 
 def _require_phase(state: AppState, expected: GamePhase) -> None:
@@ -90,7 +96,7 @@ def transition_start_game(state: AppState) -> TransitionEffects:
         "started_at_ms": None,
         "duration_ms": INTRO_DURATION_MS,
     }
-    return TransitionEffects(logs=("Интро началось",))
+    return TransitionEffects(events=(game_event("game_started", "Интро началось"),))
 
 
 def transition_start_intro_music(
@@ -110,7 +116,7 @@ def transition_start_intro_music(
 
     intro["started_at_ms"] = now_ms
     return TransitionEffects(
-        logs=("Интро: музыка запущена",),
+        events=(game_event("intro_music_started", "Интро: музыка запущена"),),
         sounds=("intro",),
     )
 
@@ -141,12 +147,25 @@ def transition_advance_intro(
     if current_slide < INTRO_LAST_SLIDE:
         next_slide = current_slide + 1
         intro["slide_index"] = next_slide
-        return TransitionEffects(logs=(f"Интро: слайд {next_slide:02d}",))
+        return TransitionEffects(
+            events=(
+                game_event(
+                    "intro_slide_changed",
+                    f"Интро: слайд {next_slide:02d}",
+                    slide_index=next_slide,
+                ),
+            )
+        )
 
     state["presentation"]["intro"] = None
     state["game"]["phase"] = PHASE_PRE_ROUND
     return TransitionEffects(
-        logs=("Интро завершено. Фаза: ожидание первого вращения",),
+        events=(
+            game_event(
+                "intro_completed",
+                "Интро завершено. Фаза: ожидание первого вращения",
+            ),
+        ),
         stop_sounds=True,
     )
 
@@ -187,7 +206,9 @@ def transition_start_blackbox(
         "playback_generation": generation,
     }
     return TransitionEffects(
-        logs=("Чёрный ящик: музыка запущена",),
+        events=(
+            game_event("blackbox_started", "Чёрный ящик: музыка запущена"),
+        ),
         start_sound_output=True,
     )
 
@@ -212,7 +233,15 @@ def transition_end_blackbox(
 
     clear_blackbox_presentation(state)
     ending = "музыка завершилась" if natural else "остановлен ведущим"
-    return TransitionEffects(logs=(f"Чёрный ящик: {ending}",))
+    return TransitionEffects(
+        events=(
+            game_event(
+                "blackbox_ended",
+                f"Чёрный ящик: {ending}",
+                natural=natural,
+            ),
+        )
+    )
 
 
 def validate_spin_start(state: AppState) -> None:
@@ -270,12 +299,29 @@ def transition_start_spin(
     if forced:
         log += " [выбор ведущего]"
     log += f" → играет сектор: {playing_sector}"
-    logs = [log]
+    events = [
+        game_event(
+            "spin_started",
+            log,
+            raw_angle=raw_angle,
+            raw_sector=raw_sector,
+            playing_sector=playing_sector,
+            forced=forced,
+            spin_id=spin_id,
+        )
+    ]
     if playing_sector == SECTORS_COUNT:
-        logs.append("Внимание! 13-й сектор!")
+        events.append(
+            game_event(
+                "sector_thirteen_selected",
+                "Внимание! 13-й сектор!",
+                sector=SECTORS_COUNT,
+                spin_id=spin_id,
+            )
+        )
 
     return TransitionEffects(
-        logs=tuple(logs),
+        events=tuple(events),
         clear_media_tokens=True,
         start_sound_output=True,
         spin_id=spin_id,
@@ -318,7 +364,15 @@ def transition_complete_spin(state: AppState, *, spin_id: int) -> TransitionEffe
     state["game"]["phase"] = PHASE_QUESTION_READING
     sounds = ("sector13",) if playing_sector == SECTORS_COUNT else ()
     return TransitionEffects(
-        logs=("Фаза: зачитывание вопроса",),
+        events=(
+            game_event(
+                "question_opened",
+                "Фаза: зачитывание вопроса",
+                sector=playing_sector,
+                kind=question_type,
+                part_index=0 if question_type in ("blitz", "superblitz") else None,
+            ),
+        ),
         sounds=sounds,
         refresh_admin_question=True,
         spin_id=spin_id,
@@ -335,7 +389,11 @@ def transition_start_discussion(state: AppState, *, deadline_ms: int) -> Transit
         )
     state["game"]["phase"] = PHASE_DISCUSSION
     state["timer"]["discussion_deadline_ms"] = deadline_ms
-    return TransitionEffects(logs=("Фаза: обсуждение",))
+    return TransitionEffects(
+        events=(
+            game_event("phase_changed", "Фаза: обсуждение", phase=PHASE_DISCUSSION),
+        )
+    )
 
 
 def transition_team_answer(state: AppState) -> TransitionEffects:
@@ -343,7 +401,13 @@ def transition_team_answer(state: AppState) -> TransitionEffects:
     state["timer"]["discussion_deadline_ms"] = None
     state["game"]["phase"] = PHASE_TEAM_ANSWER
     return TransitionEffects(
-        logs=("Фаза: ответ команды",),
+        events=(
+            game_event(
+                "phase_changed",
+                "Фаза: ответ команды",
+                phase=PHASE_TEAM_ANSWER,
+            ),
+        ),
         sounds=("sig1",),
     )
 
@@ -352,7 +416,13 @@ def transition_ten_seconds(state: AppState, *, deadline_ms: int) -> TransitionEf
     _require_phase(state, PHASE_DISCUSSION)
     state["timer"]["discussion_deadline_ms"] = deadline_ms
     return TransitionEffects(
-        logs=("Сигнал: 10 секунд (таймер сброшен на 10)",),
+        events=(
+            game_event(
+                "timer_changed",
+                "Сигнал: 10 секунд (таймер сброшен на 10)",
+                seconds=10,
+            ),
+        ),
         sounds=("sig2",),
     )
 
@@ -382,36 +452,81 @@ def transition_score(
 
         if winner == "tv":
             state["game"]["score"]["tv"] += 1
-            logs = (
-                "Неверно. Очко Телезрителям!",
-                "Фаза: разбор ответа",
+            events = (
+                game_event(
+                    "score_changed",
+                    "Неверно. Очко Телезрителям!",
+                    winner="tv",
+                    score=dict(state["game"]["score"]),
+                    part_index=part_index,
+                ),
+                game_event(
+                    "phase_changed",
+                    "Фаза: разбор ответа",
+                    phase=PHASE_POST_ROUND,
+                ),
             )
             sounds = (incorrect_sound,)
         elif part_index < BLITZ_PARTS - 1:
             round_ctx["advance_next_part"] = True
             state["game"]["round"] = round_ctx
-            logs = (f"Верно (часть {part_index + 1}/{BLITZ_PARTS}). Фаза: разбор ответа",)
+            events = (
+                game_event(
+                    "blitz_part_answered",
+                    f"Верно (часть {part_index + 1}/{BLITZ_PARTS}). Фаза: разбор ответа",
+                    winner="znatoki",
+                    part_index=part_index,
+                ),
+            )
             sounds = ()
         else:
             state["game"]["score"]["znatoki"] += 1
-            logs = (
-                "Все ответы верны. Очко Знатокам!",
-                "Фаза: разбор ответа",
+            events = (
+                game_event(
+                    "score_changed",
+                    "Все ответы верны. Очко Знатокам!",
+                    winner="znatoki",
+                    score=dict(state["game"]["score"]),
+                    part_index=part_index,
+                ),
+                game_event(
+                    "phase_changed",
+                    "Фаза: разбор ответа",
+                    phase=PHASE_POST_ROUND,
+                ),
             )
             sounds = (correct_sound,)
     elif kind == "normal":
         if winner == "znatoki":
             state["game"]["score"]["znatoki"] += 1
-            logs = (
-                "Очко Знатокам!",
-                "Фаза: разбор ответа",
+            events = (
+                game_event(
+                    "score_changed",
+                    "Очко Знатокам!",
+                    winner="znatoki",
+                    score=dict(state["game"]["score"]),
+                ),
+                game_event(
+                    "phase_changed",
+                    "Фаза: разбор ответа",
+                    phase=PHASE_POST_ROUND,
+                ),
             )
             sounds = (correct_sound,)
         else:
             state["game"]["score"]["tv"] += 1
-            logs = (
-                "Очко Телезрителям!",
-                "Фаза: разбор ответа",
+            events = (
+                game_event(
+                    "score_changed",
+                    "Очко Телезрителям!",
+                    winner="tv",
+                    score=dict(state["game"]["score"]),
+                ),
+                game_event(
+                    "phase_changed",
+                    "Фаза: разбор ответа",
+                    phase=PHASE_POST_ROUND,
+                ),
             )
             sounds = (incorrect_sound,)
     else:
@@ -420,7 +535,7 @@ def transition_score(
     state["timer"]["discussion_deadline_ms"] = None
     state["game"]["phase"] = PHASE_POST_ROUND
     return TransitionEffects(
-        logs=logs,
+        events=events,
         sounds=sounds,
         refresh_admin_question=True,
     )
@@ -443,9 +558,14 @@ def transition_end_round(state: AppState, *, gong_sound: str) -> TransitionEffec
         state["wheel"]["spin_duration"] = 0
         state["wheel"]["is_spinning"] = False
         return TransitionEffects(
-            logs=(
-                f"Игра завершена. Победа {winner_label}: "
-                f"{score['znatoki']}:{score['tv']}",
+            events=(
+                game_event(
+                    "game_completed",
+                    f"Игра завершена. Победа {winner_label}: "
+                    f"{score['znatoki']}:{score['tv']}",
+                    winner=winner,
+                    score=dict(score),
+                ),
             ),
             sounds=("final",),
             clear_media_tokens=True,
@@ -470,9 +590,15 @@ def transition_end_round(state: AppState, *, gong_sound: str) -> TransitionEffec
         state["game"]["round"] = round_ctx
         state["game"]["phase"] = PHASE_QUESTION_READING
         return TransitionEffects(
-            logs=(
-                f"Переходим к части {next_part_index + 1}/{BLITZ_PARTS}. "
-                "Фаза: зачитывание вопроса",
+            events=(
+                game_event(
+                    "question_opened",
+                    f"Переходим к части {next_part_index + 1}/{BLITZ_PARTS}. "
+                    "Фаза: зачитывание вопроса",
+                    sector=round_ctx["sector"],
+                    kind=kind,
+                    part_index=next_part_index,
+                ),
             ),
             clear_media_tokens=True,
             refresh_admin_question=True,
@@ -481,16 +607,31 @@ def transition_end_round(state: AppState, *, gong_sound: str) -> TransitionEffec
     state["game"]["round"] = None
     state["game"]["phase"] = PHASE_PRE_ROUND
     return TransitionEffects(
-        logs=("Раунд завершён. Фаза: ожидание следующего вращения",),
+        events=(
+            game_event(
+                "round_completed",
+                "Раунд завершён. Фаза: ожидание следующего вращения",
+            ),
+        ),
         sounds=(gong_sound,),
         clear_media_tokens=True,
     )
 
 
 def transition_reset(state: AppState) -> TransitionEffects:
+    old_phase = state["game"]["phase"]
+    old_score = dict(state["game"]["score"])
     reset_app_state(state)
     return TransitionEffects(
-        logs=("Игра сброшена",),
+        events=(
+            game_event(
+                "game_reset",
+                "Игра сброшена",
+                previous_phase=old_phase,
+                score=old_score,
+                target_phase=PHASE_LOGIN,
+            ),
+        ),
         clear_media_tokens=True,
         clear_admin_question=True,
         stop_sounds=True,
