@@ -2,11 +2,15 @@
 
 - Snapshot date: 2026-08-09
 - Latest completed task: `docs/tasks/0019-ui-russian-localization.md`
-- Active task: none
-- Branch: `web`
-- Status: task 0019 is accepted and merged locally; pushing `web` and remote CI are pending.
+- Active task: `docs/tasks/0020-game-event-journal.md`
+- Branch: `task/game-event-journal`
+- Status: persistence, question identity and history UX decisions are fixed; implementation is starting from synchronized `web` at `67df9a4`.
 
 ## Repository checkpoint
+
+- `web` and `origin/web` are synchronized at `67df9a4` before task 0020.
+- Task 0020 adds durable structured game-session history without changing the existing in-memory recovery boundary.
+- Required explicit question UUIDs, part-level blitz history, one regular/debug mode and a mounted SQLite file are accepted decisions.
 
 - `web` and `origin/web` are synchronized at `e086f39` before task 0019.
 - Task 0019 translates rendered copy, display labels, server messages and logs while preserving all internal English identifiers and wire contracts.
