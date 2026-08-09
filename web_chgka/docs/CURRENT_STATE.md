@@ -1,17 +1,22 @@
 # CHGKA Web Current State
 
-- Snapshot date: 2026-08-08
-- Latest completed task: `docs/tasks/0018-transparent-table-background.md`
-- Active task: `docs/tasks/0019-ui-russian-localization.md`
-- Branch: `task/ui-russian-localization`
-- Status: localization is implemented and passes local automated verification; focused browser smoke and remote CI are pending.
+- Snapshot date: 2026-08-09
+- Latest completed task: `docs/tasks/0019-ui-russian-localization.md`
+- Active task: none
+- Branch: `web`
+- Status: task 0019 is accepted and merged locally; pushing `web` and remote CI are pending.
 
 ## Repository checkpoint
 
 - `web` and `origin/web` are synchronized at `e086f39` before task 0019.
 - Task 0019 translates rendered copy, display labels, server messages and logs while preserving all internal English identifiers and wire contracts.
 - Accepted terminology includes «Восстановление игры», «Отключить», «Затухание 3 с», «Выключить звук» and explicit Russian mappings for phases, question kinds and media sections.
-- Local verification: 191 backend tests, 10 frontend test files, production frontend build and Compose validation pass; the focused smoke is recorded in the task file.
+- Task 0019 planning commit: `9192e6d` (`Plan UI Russian localization task`).
+- Task 0019 implementation commit: `f27146f` (`Implement Russian user interface`).
+- Task 0019 closure commit: `fc750d1` (`Close UI Russian localization task`).
+- Task 0019 merge commit: `9c4429b` (`Merge UI Russian localization task`).
+- Local verification: 192 backend tests with warnings as errors, 10 frontend test files, production frontend build and Compose validation pass.
+- The user approved local integration on 2026-08-09. `origin/web` remains at `e086f39` until the merged branch is pushed.
 
 - `web` and `origin/web` are synchronized at `68edc87` before task 0018.
 - Task 0018 preserves both 2000×2000 table canvases and runtime paths, replacing only the white exterior with a clean alpha edge.
