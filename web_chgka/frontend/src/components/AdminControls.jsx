@@ -75,7 +75,7 @@ export function AdminControls({
               onClick={resetGame}
               className="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 py-1 px-2 rounded font-bold uppercase tracking-wider"
             >
-              {isGameOver ? 'Новая игра' : 'Reset'}
+              {isGameOver ? 'Новая игра' : 'Сброс'}
             </button>
           </div>
         </div>
@@ -249,14 +249,14 @@ export function AdminControls({
               onClick={fadeSounds}
               className="rounded bg-amber-800 hover:bg-amber-700 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white transition-colors"
             >
-              Fade 3s
+              Затухание 3 с
             </button>
             <button
               type="button"
               onClick={silence}
               className="rounded bg-red-900 hover:bg-red-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white transition-colors"
             >
-              Silence
+              Выключить звук
             </button>
           </div>
         </div>
@@ -317,7 +317,7 @@ export function AdminControls({
                       onClick={() => kickPlayer(player.name)}
                       className="text-[10px] bg-red-900/50 hover:bg-red-800 text-red-300 hover:text-white px-2 py-0.5 rounded font-bold uppercase transition-colors"
                     >
-                      Kick
+                      Отключить
                     </button>
                   </div>
                 </div>

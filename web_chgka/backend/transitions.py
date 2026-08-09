@@ -21,6 +21,7 @@ from state import (
     PHASE_TEAM_ANSWER,
     reset_app_state,
 )
+from ui_text import phase_label
 
 
 SECTORS_COUNT = 13
@@ -59,7 +60,8 @@ def _require_phase(state: AppState, expected: GamePhase) -> None:
     if phase != expected:
         raise TransitionError(
             "bad_phase",
-            f"Действие недоступно в фазе {phase}; ожидается {expected}",
+            f"Действие недоступно в фазе «{phase_label(phase)}»; "
+            f"ожидается «{phase_label(expected)}»",
         )
 
 
@@ -124,7 +126,7 @@ def transition_advance_intro(
         or isinstance(expected_slide, bool)
         or not 0 <= expected_slide <= INTRO_LAST_SLIDE
     ):
-        raise TransitionError("invalid_intro_slide", "Некорректный номер intro-слайда")
+        raise TransitionError("invalid_intro_slide", "Некорректный номер слайда интро")
 
     intro = state["presentation"]["intro"]
     if intro is None:
@@ -133,7 +135,7 @@ def transition_advance_intro(
     if current_slide != expected_slide:
         raise TransitionError(
             "stale_intro",
-            f"Intro-слайд уже изменился: сейчас {current_slide:02d}",
+            f"Слайд интро уже изменился: сейчас {current_slide:02d}",
         )
 
     if current_slide < INTRO_LAST_SLIDE:
@@ -264,10 +266,10 @@ def transition_start_spin(
     state["wheel"]["is_spinning"] = True
     state["wheel"]["spin_id"] = spin_id
 
-    log = f"Вращение! Угол: {raw_angle:.1f}° (Сектор {raw_sector})"
+    log = f"Вращение! Угол: {raw_angle:.1f}° (сектор {raw_sector})"
     if forced:
-        log += " [FORCED]"
-    log += f" -> Играет: {playing_sector}"
+        log += " [выбор ведущего]"
+    log += f" → играет сектор: {playing_sector}"
     logs = [log]
     if playing_sector == SECTORS_COUNT:
         logs.append("Внимание! 13-й сектор!")
@@ -366,7 +368,7 @@ def transition_score(
     if _game_winner(state) is not None:
         raise TransitionError("game_finished", "Игра уже достигла победного счёта")
     if winner not in ("znatoki", "tv"):
-        raise TransitionError("invalid_winner", f"Некорректный победитель: {winner}")
+        raise TransitionError("invalid_winner", "Некорректно указана победившая сторона")
 
     round_ctx = state["game"]["round"]
     if not round_ctx:
@@ -382,19 +384,19 @@ def transition_score(
             state["game"]["score"]["tv"] += 1
             logs = (
                 "Неверно. Очко Телезрителям!",
-                "Фаза: послераунд (обсуждение ответа)",
+                "Фаза: разбор ответа",
             )
             sounds = (incorrect_sound,)
         elif part_index < BLITZ_PARTS - 1:
             round_ctx["advance_next_part"] = True
             state["game"]["round"] = round_ctx
-            logs = (f"Верно (часть {part_index + 1}/{BLITZ_PARTS}). Фаза: послераунд",)
+            logs = (f"Верно (часть {part_index + 1}/{BLITZ_PARTS}). Фаза: разбор ответа",)
             sounds = ()
         else:
             state["game"]["score"]["znatoki"] += 1
             logs = (
                 "Все ответы верны. Очко Знатокам!",
-                "Фаза: послераунд (обсуждение ответа)",
+                "Фаза: разбор ответа",
             )
             sounds = (correct_sound,)
     elif kind == "normal":
@@ -402,18 +404,18 @@ def transition_score(
             state["game"]["score"]["znatoki"] += 1
             logs = (
                 "Очко Знатокам!",
-                "Фаза: послераунд (обсуждение ответа)",
+                "Фаза: разбор ответа",
             )
             sounds = (correct_sound,)
         else:
             state["game"]["score"]["tv"] += 1
             logs = (
                 "Очко Телезрителям!",
-                "Фаза: послераунд (обсуждение ответа)",
+                "Фаза: разбор ответа",
             )
             sounds = (incorrect_sound,)
     else:
-        raise TransitionError("invalid_round", f"Неизвестный тип раунда: {kind}")
+        raise TransitionError("invalid_round", "Неизвестный тип активного раунда")
 
     state["timer"]["discussion_deadline_ms"] = None
     state["game"]["phase"] = PHASE_POST_ROUND

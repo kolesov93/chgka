@@ -6,15 +6,7 @@ import {
   parseBoundedInteger,
 } from '../liveOps';
 import { socket } from '../socket';
-
-
-const PHASE_LABELS = {
-  PRE_ROUND: 'Ожидание',
-  QUESTION_READING: 'Чтение',
-  DISCUSSION: 'Обсуждение',
-  TEAM_ANSWER: 'Ответ команды',
-  POST_ROUND: 'Разбор ответа',
-};
+import { phaseLabel, questionKindLabel, responseMessage } from '../uiText';
 
 const buttonClass = 'rounded px-2 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
 
@@ -51,8 +43,11 @@ export function LiveOpsPanel({ gameState, addNotification }) {
 
   const emitRecovery = (event, payload) => {
     socket.emit(event, payload, (response) => {
+      if (response?.ok === false) {
+        console.warn('Операция восстановления отклонена:', response.error);
+      }
       if (response && response.ok === false && !response.message) {
-        warn(`Live Ops: ${response.error || 'операция отклонена'}`);
+        warn(responseMessage(response));
       }
     });
   };
@@ -93,7 +88,7 @@ export function LiveOpsPanel({ gameState, addNotification }) {
   };
 
   const forcePhase = (nextPhase) => {
-    if (!confirm(`Принудительно перейти ${phase} → ${nextPhase}?`)) return;
+    if (!confirm(`Принудительно перейти «${phaseLabel(phase)}» → «${phaseLabel(nextPhase)}»?`)) return;
     emitRecovery('admin_force_phase', { phase: nextPhase });
   };
 
@@ -105,7 +100,7 @@ export function LiveOpsPanel({ gameState, addNotification }) {
   };
 
   const cancelSpin = () => {
-    if (!confirm('Остановить зависшее вращение и вернуться в PRE_ROUND?')) return;
+    if (!confirm(`Остановить зависшее вращение и вернуться в фазу «${phaseLabel('PRE_ROUND')}»?`)) return;
     emitRecovery('admin_cancel_spin');
   };
 
@@ -129,7 +124,7 @@ export function LiveOpsPanel({ gameState, addNotification }) {
         onClick={() => setIsOpen((current) => !current)}
         className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold uppercase tracking-widest text-red-300 hover:bg-red-950/30"
       >
-        <span>⚠ Live Ops Recovery</span>
+        <span>⚠ Восстановление игры</span>
         <span>{isOpen ? '▲' : '▼'}</span>
       </button>
 
@@ -162,13 +157,13 @@ export function LiveOpsPanel({ gameState, addNotification }) {
                 />
               </label>
               <button type="button" onClick={applyScore} className={`${buttonClass} bg-red-800 hover:bg-red-700 text-white`}>
-                Apply
+                Применить
               </button>
             </div>
           </div>
 
           <div>
-            <div className="text-[10px] uppercase font-bold text-slate-500 mb-2">Played / available</div>
+            <div className="text-[10px] uppercase font-bold text-slate-500 mb-2">Сыгранные / доступные</div>
             <div className="grid grid-cols-7 gap-1">
               {Array.from({ length: 13 }, (_, index) => index + 1).map((sectorId) => {
                 const isUsed = usedQuestions.includes(sectorId);
@@ -196,7 +191,7 @@ export function LiveOpsPanel({ gameState, addNotification }) {
               >
                 {Array.from({ length: 13 }, (_, index) => index + 1).map((sectorId) => (
                   <option key={sectorId} value={sectorId}>
-                    Сектор {sectorId} — {questionTypes[sectorId - 1] || 'unknown'}
+                    Сектор {sectorId} — {questionKindLabel(questionTypes[sectorId - 1])}
                   </option>
                 ))}
               </select>
@@ -237,7 +232,7 @@ export function LiveOpsPanel({ gameState, addNotification }) {
                   onClick={() => forcePhase(nextPhase)}
                   className={`${buttonClass} ${phase === nextPhase ? 'bg-red-900 text-red-200' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
                 >
-                  {PHASE_LABELS[nextPhase]}
+                  {phaseLabel(nextPhase)}
                 </button>
               ))}
             </div>
@@ -251,15 +246,15 @@ export function LiveOpsPanel({ gameState, addNotification }) {
 
           {phase === 'DISCUSSION' && (
             <div>
-              <div className="text-[10px] uppercase font-bold text-slate-500 mb-2">Recovery timer</div>
+              <div className="text-[10px] uppercase font-bold text-slate-500 mb-2">Таймер восстановления</div>
               <div className="flex flex-wrap gap-1 mb-2">
                 {[10, 20, 60].map((seconds) => (
                   <button key={seconds} type="button" onClick={() => setTimer(seconds)} className={`${buttonClass} bg-slate-700 hover:bg-slate-600 text-white`}>
-                    {seconds}s
+                    {seconds} с
                   </button>
                 ))}
                 <button type="button" onClick={() => setTimer(null)} className={`${buttonClass} bg-slate-800 hover:bg-slate-700 text-slate-300`}>
-                  Stop timer
+                  Остановить таймер
                 </button>
               </div>
               <div className="flex gap-2">
@@ -272,7 +267,7 @@ export function LiveOpsPanel({ gameState, addNotification }) {
                   className="flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-white"
                 />
                 <button type="button" onClick={applyCustomTimer} className={`${buttonClass} bg-slate-700 hover:bg-slate-600 text-white`}>
-                  Set seconds
+                  Установить
                 </button>
               </div>
             </div>
@@ -285,7 +280,7 @@ export function LiveOpsPanel({ gameState, addNotification }) {
               onClick={() => socket.emit('admin_hide_media')}
               className={`${buttonClass} w-full bg-slate-700 hover:bg-slate-600 text-white`}
             >
-              Hide media
+              Скрыть медиа
             </button>
           </div>
         </div>

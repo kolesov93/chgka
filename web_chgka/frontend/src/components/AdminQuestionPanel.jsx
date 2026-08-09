@@ -2,6 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { BLACKBOX_IMAGE_SOURCE } from '../blackbox';
 import { inlineImagePreviews } from '../inlineMedia';
 import { mediaUrl, socket } from '../socket';
+import {
+  mediaSectionLabel,
+  questionKindLabel,
+  responseMessage,
+} from '../uiText';
 import { BlackboxCountdown } from './BlackboxPresentation';
 import { SynchronizedMedia } from './SynchronizedMedia';
 
@@ -41,7 +46,7 @@ function previewFromSharedMedia(media) {
     media_id: media.media_id,
     type: media.type,
     url: mediaUrl(media.media_id),
-    section: 'текущая',
+    section: 'current',
     name: fallbackNames[media.type] || 'Текущее медиа',
     media_ref: null,
   };
@@ -140,7 +145,7 @@ export function AdminQuestionPanel({
 
   const isBlitz = adminQuestion.kind === 'blitz' || adminQuestion.kind === 'superblitz';
   const header = isBlitz
-    ? `${adminQuestion.kind.toUpperCase()} • Сектор ${adminQuestion.sector} • Часть ${(adminQuestion.part_index ?? 0) + 1}/3`
+    ? `${questionKindLabel(adminQuestion.kind)} • Сектор ${adminQuestion.sector} • Часть ${(adminQuestion.part_index ?? 0) + 1}/3`
     : `Сектор ${adminQuestion.sector}`;
 
   const renderHtml = (html, section) => {
@@ -172,13 +177,14 @@ export function AdminQuestionPanel({
             if (resolutionGenerationRef.current !== generation) return;
 
             if (!response?.ok) {
+              console.warn('Не удалось открыть изображение:', response?.error);
               setResolvedImages((current) => ({
                 ...current,
                 [mediaRef]: { status: 'error' },
               }));
               addNotification({
                 type: 'warning',
-                message: `Не удалось открыть изображение: ${response?.error || 'unknown'}`,
+                message: responseMessage(response, 'Не удалось открыть изображение'),
               });
               return;
             }
@@ -199,9 +205,10 @@ export function AdminQuestionPanel({
         { media_ref: mediaRef },
         (response) => {
           if (!response?.ok) {
+            console.warn('Не удалось открыть медиа:', response?.error);
             addNotification({
               type: 'warning',
-              message: `Не удалось открыть медиа: ${response?.error || 'unknown'}`,
+              message: responseMessage(response, 'Не удалось открыть медиа'),
             });
             return;
           }
@@ -239,11 +246,12 @@ export function AdminQuestionPanel({
       expected_media_id: sharedMedia?.media_id,
     }, (response) => {
       if (!response?.ok) {
+        console.warn('Не удалось показать следующее медиа:', response?.error);
         addNotification({
           type: 'warning',
           message: response?.error === 'no_next_media'
             ? 'В этой секции больше нет медиа'
-            : `Не удалось показать следующее медиа: ${response?.error || 'unknown'}`,
+            : responseMessage(response, 'Не удалось показать следующее медиа'),
         });
         return;
       }
@@ -271,9 +279,10 @@ export function AdminQuestionPanel({
   const startBlackbox = () => {
     socket.emit('admin_start_blackbox', {}, (response) => {
       if (!response?.ok) {
+        console.warn('Не удалось запустить чёрный ящик:', response?.error);
         addNotification({
           type: 'warning',
-          message: response?.message || `Не удалось запустить чёрный ящик: ${response?.error || 'unknown'}`,
+          message: responseMessage(response, 'Не удалось запустить чёрный ящик'),
         });
       }
     });
@@ -332,7 +341,7 @@ export function AdminQuestionPanel({
                 onClick={stopBlackbox}
                 className="self-start rounded bg-red-800 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-red-700"
               >
-                Stop
+                Остановить
               </button>
             ) : (
               <button
@@ -380,17 +389,17 @@ export function AdminQuestionPanel({
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="text-xs text-slate-400 uppercase font-bold tracking-widest">Медиа</div>
           <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">
-            Шарим: {sharedMedia ? 'да' : 'нет'}
+            Показывается игрокам: {sharedMedia ? 'да' : 'нет'}
           </div>
         </div>
 
         {mediaPreview ? (
           <div className="flex flex-col gap-3">
             <div className="text-[11px] text-slate-400">
-              Preview: <span className="text-slate-200">{mediaPreview.name}</span>
+              Предпросмотр: <span className="text-slate-200">{mediaPreview.name}</span>
               <span className="text-slate-600"> • </span>
               <span className="text-slate-500">секция:</span>{' '}
-              <span className="text-slate-200">{mediaPreview.section}</span>
+              <span className="text-slate-200">{mediaSectionLabel(mediaPreview.section)}</span>
             </div>
             {mediaPreview.type === 'image' && (
               <div className="rounded border border-slate-700 bg-slate-900/40 p-2 flex justify-center">
@@ -445,19 +454,19 @@ export function AdminQuestionPanel({
                     onClick={() => socket.emit('admin_play_media')}
                     className="bg-green-700 hover:bg-green-600 text-white py-2 px-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
                   >
-                    Play
+                    Воспроизвести
                   </button>
                   <button
                     onClick={() => socket.emit('admin_pause_media')}
                     className="bg-yellow-700 hover:bg-yellow-600 text-white py-2 px-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
                   >
-                    Pause
+                    Пауза
                   </button>
                   <button
                     onClick={() => socket.emit('admin_stop_media')}
                     className="bg-red-900 hover:bg-red-800 text-white py-2 px-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
                   >
-                    Stop
+                    Остановить
                   </button>
                 </>
               )}
