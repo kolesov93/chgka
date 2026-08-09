@@ -1,4 +1,5 @@
 ---
+id: 1b5bbfe2-f115-5a2a-a8f2-7c5c5ef28a62
 title: Дублирующийся автор
 author: Автор 1
 author: Автор 2

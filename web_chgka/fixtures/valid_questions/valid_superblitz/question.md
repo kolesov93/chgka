@@ -1,4 +1,5 @@
 ---
+id: 3ffe069a-c8a7-5db5-8a81-0d6a10d25bba
 title: Тестовый суперблиц
 type: superblitz
 ---

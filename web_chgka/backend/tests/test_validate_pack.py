@@ -1,8 +1,10 @@
 import shutil
 from pathlib import Path
+import uuid
 
 import pytest
 
+from assign_question_ids import assign_question_ids
 from questions import QuestionParseError, parse_question, parse_question_pack
 from validate_pack import main
 
@@ -17,6 +19,14 @@ def _copy_sample_pack(tmp_path: Path) -> Path:
     return pack_path
 
 
+def _question_id(path: Path) -> str:
+    return next(
+        line.split(":", 1)[1].strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.startswith("id:")
+    )
+
+
 def _write_question(folder: Path, media_reference: str) -> None:
     folder.mkdir(parents=True)
     (folder / "media").mkdir()
@@ -24,6 +34,7 @@ def _write_question(folder: Path, media_reference: str) -> None:
         "\n".join(
             (
                 "---",
+                "id: 6dc156af-2774-4ced-81f7-61c0bdf43b42",
                 "title: Media path test",
                 "---",
                 "",
@@ -50,6 +61,89 @@ def test_cli_prints_sample_pack_summary(capsys):
         "Parts: 6\n"
         "Media: 9 (image: 5, audio: 2, video: 2)\n"
     )
+
+
+def test_pack_requires_canonical_unique_question_ids(tmp_path):
+    pack_path = _copy_sample_pack(tmp_path)
+    first = pack_path / "01" / "question.md"
+    first_id = _question_id(first)
+    first.write_text(
+        first.read_text(encoding="utf-8").replace(f"id: {first_id}\n", ""),
+        encoding="utf-8",
+    )
+    with pytest.raises(QuestionParseError, match="id"):
+        parse_question_pack(pack_path)
+
+    pack_path = _copy_sample_pack(tmp_path / "duplicate")
+    first_id = _question_id(pack_path / "01" / "question.md")
+    second = pack_path / "02" / "question.md"
+    second_id = _question_id(second)
+    second.write_text(
+        second.read_text(encoding="utf-8").replace(second_id, first_id),
+        encoding="utf-8",
+    )
+    with pytest.raises(QuestionParseError, match="Duplicate question id"):
+        parse_question_pack(pack_path)
+
+    pack_path = _copy_sample_pack(tmp_path / "canonical")
+    first = pack_path / "01" / "question.md"
+    first_id = _question_id(first)
+    first.write_text(
+        first.read_text(encoding="utf-8").replace(first_id, first_id.upper()),
+        encoding="utf-8",
+    )
+    with pytest.raises(QuestionParseError, match="canonical lowercase"):
+        parse_question_pack(pack_path)
+
+
+def test_assign_question_ids_validates_then_fills_normal_and_blitz_part(tmp_path):
+    pack_path = _copy_sample_pack(tmp_path)
+    targets = [
+        pack_path / "01" / "question.md",
+        pack_path / "04" / "02" / "question.md",
+    ]
+    for target in targets:
+        existing_id = _question_id(target)
+        target.write_text(
+            target.read_text(encoding="utf-8").replace(f"id: {existing_id}\n", ""),
+            encoding="utf-8",
+        )
+
+    assigned_ids = iter(
+        (
+            uuid.UUID("00000000-0000-4000-8000-000000000001"),
+            uuid.UUID("00000000-0000-4000-8000-000000000002"),
+        )
+    )
+    assigned = assign_question_ids(pack_path, id_factory=lambda: next(assigned_ids))
+
+    assert assigned == 2
+    pack = parse_question_pack(pack_path)
+    assert pack.get_by_sector(1).id == "00000000-0000-4000-8000-000000000001"
+    assert pack.get_by_sector(4).parts[1].id == "00000000-0000-4000-8000-000000000002"
+    assert len(pack.question_ids) == 19
+    assert len(pack.fingerprint) == 64
+
+
+def test_assign_question_ids_replaces_empty_field_and_preserves_existing_ids(tmp_path):
+    pack_path = _copy_sample_pack(tmp_path)
+    target = pack_path / "01" / "question.md"
+    existing_id = _question_id(target)
+    preserved_id = _question_id(pack_path / "02" / "question.md")
+    target.write_text(
+        target.read_text(encoding="utf-8").replace(existing_id, ""),
+        encoding="utf-8",
+    )
+
+    assigned = assign_question_ids(
+        pack_path,
+        id_factory=lambda: uuid.UUID("00000000-0000-4000-8000-000000000003"),
+    )
+
+    assert assigned == 1
+    assert _question_id(target) == "00000000-0000-4000-8000-000000000003"
+    assert target.read_text(encoding="utf-8").count("id:") == 1
+    assert _question_id(pack_path / "02" / "question.md") == preserved_id
 
 
 def test_cli_returns_one_for_missing_pack(tmp_path, capsys):

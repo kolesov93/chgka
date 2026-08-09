@@ -1,4 +1,5 @@
 ---
+id: 144f5fda-85dc-5aec-91c5-c69f4c89a0ea
 title: Тестовый блиц
 type: blitz
 ---

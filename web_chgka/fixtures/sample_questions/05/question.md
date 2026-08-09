@@ -1,4 +1,5 @@
 ---
+id: 27a5863b-0331-4a97-a6c4-e4d71ad8ebe7
 title: Голос из прошлого
 author: Дмитрий Иванов
 author_photo: author.jpg

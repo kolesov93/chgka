@@ -1,4 +1,5 @@
 ---
+id: 9aa28a26-9a73-4826-8b1e-8f26c52bee5b
 title: Музыкальный ответ
 author: Игорь Белов
 author_photo: author.jpg

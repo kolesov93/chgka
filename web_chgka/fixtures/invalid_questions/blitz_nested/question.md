@@ -1,4 +1,5 @@
 ---
+id: 0c01f586-d100-5ddf-8d48-ca160abde026
 title: Вложенный блиц
 type: blitz
 ---

@@ -1,4 +1,5 @@
 ---
+id: 8d74d29f-6ec6-48ed-bf5d-c2da8789badf
 title: Музыкальная загадка
 author: Андрей Козлов
 city: Казань

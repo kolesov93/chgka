@@ -59,6 +59,11 @@ python3 -m pytest -q
 python3 -m validate_pack /path/to/pack
 ```
 
+Для старого пака без обязательных UUID сначала выполните
+`python3 -m assign_question_ids /path/to/pack`, сохраните изменённые
+`question.md`, а затем запустите валидатор. Подробности формата — в
+[`docs/QUESTION_PACKS.md`](docs/QUESTION_PACKS.md).
+
 ### Frontend
 
 Из каталога `web_chgka/frontend`:

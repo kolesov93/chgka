@@ -1,4 +1,5 @@
 ---
+id: a3b2bab2-3687-4119-85a5-96ecc330b3e0
 title: Кинематографическая загадка
 author: Анна Смирнова
 author_photo: author.jpg

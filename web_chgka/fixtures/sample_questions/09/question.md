@@ -1,4 +1,5 @@
 ---
+id: 505e751b-025a-4d05-b0dc-9067f822ec70
 title: Литературный псевдоним
 author: Мария Кузнецова
 author_photo: author.jpg

@@ -1,4 +1,5 @@
 ---
+id: ea987204-95ef-56b5-8950-12554a9faf8d
 title: Неизвестный тип
 type: unknown
 ---

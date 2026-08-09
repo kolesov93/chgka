@@ -1,4 +1,5 @@
 ---
+id: 3656cb65-9c52-4d1f-a0f1-dde9a3aa322d
 title: Архитектурное чудо
 author: Павел Морозов
 author_photo: author.jpg

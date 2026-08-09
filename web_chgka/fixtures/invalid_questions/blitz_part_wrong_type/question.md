@@ -1,4 +1,5 @@
 ---
+id: 2dcdfc09-ad07-5fa1-8c5e-cf9fca52703f
 title: Блиц с подвопросом неправильного типа
 type: blitz
 ---

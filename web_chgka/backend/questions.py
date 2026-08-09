@@ -7,6 +7,7 @@ See fixtures/sample_questions for examples.
 
 import hashlib
 import re
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -49,6 +50,7 @@ class Question:
     and `parts` contains the actual sub-questions.
     """
     # Required
+    id: str
     title: str
     question_html: str  # markdown converted to HTML with media placeholders
     
@@ -88,6 +90,24 @@ _IMAGE_EXTS = {".jpg", ".jpeg", ".png"}
 _AUDIO_EXTS = {".mp3", ".wav", ".ogg"}
 _VIDEO_EXTS = {".mp4", ".webm"}
 _SECTOR_DIR_RE = re.compile(r"^\d{2}$")
+
+
+def _parse_question_id(fm: dict[str, str], *, required: bool) -> str:
+    raw_id = fm.get("id", "").strip()
+    if not raw_id:
+        if required:
+            raise QuestionParseError("Missing required field: id")
+        return ""
+    try:
+        parsed = uuid.UUID(raw_id)
+    except ValueError as error:
+        raise QuestionParseError("Question id must be a valid UUID") from error
+    canonical = str(parsed)
+    if raw_id != canonical:
+        raise QuestionParseError(
+            f"Question id must use canonical lowercase UUID format: {canonical}"
+        )
+    return canonical
 
 
 def _read_text_file(path: Path) -> str:
@@ -350,7 +370,7 @@ def _parse_optional_bool(fm: dict[str, str], field_name: str) -> bool:
     raise QuestionParseError(f"{field_name} must be true or false")
 
 
-def _parse_one_question_folder(folder: Path) -> Question:
+def _parse_one_question_folder(folder: Path, *, require_id: bool = True) -> Question:
     qmd = folder / "question.md"
     if not qmd.exists():
         raise QuestionParseError(f"question.md not found in {folder}")
@@ -361,6 +381,7 @@ def _parse_one_question_folder(folder: Path) -> Question:
     title = fm.get("title")
     if not title:
         raise QuestionParseError("Missing required field: title")
+    question_id = _parse_question_id(fm, required=require_id)
 
     qtype_raw = fm.get("type", "normal").strip().lower()
     try:
@@ -413,6 +434,7 @@ def _parse_one_question_folder(folder: Path) -> Question:
     _validate_media_usage(folder, media_links_from_md)
 
     return Question(
+        id=question_id,
         title=title,
         question_html=question_html,
         answer_html=answer_html,
@@ -436,7 +458,7 @@ def _existing_part_dirs(folder: Path) -> list[Path]:
     return [p for p in _part_dirs(folder) if p.exists() and p.is_dir()]
 
 
-def parse_question(folder: Path) -> Question:
+def parse_question(folder: Path, *, require_id: bool = True) -> Question:
     """
     Parse a question from a folder.
     
@@ -453,7 +475,7 @@ def parse_question(folder: Path) -> Question:
     if not folder.exists() or not folder.is_dir():
         raise QuestionParseError(f"Question folder does not exist: {folder}")
 
-    q = _parse_one_question_folder(folder)
+    q = _parse_one_question_folder(folder, require_id=require_id)
     existing_parts = _existing_part_dirs(folder)
 
     if q.type == QuestionType.NORMAL:
@@ -475,7 +497,7 @@ def parse_question(folder: Path) -> Question:
     for p in _part_dirs(folder):
         if not p.exists() or not p.is_dir():
             raise QuestionParseError("Blitz question must have exactly 3 parts (01/02/03)")
-        part_q = _parse_one_question_folder(p)
+        part_q = _parse_one_question_folder(p, require_id=require_id)
         if part_q.type != QuestionType.NORMAL:
             raise QuestionParseError("Blitz part has invalid type (must be normal)")
         if part_q.answer_html is None:
@@ -508,6 +530,24 @@ class QuestionPack:
     def __len__(self) -> int:
         return len(self.questions)
 
+    @property
+    def fingerprint(self) -> str:
+        """Stable identity for this exact ordered set of sectors and parts."""
+        ordered_ids = [
+            question_id
+            for question in self.questions
+            for question_id in [question.id, *(part.id for part in question.parts)]
+        ]
+        return hashlib.sha256("\n".join(ordered_ids).encode("utf-8")).hexdigest()
+
+    @property
+    def question_ids(self) -> tuple[str, ...]:
+        return tuple(
+            question_id
+            for question in self.questions
+            for question_id in [question.id, *(part.id for part in question.parts)]
+        )
+
 
 def _validate_pack_authors(question: Question) -> None:
     if not question.author:
@@ -519,7 +559,11 @@ def _validate_pack_authors(question: Question) -> None:
             )
 
 
-def parse_question_pack(pack_folder: Path) -> QuestionPack:
+def parse_question_pack(
+    pack_folder: Path,
+    *,
+    require_ids: bool = True,
+) -> QuestionPack:
     """
     Parse a question pack from a folder containing 13 question subfolders: 01..13.
 
@@ -583,11 +627,25 @@ def parse_question_pack(pack_folder: Path) -> QuestionPack:
         if not qdir.exists() or not qdir.is_dir():
             raise QuestionParseError(f"Missing question folder for sector {sector}: {qdir}")
         try:
-            question = parse_question(qdir)
+            question = parse_question(qdir, require_id=require_ids)
             _validate_pack_authors(question)
             questions.append(question)
         except QuestionParseError as e:
             raise QuestionParseError(f"Failed to parse sector {sector} ({qdir}): {e}") from e
+
+    question_ids = [
+        question_id
+        for question in questions
+        for question_id in [question.id, *(part.id for part in question.parts)]
+        if question_id
+    ]
+    if len(question_ids) != len(set(question_ids)):
+        duplicate = next(
+            question_id
+            for question_id in question_ids
+            if question_ids.count(question_id) > 1
+        )
+        raise QuestionParseError(f"Duplicate question id in pack: {duplicate}")
 
     return QuestionPack(
         questions=questions,
