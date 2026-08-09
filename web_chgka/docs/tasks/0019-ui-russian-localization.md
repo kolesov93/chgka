@@ -1,7 +1,7 @@
 # 0019: Русификация пользовательского интерфейса
 
 Branch: `task/ui-russian-localization`
-Status: Implemented locally; awaiting browser smoke and remote CI
+Status: Accepted; ready to merge into `web`
 
 ## Goal
 
@@ -37,7 +37,7 @@ Status: Implemented locally; awaiting browser smoke and remote CI
 
 ## Local verification
 
-- `python3 -m pytest -q`: 191 passed.
+- `python3 -W error -m pytest -q`: 192 passed.
 - `npm ci` and `npm test`: 10 test files passed.
 - `npm run build`: passed.
 - `docker compose config --quiet`: passed outside the restricted sandbox required by the local snap package.
@@ -50,3 +50,8 @@ Status: Implemented locally; awaiting browser smoke and remote CI
 3. Open «Восстановление игры»; check sector type labels, phase buttons, timer controls and confirmation text. Submit an invalid score and check the Russian warning.
 4. Open sample sector 03 audio; check «Предпросмотр», the Russian section name and «Воспроизвести / Пауза / Остановить» on the host, plus the Russian playback state on the player.
 5. Open sample sector 09 black box; check the Russian start/stop copy and return to the table after stopping.
+
+## Acceptance
+
+- The user approved integration into `web` on 2026-08-09.
+- Remote CI remains the publication gate after pushing the merged `web` branch.
