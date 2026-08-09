@@ -55,3 +55,14 @@ Status: Ready for browser acceptance
 - `python3 -m validate_pack ../fixtures/sample_questions`: passed, 13 sectors / 19 authored question units / 6 blitz parts.
 - Compose YAML and the `/data` journal mount were parsed and asserted independently. Native `docker compose config --quiet` is blocked before reading the project by the installed Snap `snap-confine` capability error (`cap_dac_override`), the same environment defect recorded for earlier tasks.
 - Focused two-browser host/player smoke: pending.
+
+## Focused browser smoke
+
+1. Запустить development Compose, открыть `/admin` и `/play`, войти ведущим и одним игроком. Убедиться, что игрок нигде не видит режимы и историю.
+2. На waiting screen проверить default «Тестовая», переключить на «Обычная», обновить `/admin` и убедиться, что режим сохранился.
+3. Начать игру и через Live Ops открыть часть 1 блица. Пройти «обсуждение → ответ команды → верно → следующая часть», тем самым открыть часть 2.
+4. Раскрыть «История игр», нажать «Обновить»: текущая сессия должна показывать два открытых вопроса, а детали — две разные части 1/3 и 2/3 плюс полный лог действий.
+5. Обновить `/admin` или переподключить ведущего, затем снова обновить историю. Количество открытий и вопросов не должно вырасти.
+6. Переключить текущую сессию в «Тестовая»: она остаётся в списке и с полным логом, но её вопросы исчезают из сводки обычных игр. Вернуть «Обычная» — вопросы снова появляются.
+7. Выполнить Live Ops «Сбросить до интро». Предыдущая сессия должна стать «Сброшена» с сохранённым счётом, новая — автоматически «Тестовая».
+8. Перезапустить только backend-контейнер. История должна сохраниться, а незакрытая новая сессия — стать «Прервана». Текущий `AppState` при этом ожидаемо начнётся заново.
