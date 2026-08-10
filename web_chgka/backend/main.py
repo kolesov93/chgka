@@ -102,6 +102,7 @@ ADMIN_NAME = 'Господин Ведущий'
 NORMAL_DISCUSSION_SECONDS = 60
 BLITZ_DISCUSSION_SECONDS = 20
 TEN_SECONDS = 10
+HISTORY_CLIENT_KIND = "history"
 
 # Media access
 MEDIA_TOKEN_TTL_SECONDS = 10 * 60  # 10 minutes
@@ -736,6 +737,7 @@ async def restore_session(sid, data):
     payload = data if isinstance(data, dict) else {}
     admin_token = payload.get('token')
     player_token = payload.get('player_token')
+    history_only = payload.get("client_kind") == HISTORY_CLIENT_KIND
     
     session_data = {'role': 'player'}
     
@@ -743,8 +745,22 @@ async def restore_session(sid, data):
     if admin_token and validate_admin_token(admin_token):
         session_data['role'] = 'admin'
         session_data['admin_token'] = admin_token
+        if history_only:
+            session_data["client_kind"] = HISTORY_CLIENT_KIND
         await sio.save_session(sid, session_data)
         logger.info(f"Session restored for {sid}: admin")
+
+        if history_only:
+            await sio.emit('role_update', {'role': 'admin'}, to=sid)
+            expires_at = admin_tokens.expires_at(admin_token)
+            await sio.emit(
+                'auth_restored',
+                {
+                    'expires_at_ms': int(expires_at * 1000) if expires_at is not None else None,
+                },
+                to=sid,
+            )
+            return
         
         # Ищем админа в списке игроков
         admin_record = next((p for p in players_list if p['role'] == 'admin'), None)
@@ -816,8 +832,11 @@ async def restore_session(sid, data):
 @sio.event
 async def authenticate_admin(sid, data):
     """Проверка пароля и выдача токена"""
+    global players_list
+
     payload = data if isinstance(data, dict) else {}
     password = payload.get('password')
+    history_only = payload.get("client_kind") == HISTORY_CLIENT_KIND
 
     if _admin_password_matches(password):
         previous_admins = [
@@ -828,7 +847,15 @@ async def authenticate_admin(sid, data):
         token = generate_admin_token()
         await sio.save_session(
             sid,
-            {'role': 'admin', 'admin_token': token},
+            {
+                'role': 'admin',
+                'admin_token': token,
+                **(
+                    {"client_kind": HISTORY_CLIENT_KIND}
+                    if history_only
+                    else {}
+                ),
+            },
         )
         logger.info(f"Admin authenticated: {sid}")
 
@@ -845,6 +872,22 @@ async def authenticate_admin(sid, data):
                     {'message': 'Выполнен новый вход ведущего. Войдите повторно при необходимости.'},
                     to=previous_sid,
                 )
+
+        if history_only:
+            players_list = [
+                player for player in players_list if player.get("role") != "admin"
+            ]
+            expires_at = admin_tokens.expires_at(token)
+            await sio.emit(
+                'auth_success',
+                {
+                    'token': token,
+                    'expires_at_ms': int(expires_at * 1000) if expires_at is not None else None,
+                },
+                to=sid,
+            )
+            await sio.emit('role_update', {'role': 'admin'}, to=sid)
+            return
         
         # Добавляем/обновляем админа
         admin_record = next((p for p in players_list if p['role'] == 'admin'), None)

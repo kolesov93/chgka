@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ENTRYPOINT_ADMIN } from '../entrypoint';
+import { ENTRYPOINT_ADMIN_HISTORY, isAdminEntrypoint } from '../entrypoint';
 
 
 function PlayerLoginForm({ socket }) {
@@ -66,7 +66,7 @@ function PlayerLoginForm({ socket }) {
 }
 
 
-function AdminLoginForm({ socket }) {
+function AdminLoginForm({ socket, historyOnly = false }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -101,7 +101,10 @@ function AdminLoginForm({ socket }) {
 
     setIsSubmitting(true);
     setError('');
-    socket.emit('authenticate_admin', { password: normalizedPassword });
+    socket.emit('authenticate_admin', {
+      password: normalizedPassword,
+      ...(historyOnly ? { client_kind: 'history' } : {}),
+    });
   };
 
   return (
@@ -140,7 +143,7 @@ function AdminLoginForm({ socket }) {
 
 
 export function LoginScreen({ socket, entrypoint, sessionNotice = '' }) {
-  const isAdmin = entrypoint === ENTRYPOINT_ADMIN;
+  const isAdmin = isAdminEntrypoint(entrypoint);
 
   return (
     <div
@@ -169,7 +172,12 @@ export function LoginScreen({ socket, entrypoint, sessionNotice = '' }) {
         )}
 
         {isAdmin
-          ? <AdminLoginForm socket={socket} />
+          ? (
+              <AdminLoginForm
+                socket={socket}
+                historyOnly={entrypoint === ENTRYPOINT_ADMIN_HISTORY}
+              />
+            )
           : <PlayerLoginForm socket={socket} />}
       </div>
     </div>

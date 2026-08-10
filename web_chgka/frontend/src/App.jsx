@@ -1,4 +1,5 @@
 import { GameTable } from './components/GameTable';
+import { GameHistoryScreen } from './components/GameHistoryScreen';
 import { ScoreBoard } from './components/ScoreBoard';
 import { LoginScreen } from './components/LoginScreen';
 import { WaitingRoom } from './components/WaitingRoom';
@@ -17,8 +18,9 @@ import { useSocketSoundEvents } from './hooks/useSocketSoundEvents';
 import { useSoundFade } from './hooks/useSoundFade';
 import { socket } from './socket';
 import { phaseLabel } from './uiText';
+import { ENTRYPOINT_ADMIN_HISTORY } from './entrypoint';
 
-function App({ entrypoint }) {
+function GameApp({ entrypoint }) {
   const {
     gameState,
     gameSettings,
@@ -100,12 +102,7 @@ function App({ entrypoint }) {
         <>
           {notificationsPanel}
           {userHeader}
-          <WaitingRoom
-            socket={socket}
-            gameState={gameState}
-            players={players}
-            addNotification={addNotification}
-          />
+          <WaitingRoom socket={socket} players={players} />
         </>
       );
     }
@@ -212,6 +209,47 @@ function App({ entrypoint }) {
       )}
     </div>
   );
+}
+
+function HistoryApp({ entrypoint }) {
+  const {
+    myRole,
+    myName,
+    sessionNotice,
+    notifications,
+    addNotification,
+    dismissNotification,
+    logout,
+  } = useGameSession(entrypoint);
+  const isAdmin = myRole === 'admin';
+
+  if (!isAdmin) {
+    return (
+      <LoginScreen
+        socket={socket}
+        entrypoint={entrypoint}
+        sessionNotice={sessionNotice}
+      />
+    );
+  }
+
+  return (
+    <div className="relative min-h-screen">
+      <NotificationsPanel
+        notifications={notifications}
+        onDismiss={dismissNotification}
+      />
+      <UserHeader name={myName} role={myRole} onLogout={logout} />
+      <GameHistoryScreen socket={socket} addNotification={addNotification} />
+    </div>
+  );
+}
+
+function App({ entrypoint }) {
+  if (entrypoint === ENTRYPOINT_ADMIN_HISTORY) {
+    return <HistoryApp entrypoint={entrypoint} />;
+  }
+  return <GameApp entrypoint={entrypoint} />;
 }
 
 export default App;

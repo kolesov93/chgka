@@ -1,4 +1,8 @@
-import { ENTRYPOINT_ADMIN, ENTRYPOINT_PLAYER } from './entrypoint.js';
+import {
+  ENTRYPOINT_ADMIN_HISTORY,
+  ENTRYPOINT_PLAYER,
+  isAdminEntrypoint,
+} from './entrypoint.js';
 
 export const ADMIN_TOKEN_KEY = 'chgka_admin_token';
 export const PLAYER_TOKEN_KEY = 'chgka_player_token';
@@ -7,9 +11,16 @@ const DEFAULT_AUTH_EXPIRED_MESSAGE =
   'Сессия ведущего истекла. Введите пароль ещё раз.';
 
 export function getSessionRestorePayload(storage, entrypoint) {
-  if (entrypoint === ENTRYPOINT_ADMIN) {
+  if (isAdminEntrypoint(entrypoint)) {
     const adminToken = storage.getItem(ADMIN_TOKEN_KEY);
-    return adminToken ? { token: adminToken } : null;
+    return adminToken
+      ? {
+          token: adminToken,
+          ...(entrypoint === ENTRYPOINT_ADMIN_HISTORY
+            ? { client_kind: 'history' }
+            : {}),
+        }
+      : null;
   }
   if (entrypoint === ENTRYPOINT_PLAYER) {
     const playerToken = storage.getItem(PLAYER_TOKEN_KEY);

@@ -30,7 +30,8 @@ Status: Ready for browser acceptance
 - `GameJournal` создаёт versioned SQLite schema для сессий и упорядоченных событий. Lobby/active/completed/reset/interrupted, итоговый счёт, pack identity и immediate commits покрыты repository-тестами.
 - Все прежние строки live-лога теперь рождаются из typed transition events либо записываются как typed handler events. In-memory `logs` остаётся совместимой 50-строчной проекцией.
 - `question_opened` обогащается на backend постоянным ID, parent ID, сектором, индексом части, названием и автором. Обычное вращение, Live Ops open и переход к следующей части блица являются авторитетными точками записи; reconnect — нет.
-- Ведущий на waiting screen и в обычной панели видит режим текущей игры, список сессий, regular-only сводку вопросов, точные части блица и полный хронологический лог. Режим текущей и прошлой сессии можно исправить.
+- На отдельном защищённом entrypoint `/admin/history` ведущий видит режим текущей игры, список сессий, regular-only сводку вопросов, точные части блица и полный хронологический лог. Waiting screen и live-панель `/admin` не показывают историю или режим. Режим текущей и прошлой сессии можно исправить.
+- History-only login/restore использует тот же admin token, но не добавляет ведущего в live roster, не создаёт пустую игровую сессию и при restore того же токена не перехватывает live host socket record.
 - Development Compose хранит базу в gitignored `./runtime-data/chgka.sqlite3`; production config требует абсолютный durable `CHGKA_DB_PATH`.
 
 Каждая новая development-сессия снова получает безопасный default `debug`, даже если предыдущую игру ведущий пометил regular. В production новый default — `regular`.
@@ -49,20 +50,21 @@ Status: Ready for browser acceptance
 
 ## Verification
 
-- `python3 -W error -m pytest -q`: 204 passed.
+- `python3 -W error -m pytest -q`: 206 passed.
 - `npm test`: 11 test files passed.
 - `npm run build`: passed.
+- Direct Vite request to `/admin/history`: HTTP 200 with SPA entrypoint.
 - `python3 -m validate_pack ../fixtures/sample_questions`: passed, 13 sectors / 19 authored question units / 6 blitz parts.
 - Compose YAML and the `/data` journal mount were parsed and asserted independently. Native `docker compose config --quiet` is blocked before reading the project by the installed Snap `snap-confine` capability error (`cap_dac_override`), the same environment defect recorded for earlier tasks.
 - Focused two-browser host/player smoke: pending.
 
 ## Focused browser smoke
 
-1. Запустить development Compose, открыть `/admin` и `/play`, войти ведущим и одним игроком. Убедиться, что игрок нигде не видит режимы и историю.
-2. На waiting screen проверить default «Тестовая», переключить на «Обычная», обновить `/admin` и убедиться, что режим сохранился.
-3. Начать игру и через Live Ops открыть часть 1 блица. Пройти «обсуждение → ответ команды → верно → следующая часть», тем самым открыть часть 2.
-4. Раскрыть «История игр», нажать «Обновить»: текущая сессия должна показывать два открытых вопроса, а детали — две разные части 1/3 и 2/3 плюс полный лог действий.
-5. Обновить `/admin` или переподключить ведущего, затем снова обновить историю. Количество открытий и вопросов не должно вырасти.
-6. Переключить текущую сессию в «Тестовая»: она остаётся в списке и с полным логом, но её вопросы исчезают из сводки обычных игр. Вернуть «Обычная» — вопросы снова появляются.
-7. Выполнить Live Ops «Сбросить до интро». Предыдущая сессия должна стать «Сброшена» с сохранённым счётом, новая — автоматически «Тестовая».
+1. Запустить development Compose, открыть `/admin/history`. Без admin token должна быть только форма пароля; после входа — только экран «История игр», без стола, игроков и игровых кнопок.
+2. Проверить default «Тестовая», переключить на «Обычная», обновить `/admin/history` и убедиться, что режим сохранился. Сам вход в историю не должен добавлять пустую сессию.
+3. Перейти на `/admin`, открыть рядом `/play`, войти игроком и начать игру. На waiting screen и во всех фазах панели ведущего не должно быть истории или режима.
+4. Через Live Ops открыть часть 1 блица. Пройти «обсуждение → ответ команды → верно → следующая часть», тем самым открыть часть 2.
+5. Открыть `/admin/history` и обновить данные: текущая сессия должна показывать два открытых вопроса, а детали — две разные части 1/3 и 2/3 плюс полный лог действий.
+6. Обновить `/admin/history`. Количество открытий и вопросов не должно вырасти. Переключить сессию в «Тестовая»: полный лог остаётся, а её вопросы исчезают из regular-сводки; возврат в «Обычная» возвращает их.
+7. Вернуться на `/admin`, выполнить Live Ops «Сбросить до интро», затем проверить `/admin/history`: предыдущая сессия «Сброшена» с сохранённым счётом, новая автоматически «Тестовая».
 8. Перезапустить только backend-контейнер. История должна сохраниться, а незакрытая новая сессия — стать «Прервана». Текущий `AppState` при этом ожидаемо начнётся заново.

@@ -656,6 +656,84 @@ def test_admin_login_replaces_previous_token_and_session(monkeypatch):
     )
 
 
+def test_history_login_is_authorized_without_creating_a_game_session(monkeypatch):
+    store = AdminTokenStore(
+        60,
+        clock=lambda: 100.0,
+        token_factory=lambda: "history-admin-token",
+    )
+    fake_sio = FakeSio(yield_on_emit=False)
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "admin_tokens", store)
+    monkeypatch.setattr(main, "players_list", [])
+    monkeypatch.setattr(
+        main,
+        "APP_CONFIG",
+        replace(main.APP_CONFIG, admin_password="correct-password"),
+    )
+
+    asyncio.run(
+        main.authenticate_admin(
+            "history",
+            {
+                "password": "correct-password",
+                "client_kind": main.HISTORY_CLIENT_KIND,
+            },
+        )
+    )
+
+    assert fake_sio.sessions["history"] == {
+        "role": "admin",
+        "admin_token": "history-admin-token",
+        "client_kind": main.HISTORY_CLIENT_KIND,
+    }
+    assert main.players_list == []
+    assert main.game_journal.list_sessions() == []
+    assert [event for event, _data, _kwargs in fake_sio.events] == [
+        "auth_success",
+        "role_update",
+    ]
+
+
+def test_history_restore_does_not_take_over_the_game_admin_record(monkeypatch):
+    store = AdminTokenStore(
+        60,
+        clock=lambda: 100.0,
+        token_factory=lambda: "shared-admin-token",
+    )
+    token = store.issue()
+    fake_sio = FakeSio(yield_on_emit=False)
+    game_admin = {
+        "sid": "game-admin",
+        "name": main.ADMIN_NAME,
+        "role": "admin",
+        "token": token,
+        "online": True,
+    }
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "admin_tokens", store)
+    monkeypatch.setattr(main, "players_list", [game_admin])
+
+    asyncio.run(
+        main.restore_session(
+            "history",
+            {"token": token, "client_kind": main.HISTORY_CLIENT_KIND},
+        )
+    )
+
+    assert fake_sio.sessions["history"] == {
+        "role": "admin",
+        "admin_token": token,
+        "client_kind": main.HISTORY_CLIENT_KIND,
+    }
+    assert main.players_list == [game_admin]
+    assert main.game_journal.list_sessions() == []
+    assert [event for event, _data, _kwargs in fake_sio.events] == [
+        "role_update",
+        "auth_restored",
+    ]
+
+
 def test_admin_password_comparison_supports_unicode(monkeypatch):
     monkeypatch.setattr(
         main,

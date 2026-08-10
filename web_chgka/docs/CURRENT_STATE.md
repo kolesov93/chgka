@@ -14,7 +14,7 @@
 - Task 0020 planning commit: `b5e324d` (`Plan game event journal task`).
 - Question-ID commit: `b28cf8e` (`Add persistent question identifiers`).
 - Implementation commit: `d0b2bb5` (`Implement durable game event journal`) adds versioned SQLite sessions/events, typed transition logging, exact `question_opened` metadata, regular-only history queries, mode correction, admin-only history UI, and durable Compose storage.
-- Local verification: 204 backend tests with warnings as errors, 11 frontend test files, production frontend build, and sample-pack validation pass. Native Compose validation remains blocked by the installed Snap `snap-confine` capability failure; independent YAML/mount assertions pass.
+- Local verification: 206 backend tests with warnings as errors, 11 frontend test files, production frontend build, direct `/admin/history` SPA response, and sample-pack validation pass. Native Compose validation remains blocked by the installed Snap `snap-confine` capability failure; independent YAML/mount assertions pass.
 - Next continuation point: run the focused smoke in `docs/tasks/0020-game-event-journal.md`, then close and merge only after acceptance.
 
 - `web` and `origin/web` are synchronized at `e086f39` before task 0019.

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ENTRYPOINT_ADMIN } from '../entrypoint';
+import { isAdminEntrypoint } from '../entrypoint';
 import { socket } from '../socket';
 import {
   ADMIN_TOKEN_KEY,
@@ -59,7 +59,7 @@ export function useGameSession(entrypoint) {
   }, []);
 
   useEffect(() => {
-    if (entrypoint !== ENTRYPOINT_ADMIN) return undefined;
+    if (!isAdminEntrypoint(entrypoint)) return undefined;
     window.authenticateAdmin = (password) => {
       socket.emit('authenticate_admin', { password });
     };

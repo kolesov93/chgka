@@ -20,6 +20,7 @@ docker compose up --build
 
 - игроки: `http://localhost:5173/play`
 - ведущий: `http://localhost:5173/admin`
+- история игр: `http://localhost:5173/admin/history`
 - корневой `http://localhost:5173/` перенаправляет на player-entrypoint
 - backend: `http://localhost:8000`
 
@@ -86,6 +87,7 @@ npm run build
 
 - игроки: `http://localhost:5173/play`
 - ведущий: `http://localhost:5173/admin`
+- история игр: `http://localhost:5173/admin/history`
 - корневой `http://localhost:5173/` перенаправляет на player-entrypoint
 - backend: `http://localhost:8000`
 
@@ -96,8 +98,8 @@ npm run build
 - Production допускает только `CHGKA_ENV=production`, пароль длиной не менее 12 символов (не `admin123`) и точные HTTPS origins. Пример полного набора переменных есть в [`.env.example`](.env.example); сам backend `.env`-файлы не загружает.
 - В production `CHGKA_DB_PATH` должен быть абсолютным путём на durable volume. SQLite хранит историю, но не восстанавливает текущий `AppState`, игроков или токены после рестарта.
 - `ADMIN_TOKEN_TTL_SECONDS` необязателен: по умолчанию admin-сессия действует 12 часов без продления при reconnect; допустимый диапазон — от 60 секунд до 24 часов.
-- `/play` восстанавливает только player token, а `/admin` — только admin token. Разделение форм улучшает UX, но не является границей безопасности: backend по-прежнему проверяет пароль, роль и токен для каждой привилегированной операции.
-- Прямое открытие и refresh `/play` и `/admin` работают в Vite development/preview. Будущий production frontend server/reverse proxy должен отдавать `index.html` для обоих SPA-путей.
+- `/play` восстанавливает только player token, а `/admin` и `/admin/history` — только admin token. История не отображается на экранах запуска/ведения игры и доступна отдельной страницей после той же авторизации ведущего. Разделение форм улучшает UX, но не является границей безопасности: backend по-прежнему проверяет пароль, роль и токен для каждой привилегированной операции.
+- Прямое открытие и refresh `/play`, `/admin` и `/admin/history` работают в Vite development/preview. Будущий production frontend server/reverse proxy должен отдавать `index.html` для всех трёх SPA-путей.
 
 ## Диагностика CORS локально
 
