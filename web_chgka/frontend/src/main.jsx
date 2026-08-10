@@ -1,10 +1,11 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
-import { resolveEntrypoint } from './entrypoint.js'
+import { entrypointDocumentTitle, resolveEntrypoint } from './entrypoint.js'
 import './index.css'
 
 const { entrypoint, canonicalPath } = resolveEntrypoint(window.location.pathname)
+document.title = entrypointDocumentTitle(entrypoint)
 if (window.location.pathname !== canonicalPath) {
   window.history.replaceState(
     window.history.state,
@@ -18,4 +19,3 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <App entrypoint={entrypoint} />
   </React.StrictMode>,
 )
-

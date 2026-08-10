@@ -6,6 +6,24 @@ export const PLAYER_ENTRY_PATH = '/play';
 export const ADMIN_ENTRY_PATH = '/admin';
 export const ADMIN_HISTORY_PATH = '/admin/history';
 
+const BASE_DOCUMENT_TITLE = 'Что? Где? Когда?';
+
+
+export function entrypointDocumentTitle(entrypoint) {
+  if (entrypoint === ENTRYPOINT_ADMIN) return `${BASE_DOCUMENT_TITLE} — Ведущий`;
+  if (entrypoint === ENTRYPOINT_ADMIN_HISTORY) {
+    return `${BASE_DOCUMENT_TITLE} — История игр`;
+  }
+  return BASE_DOCUMENT_TITLE;
+}
+
+
+export function entrypointLoginSubtitle(entrypoint) {
+  if (entrypoint === ENTRYPOINT_ADMIN) return '[ведущий]';
+  if (entrypoint === ENTRYPOINT_ADMIN_HISTORY) return '[история игр]';
+  return null;
+}
+
 
 export function isAdminEntrypoint(entrypoint) {
   return entrypoint === ENTRYPOINT_ADMIN || entrypoint === ENTRYPOINT_ADMIN_HISTORY;

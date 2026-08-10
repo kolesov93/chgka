@@ -8,6 +8,8 @@ import {
   ENTRYPOINT_ADMIN_HISTORY,
   ENTRYPOINT_PLAYER,
   PLAYER_ENTRY_PATH,
+  entrypointDocumentTitle,
+  entrypointLoginSubtitle,
   resolveEntrypoint,
   isAdminEntrypoint,
 } from './entrypoint.js';
@@ -53,4 +55,23 @@ test('nested admin-looking paths do not expose the host entrypoint', () => {
   assert.equal(resolveEntrypoint('/admin/reset').entrypoint, ENTRYPOINT_PLAYER);
   assert.equal(resolveEntrypoint('/admin/history/export').entrypoint, ENTRYPOINT_PLAYER);
   assert.equal(resolveEntrypoint('/play/admin').entrypoint, ENTRYPOINT_PLAYER);
+});
+
+
+test('entrypoints provide distinct document titles and admin login subtitles', () => {
+  assert.equal(
+    entrypointDocumentTitle(ENTRYPOINT_ADMIN),
+    'Что? Где? Когда? — Ведущий',
+  );
+  assert.equal(entrypointLoginSubtitle(ENTRYPOINT_ADMIN), '[ведущий]');
+  assert.equal(
+    entrypointDocumentTitle(ENTRYPOINT_ADMIN_HISTORY),
+    'Что? Где? Когда? — История игр',
+  );
+  assert.equal(
+    entrypointLoginSubtitle(ENTRYPOINT_ADMIN_HISTORY),
+    '[история игр]',
+  );
+  assert.equal(entrypointDocumentTitle(ENTRYPOINT_PLAYER), 'Что? Где? Когда?');
+  assert.equal(entrypointLoginSubtitle(ENTRYPOINT_PLAYER), null);
 });

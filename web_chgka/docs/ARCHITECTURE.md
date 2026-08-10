@@ -26,7 +26,7 @@ FastAPI + python-socketio (backend/main.py)
 ### Frontend
 
 - `frontend/src/App.jsx` owns only top-level phase routing and the main page layout.
-- `frontend/src/entrypoint.js` resolves the exact `/play`, `/admin`, and `/admin/history` entrypoints before React renders. `/`, trailing-slash aliases, and unknown paths are canonicalized without adding a routing dependency.
+- `frontend/src/entrypoint.js` resolves the exact `/play`, `/admin`, and `/admin/history` entrypoints before React renders and owns their document titles/login subtitles. `/`, trailing-slash aliases, and unknown paths are canonicalized without adding a routing dependency.
 - `frontend/src/socket.js` owns the single Socket.IO client plus backend/media URL construction.
 - `frontend/src/hooks/useGameSession.js` owns session restore, shared server state, players, pack/admin data, notifications, logout, and non-audio socket listeners.
 - `frontend/src/hooks/useDiscussionTimer.js` owns the admin countdown and one-shot local ten-second notification; `useSocketSoundEvents.js` bridges sound events to `useGameSound.js`.
@@ -39,7 +39,7 @@ FastAPI + python-socketio (backend/main.py)
 
 The frontend receives the shared game snapshot through `state_update`. Admin-only data uses separate events such as `players_update`, `pack_info`, and `admin_question`.
 
-`/play` renders only the player-name form and restores only `chgka_player_token`; `/admin` renders the live host application, while `/admin/history` renders only game mode/history. Both admin entrypoints use the host-password form and restore only `chgka_admin_token`. The other stored token is ignored rather than treated as a fallback. A history-only socket is authorized but is not inserted into the live host/player roster, does not create a journal session merely by logging in, and does not take over the live host record when restoring the same token. Logout and expiry stay on the current path. These paths are a UX boundary only: all privileged events still require backend role-plus-token authorization.
+`/play` renders only the player-name form and restores only `chgka_player_token`; `/admin` renders the live host application, while `/admin/history` renders only history. Both admin entrypoints use the host-password form and restore only `chgka_admin_token`. Their login screens are distinguished by `[ведущий]` / `[история игр]` subtitles and route-specific document titles; the player login keeps the unqualified product title and no subtitle. The other stored token is ignored rather than treated as a fallback. A history-only socket is authorized but is not inserted into the live host/player roster, does not create a journal session merely by logging in, and does not take over the live host record when restoring the same token. Logout and expiry stay on the current path. These paths are a UX boundary only: all privileged events still require backend role-plus-token authorization.
 
 UI components may emit existing user actions through the shared socket, but they do not create connections or own session restoration. The decomposition preserves the existing Socket.IO event names, payloads, and flat `state_update` contract.
 

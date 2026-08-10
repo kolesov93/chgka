@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ENTRYPOINT_ADMIN_HISTORY, isAdminEntrypoint } from '../entrypoint';
+import {
+  ENTRYPOINT_ADMIN_HISTORY,
+  entrypointLoginSubtitle,
+  isAdminEntrypoint,
+} from '../entrypoint';
 
 
 function PlayerLoginForm({ socket }) {
@@ -145,6 +149,7 @@ function AdminLoginForm({ socket, historyOnly = false }) {
 export function LoginScreen({ socket, entrypoint, sessionNotice = '' }) {
   const isAdmin = isAdminEntrypoint(entrypoint);
   const isHistory = entrypoint === ENTRYPOINT_ADMIN_HISTORY;
+  const subtitle = entrypointLoginSubtitle(entrypoint);
 
   return (
     <div
@@ -161,9 +166,18 @@ export function LoginScreen({ socket, entrypoint, sessionNotice = '' }) {
             : 'border-slate-700 bg-slate-800'
         }`}
       >
-        <h1 className="mb-8 text-center text-3xl font-bold text-yellow-500">
+        <h1 className={`${subtitle ? 'mb-1' : 'mb-8'} text-center text-3xl font-bold text-yellow-500`}>
           Что? Где? Когда?
         </h1>
+        {subtitle && (
+          <div
+            className={`mb-8 text-center text-xs font-bold uppercase tracking-[0.2em] ${
+              isHistory ? 'text-teal-200' : 'text-indigo-200'
+            }`}
+          >
+            {subtitle}
+          </div>
+        )}
 
         {sessionNotice && (
           <p
