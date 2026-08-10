@@ -7,6 +7,7 @@ import pytest
 
 import main
 from auth import AdminTokenStore
+from game_journal import MODE_DEBUG, MODE_REGULAR, STATUS_COMPLETED, GameJournal
 from questions import parse_question_pack
 from sound_control import begin_fade, create_sound_control_state
 from state import (
@@ -77,6 +78,68 @@ def _isolated_global_settings(monkeypatch):
         "global_settings",
         {"volume": 1.0, "sound_control": create_sound_control_state()},
     )
+    journal = GameJournal(":memory:", default_mode=MODE_DEBUG)
+    journal.initialize()
+    sample_pack = parse_question_pack(SAMPLE_PACK)
+    journal.configure_pack(
+        fingerprint=sample_pack.fingerprint,
+        name="sample_questions",
+        path=SAMPLE_PACK,
+    )
+    monkeypatch.setattr(main, "game_journal", journal)
+    yield
+    journal.close()
+
+
+def test_blitz_open_events_use_each_part_id(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    pack = parse_question_pack(SAMPLE_PACK)
+    state = create_initial_app_state(
+        phase=PHASE_PRE_ROUND,
+        question_types=[question.type.value for question in pack.questions],
+    )
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", pack)
+    monkeypatch.setattr(main, "players_list", [])
+
+    async def run():
+        started = main.transition_start_spin(
+            state,
+            raw_angle=10.0,
+            raw_sector=4,
+            duration=1.0,
+            forced=True,
+        )
+        await main._apply_transition_effects(started)
+        await main._apply_transition_effects(
+            main.transition_complete_spin(state, spin_id=started.spin_id)
+        )
+        await main._apply_transition_effects(
+            main.transition_start_discussion(state, deadline_ms=100_000)
+        )
+        await main._apply_transition_effects(main.transition_team_answer(state))
+        await main._apply_transition_effects(
+            main.transition_score(
+                state,
+                winner="znatoki",
+                correct_sound="yes1",
+                incorrect_sound="no1",
+            )
+        )
+        await main._apply_transition_effects(
+            main.transition_end_round(state, gong_sound="gong1")
+        )
+
+    asyncio.run(run())
+
+    session_id = main.game_journal.list_sessions()[0]["id"]
+    opened = main.game_journal.get_session(session_id)["opened_questions"]
+    assert [item["question_id"] for item in opened] == [
+        pack.get_by_sector(4).parts[0].id,
+        pack.get_by_sector(4).parts[1].id,
+    ]
+    assert [item["part_index"] for item in opened] == [0, 1]
 
 
 def test_public_status_message_is_russian():
@@ -475,6 +538,9 @@ def test_end_round_at_six_broadcasts_final_state_and_sound(monkeypatch):
         event == "admin_question" and data is None
         for event, data, _kwargs in fake_sio.events
     )
+    persisted = main.game_journal.list_sessions()[0]
+    assert persisted["status"] == STATUS_COMPLETED
+    assert persisted["score"] == {"znatoki": 6, "tv": 4}
 
 
 def test_reset_during_spin_keeps_reset_state(monkeypatch):
@@ -588,6 +654,84 @@ def test_admin_login_replaces_previous_token_and_session(monkeypatch):
         event == "auth_expired" and kwargs == {"to": "old-admin"}
         for event, _data, kwargs in fake_sio.events
     )
+
+
+def test_history_login_is_authorized_without_creating_a_game_session(monkeypatch):
+    store = AdminTokenStore(
+        60,
+        clock=lambda: 100.0,
+        token_factory=lambda: "history-admin-token",
+    )
+    fake_sio = FakeSio(yield_on_emit=False)
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "admin_tokens", store)
+    monkeypatch.setattr(main, "players_list", [])
+    monkeypatch.setattr(
+        main,
+        "APP_CONFIG",
+        replace(main.APP_CONFIG, admin_password="correct-password"),
+    )
+
+    asyncio.run(
+        main.authenticate_admin(
+            "history",
+            {
+                "password": "correct-password",
+                "client_kind": main.HISTORY_CLIENT_KIND,
+            },
+        )
+    )
+
+    assert fake_sio.sessions["history"] == {
+        "role": "admin",
+        "admin_token": "history-admin-token",
+        "client_kind": main.HISTORY_CLIENT_KIND,
+    }
+    assert main.players_list == []
+    assert main.game_journal.list_sessions() == []
+    assert [event for event, _data, _kwargs in fake_sio.events] == [
+        "auth_success",
+        "role_update",
+    ]
+
+
+def test_history_restore_does_not_take_over_the_game_admin_record(monkeypatch):
+    store = AdminTokenStore(
+        60,
+        clock=lambda: 100.0,
+        token_factory=lambda: "shared-admin-token",
+    )
+    token = store.issue()
+    fake_sio = FakeSio(yield_on_emit=False)
+    game_admin = {
+        "sid": "game-admin",
+        "name": main.ADMIN_NAME,
+        "role": "admin",
+        "token": token,
+        "online": True,
+    }
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "admin_tokens", store)
+    monkeypatch.setattr(main, "players_list", [game_admin])
+
+    asyncio.run(
+        main.restore_session(
+            "history",
+            {"token": token, "client_kind": main.HISTORY_CLIENT_KIND},
+        )
+    )
+
+    assert fake_sio.sessions["history"] == {
+        "role": "admin",
+        "admin_token": token,
+        "client_kind": main.HISTORY_CLIENT_KIND,
+    }
+    assert main.players_list == [game_admin]
+    assert main.game_journal.list_sessions() == []
+    assert [event for event, _data, _kwargs in fake_sio.events] == [
+        "role_update",
+        "auth_restored",
+    ]
 
 
 def test_admin_password_comparison_supports_unicode(monkeypatch):
@@ -1058,6 +1202,147 @@ def test_live_ops_open_round_force_phase_timer_and_clear_question(monkeypatch):
     assert any(event == "stop_sound" for event, _, _ in fake_sio.events)
     assert state["game"]["phase"] == PHASE_PRE_ROUND
     assert state["game"]["round"] is None
+    session_id = main.game_journal.list_sessions()[0]["id"]
+    opened = main.game_journal.get_session(session_id)["opened_questions"]
+    assert opened == [
+        {
+            "author": pack.get_by_sector(3).author,
+            "city": pack.get_by_sector(3).city,
+            "kind": "normal",
+            "live_ops": True,
+            "pack_fingerprint": pack.fingerprint,
+            "parent_question_id": pack.get_by_sector(3).id,
+            "part_index": None,
+            "question_id": pack.get_by_sector(3).id,
+            "sector": 3,
+            "title": pack.get_by_sector(3).title,
+            "opened_at": opened[0]["opened_at"],
+            "open_count": 1,
+            "last_opened_at": opened[0]["last_opened_at"],
+        }
+    ]
+
+
+def test_resending_current_question_does_not_journal_another_open(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    pack = parse_question_pack(SAMPLE_PACK)
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "blitz", "sector": 4, "part_index": 1}
+    state["pack"]["question_types"] = [q.type.value for q in pack.questions]
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", pack)
+    monkeypatch.setattr(
+        main,
+        "players_list",
+        [_authorized_admin(monkeypatch, fake_sio)],
+    )
+    main.game_journal.mark_started()
+    main.game_journal.record_event(
+        "question_opened",
+        "Открыта часть блица",
+        {
+            "question_id": pack.get_by_sector(4).parts[1].id,
+            "title": pack.get_by_sector(4).parts[1].title,
+            "sector": 4,
+            "part_index": 1,
+        },
+    )
+    session_id = main.game_journal.list_sessions()[0]["id"]
+
+    asyncio.run(main._emit_current_question_to_admins())
+
+    detail = main.game_journal.get_session(session_id)
+    assert len(detail["events"]) == 1
+    assert detail["opened_questions"][0]["question_id"] == pack.get_by_sector(4).parts[1].id
+
+
+def test_game_history_handlers_are_admin_only_and_can_reclassify(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(
+        main,
+        "players_list",
+        [_authorized_admin(monkeypatch, fake_sio)],
+    )
+    main.game_journal.record_event("player_joined", "Игрок присоединился", {})
+    session_id = main.game_journal.list_sessions()[0]["id"]
+
+    async def run():
+        current_mode = await main.admin_get_current_game_mode("admin")
+        assert current_mode == {"ok": True, "mode": MODE_DEBUG}
+
+        set_current = await main.admin_set_current_game_mode(
+            "admin",
+            {"mode": MODE_REGULAR},
+        )
+        assert set_current == {"ok": True, "mode": MODE_REGULAR}
+        assert any(
+            event == "admin_game_mode_update"
+            and data == {"mode": MODE_REGULAR}
+            and kwargs == {"to": "admin"}
+            for event, data, kwargs in fake_sio.events
+        )
+
+        await main.admin_set_current_game_mode("admin", {"mode": MODE_DEBUG})
+        history = await main.admin_get_game_history("admin")
+        assert history["ok"] is True
+        assert history["history"]["current_mode"] == MODE_DEBUG
+        assert history["history"]["sessions"] == []
+
+        debug_history = await main.admin_get_game_history(
+            "admin",
+            {"mode": MODE_DEBUG},
+        )
+        assert [
+            session["id"] for session in debug_history["history"]["sessions"]
+        ] == [session_id]
+
+        all_history = await main.admin_get_game_history(
+            "admin",
+            {"mode": "all"},
+        )
+        assert [
+            session["id"] for session in all_history["history"]["sessions"]
+        ] == [session_id]
+
+        changed = await main.admin_set_game_session_mode(
+            "admin",
+            {"session_id": session_id, "mode": MODE_REGULAR},
+        )
+        assert changed["ok"] is True
+        assert changed["history"]["sessions"][0]["mode"] == MODE_REGULAR
+
+        regular_history = await main.admin_get_game_history("admin")
+        assert regular_history["history"]["sessions"][0]["id"] == session_id
+
+        detail = await main.admin_get_game_session(
+            "admin",
+            {"session_id": session_id},
+        )
+        assert detail["ok"] is True
+        assert detail["detail"]["events"][0]["event_type"] == "player_joined"
+
+        invalid = await main.admin_set_current_game_mode(
+            "admin",
+            {"mode": "production"},
+        )
+        assert invalid["ok"] is False
+
+        invalid_filter = await main.admin_get_game_history(
+            "admin",
+            {"mode": "production"},
+        )
+        assert invalid_filter["ok"] is False
+
+        monkeypatch.setattr(main, "require_admin", _deny_admin)
+        denied = await main.admin_get_game_history("player")
+        assert denied == {"ok": False, "error": "not_admin"}
+        denied_mode = await main.admin_get_current_game_mode("player")
+        assert denied_mode == {"ok": False, "error": "not_admin"}
+
+    asyncio.run(run())
 
 
 def test_live_ops_reset_to_intro_stops_audio_and_waits_for_manual_music(monkeypatch):
@@ -1077,6 +1362,7 @@ def test_live_ops_reset_to_intro_stops_audio_and_waits_for_manual_music(monkeypa
         "players_list",
         [_authorized_admin(monkeypatch, fake_sio)],
     )
+    main.game_journal.set_current_mode(MODE_REGULAR)
 
     response = asyncio.run(main.admin_reset_to_intro("admin"))
 
@@ -1095,6 +1381,12 @@ def test_live_ops_reset_to_intro_stops_audio_and_waits_for_manual_music(monkeypa
         if event == "state_update" and data["phase"] == PHASE_INTRO
     )
     assert stop_index < state_index
+    assert any(
+        event == "admin_game_mode_update"
+        and data == {"mode": MODE_DEBUG}
+        and kwargs == {"to": "admin"}
+        for event, data, kwargs in fake_sio.events
+    )
     assert not any(
         event == "play_sound" and data == {"sound": "intro"}
         for event, data, _kwargs in fake_sio.events

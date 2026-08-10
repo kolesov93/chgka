@@ -1,4 +1,5 @@
 ---
+id: 435114c1-28e2-5e2c-afdd-b33e0aa1da6f
 title: Блиц без подвопросов
 type: blitz
 ---

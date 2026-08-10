@@ -1,4 +1,5 @@
 ---
+id: ec00a2bf-d149-46bb-9d4d-ec60d0d3676c
 title: Химический элемент
 author: Виктор Сидоров
 author_photo: author.jpg

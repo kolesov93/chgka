@@ -6,6 +6,7 @@ services:
     volumes:
       - ./backend:/app
       - ./fixtures:/fixtures:ro
+      - ./runtime-data:/data
     environment:
       - PYTHONUNBUFFERED=1
       - CHGKA_ENV=development
@@ -13,6 +14,7 @@ services:
       - ADMIN_PASSWORD=admin123
       - ALLOWED_ORIGINS=http://localhost:5173
       - ADMIN_TOKEN_TTL_SECONDS=${ADMIN_TOKEN_TTL_SECONDS:-43200}
+      - CHGKA_DB_PATH=/data/chgka.sqlite3
 
   frontend:
     build: ./frontend

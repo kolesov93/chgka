@@ -19,18 +19,19 @@ FastAPI + python-socketio (backend/main.py)
     |-- synchronous admin recovery operations (backend/live_ops.py)
     |-- players and session tokens in memory
     |-- question pack loaded from the filesystem
-    `-- temporary media tokens -> GET /media/{media_id}
+    |-- temporary media tokens -> GET /media/{media_id}
+    `-- durable game/event journal -> SQLite at CHGKA_DB_PATH
 ```
 
 ### Frontend
 
 - `frontend/src/App.jsx` owns only top-level phase routing and the main page layout.
-- `frontend/src/entrypoint.js` resolves the exact `/play` and `/admin` entrypoints before React renders. `/`, trailing-slash aliases, and unknown paths are canonicalized without adding a routing dependency.
+- `frontend/src/entrypoint.js` resolves the exact `/play`, `/admin`, and `/admin/history` entrypoints before React renders and owns their document titles/login subtitles. `/`, trailing-slash aliases, and unknown paths are canonicalized without adding a routing dependency.
 - `frontend/src/socket.js` owns the single Socket.IO client plus backend/media URL construction.
 - `frontend/src/hooks/useGameSession.js` owns session restore, shared server state, players, pack/admin data, notifications, logout, and non-audio socket listeners.
 - `frontend/src/hooks/useDiscussionTimer.js` owns the admin countdown and one-shot local ten-second notification; `useSocketSoundEvents.js` bridges sound events to `useGameSound.js`.
 - `frontend/src/hooks/useSoundFade.js` derives one reconnect-aware emergency fade multiplier from the server sound-control snapshot. Shared media, effects, and the wheel consume that multiplier; the wheel also retains its intrinsic end-of-spin fade.
-- `frontend/src/components/` contains the shared intro screen with host-only speech/navigation, the admin question/media panel with private inline image thumbnails and black-box controls, synchronized black-box audio/static player screen, the shared final screen, normal admin controls with the always-visible director sound block, the separate danger-styled Live Ops recovery panel, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
+- `frontend/src/components/` contains the shared intro screen with host-only speech/navigation, the admin question/media panel with private inline image thumbnails and black-box controls, synchronized black-box audio/static player screen, the shared final screen, normal admin controls with the always-visible game-mode and director-sound blocks, the standalone admin-only `/admin/history` screen with its own teal page/login background, the separate danger-styled Live Ops recovery panel, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
 - `frontend/src/intro.js` owns the static `00`/`13` boundary, fallback author asset, host next-step labels, and reconnect-aware music countdown math. Author photos for slides 1–12 come from the backend origin.
 - `frontend/src/inlineMedia.js` safely turns resolved image placeholders into host-only thumbnail markup. Non-image and unknown placeholders remain unchanged.
 - `frontend/src/blackbox.js` owns the static image/music sources and converts the public black-box timeline into the existing synchronized playback shape.
@@ -38,21 +39,22 @@ FastAPI + python-socketio (backend/main.py)
 
 The frontend receives the shared game snapshot through `state_update`. Admin-only data uses separate events such as `players_update`, `pack_info`, and `admin_question`.
 
-`/play` renders only the player-name form and restores only `chgka_player_token`; `/admin` renders only the host-password form and restores only `chgka_admin_token`. The other stored token is ignored rather than treated as a fallback. Logout and expiry stay on the current path. These paths are a UX boundary only: both use the same Socket.IO connection and all privileged events still require backend role-plus-token authorization.
+`/play` renders only the player-name form and restores only `chgka_player_token`; `/admin` renders the live host application, while `/admin/history` renders only history. Both admin entrypoints use the host-password form and restore only `chgka_admin_token`. Their login screens are distinguished by `[ведущий]` / `[история игр]` subtitles and route-specific document titles; the player login keeps the unqualified product title and no subtitle. The other stored token is ignored rather than treated as a fallback. A history-only socket is authorized but is not inserted into the live host/player roster, does not create a journal session merely by logging in, and does not take over the live host record when restoring the same token. Logout and expiry stay on the current path. These paths are a UX boundary only: all privileged events still require backend role-plus-token authorization.
 
 UI components may emit existing user actions through the shared socket, but they do not create connections or own session restoration. The decomposition preserves the existing Socket.IO event names, payloads, and flat `state_update` contract.
 
 ### Backend
 
 - `backend/main.py` creates the FastAPI/Socket.IO application and currently contains authentication, player lifecycle, phase handlers, scoring, spin orchestration, media access, logging, and emits.
-- `backend/config.py` validates the explicit development/production environment, admin password, exact browser-origin allowlist, and admin-token TTL before the application starts.
+- `backend/config.py` validates the explicit development/production environment, admin password, exact browser-origin allowlist, admin-token TTL, and SQLite path before the application starts.
 - `backend/auth.py` owns the single active opaque admin token and its fixed in-memory expiry/revocation lifecycle; every privileged Socket.IO action validates the role plus current token.
 - `backend/safe_html.py` owns the `nh3` allowlist used after Markdown conversion for question sections and intro speech.
 - `backend/state.py` defines the typed internal `AppState` and serializes it to the flat public payload expected by the frontend.
-- `backend/transitions.py` owns synchronous intro, black-box presentation, phase, spin, scoring, blitz, round-end, and reset rules. It mutates `AppState` before network awaits and returns transport effects such as logs, sounds, media-token cleanup, and admin-question refresh.
+- `backend/transitions.py` owns synchronous intro, black-box presentation, phase, spin, scoring, blitz, round-end, and reset rules. It mutates `AppState` before network awaits and returns typed events plus transport effects such as sounds, media-token cleanup, and admin-question refresh.
 - `backend/live_ops.py` owns exceptional admin recovery rules: exact score/sector edits, direct round opening, normalized phase forcing, stuck-spin cancellation, and timer repair. It uses the same transport effects without weakening normal transition guards.
 - `backend/sound_control.py` owns the pure generation-based `normal`/`fading`/`stopped` lifecycle and synchronized fade progress math.
-- `backend/questions.py` parses and validates filesystem question packs, required author/optional city/direct author-photo/strict black-box metadata, section-aware opaque question-media references, and Markdown sections.
+- `backend/questions.py` parses and validates filesystem question packs, mandatory unique UUIDs, required author/optional city/direct author-photo/strict black-box metadata, section-aware opaque question-media references, and Markdown sections. `backend/assign_question_ids.py` performs the one-time migration of an otherwise valid old pack.
+- `backend/game_journal.py` owns the SQLite schema, game-session lifecycle, regular/debug classification, ordered structured events, and question-history queries. It does not restore `AppState`.
 - `backend/media.py` builds the media catalog for the exact current round/blitz part, creates and validates media-token context, and owns synchronous playback-state transitions.
 - `backend/validate_pack.py` exposes that same parser as the pre-start `python -m validate_pack` CLI; it does not define separate validation rules.
 
@@ -67,7 +69,7 @@ Internal state is split by responsibility:
 - `timer`: discussion deadline;
 - `presentation`: intro progress/timeline, shared media, and the synchronized black-box timeline/generation;
 - `pack`: question types plus public intro-author metadata needed by the UI;
-- `logs`: recent game log entries.
+- `logs`: the latest 50 display entries for the live snapshot; the complete log is kept separately in SQLite.
 
 `public_game_state()` flattens these sections into the existing `state_update` contract. This compatibility layer allows the backend internals to evolve without combining a state refactor with a frontend protocol migration.
 
@@ -115,6 +117,8 @@ Every later server sound command advances the generation synchronously before it
 
 A pack contains 13 required sector directories named `01` through `13`. Each sector and every blitz part requires an author; city and a direct sibling author photo are optional. Question media remain under local `media/`. An optional root `intro.md` contains Markdown speech shown only to the admin through `pack_info`; media in that file are unsupported.
 
+Every top-level question and every blitz/superblitz part has a unique canonical UUID in frontmatter. IDs remain stable when wording or media are corrected. The ordered ID set identifies the pack in journal sessions, while a `question_opened` event points at the exact normal question or blitz part. Re-sending `admin_question` after reconnect does not create an opening event.
+
 Supported question kinds are `normal`, `blitz`, and `superblitz`. Blitz variants contain three nested parts, also named `01` through `03`. Optional strict `blackbox: true|false` metadata can mark a normal question, a whole blitz/superblitz from its top-level file, or an individual nested part.
 
 The parser validates required sectors and sections, section order, media existence and usage, supported extensions, local media-path containment, and blitz structure. Extra two-digit numeric sector directories are rejected; named root-level auxiliary directories are ignored. It intentionally supports only simple `key: value` frontmatter rather than the full YAML language. The authoring contract and validator usage are documented in `docs/QUESTION_PACKS.md`.
@@ -150,7 +154,11 @@ Players receive no native playback controls. Browser autoplay restrictions are h
 
 ## Persistence and concurrency
 
-All mutable runtime data is process-local. A backend restart loses the game, players, sessions, logs, media tokens, volume, and sound-control generation.
+The complete game-session/event journal is durable SQLite data at `CHGKA_DB_PATH`. The first journaled lobby event creates a session, game start/opening marks it active, final score marks it completed, and reset closes it and starts a new session. On process startup, an older lobby/active session is marked interrupted. Each accepted event is inserted and committed before its Socket.IO broadcast. The live 50-line log is only a projection of these durable events.
+
+Sessions have one `regular|debug` mode. Development creates each new session as debug by default; production uses regular. The live `/admin` waiting room and game panel always show the current mode and let the host change it; mode updates are sent separately from the public game-state contract and reset immediately restores the configured default. `/admin/history` has no separate current-mode control, but the host can correct the classification of any listed session. Its session list has server-side `regular|debug|all` filtering and defaults to regular, so a large number of recent debug sessions cannot displace regular games before frontend filtering. Both modes retain their full logs, but only question openings from regular sessions contribute to the aggregated played-question history. Repeated openings remain in the event log while the summary deduplicates by `question_id` and retains an open count.
+
+All other mutable runtime data remains process-local. A backend restart still loses the current game state, players, connection/admin tokens, media tokens, volume, sound-control generation, and the live log projection. It does not resume an interrupted game from SQLite.
 
 Admin authentication is also process-local. The backend accepts one active opaque token with a fixed, non-sliding TTL (12 hours by default); a new password login, explicit logout, expiry, or backend restart revokes the old session. The browser stores it in `localStorage` for reconnect, but the backend validates the token again for every privileged event. Player reconnect tokens keep their previous untimed in-memory lifecycle and never grant admin rights.
 
@@ -158,6 +166,6 @@ Socket.IO handlers are asynchronous and can overlap. UI button disabling is not 
 
 ## Deployment status
 
-`docker-compose.yml` is development-only: it bind-mounts source code and both Dockerfiles run development servers. There is no reverse proxy, TLS configuration, persistent store, health check, production image, or CI deployment workflow yet.
+`docker-compose.yml` is development-only: it bind-mounts source code, keeps SQLite in the gitignored host directory `./runtime-data`, and both Dockerfiles run development servers. There is no reverse proxy, TLS configuration, backup policy, health check, production image, or CI deployment workflow yet. Production must mount durable storage at the absolute `CHGKA_DB_PATH` and back it up independently of container replacement.
 
-Backend startup nevertheless has an explicit security mode. Development Compose supplies its local password and exact `http://localhost:5173` origin. Production requires an externally injected password and exact HTTPS origins; the same allowlist protects FastAPI CORS and Socket.IO/WebSocket handshakes. The production frontend still assumes same-origin HTTP and WebSocket routing through a future TLS reverse proxy. That frontend server must use SPA fallback for `/`, `/play`, and `/admin`; pathname separation itself grants no access.
+Backend startup nevertheless has an explicit security mode. Development Compose supplies its local password and exact `http://localhost:5173` origin. Production requires an externally injected password and exact HTTPS origins; the same allowlist protects FastAPI CORS and Socket.IO/WebSocket handshakes. The production frontend still assumes same-origin HTTP and WebSocket routing through a future TLS reverse proxy. That frontend server must use SPA fallback for `/`, `/play`, `/admin`, and `/admin/history`; pathname separation itself grants no access.

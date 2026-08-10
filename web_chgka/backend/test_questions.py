@@ -148,6 +148,7 @@ class TestValidQuestions:
         question_path.mkdir()
         (question_path / "question.md").write_text(
             """---
+id: f54c4052-c2d7-47ab-a6de-f4d652466bc7
 title: Sanitization
 ---
 

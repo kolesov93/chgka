@@ -32,6 +32,7 @@ def _active_state(*, sector=3, kind="normal", part_index=0, spin_id=4):
 
 def _question(title, *, media=None, qtype=QuestionType.NORMAL, parts=None):
     return Question(
+        id=title,
         title=title,
         question_html="question",
         answer_html="answer" if qtype == QuestionType.NORMAL else None,

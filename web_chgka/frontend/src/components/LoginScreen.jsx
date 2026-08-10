@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ENTRYPOINT_ADMIN } from '../entrypoint';
+import {
+  ENTRYPOINT_ADMIN_HISTORY,
+  entrypointLoginSubtitle,
+  isAdminEntrypoint,
+} from '../entrypoint';
 
 
 function PlayerLoginForm({ socket }) {
@@ -66,7 +70,7 @@ function PlayerLoginForm({ socket }) {
 }
 
 
-function AdminLoginForm({ socket }) {
+function AdminLoginForm({ socket, historyOnly = false }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -101,7 +105,10 @@ function AdminLoginForm({ socket }) {
 
     setIsSubmitting(true);
     setError('');
-    socket.emit('authenticate_admin', { password: normalizedPassword });
+    socket.emit('authenticate_admin', {
+      password: normalizedPassword,
+      ...(historyOnly ? { client_kind: 'history' } : {}),
+    });
   };
 
   return (
@@ -140,24 +147,37 @@ function AdminLoginForm({ socket }) {
 
 
 export function LoginScreen({ socket, entrypoint, sessionNotice = '' }) {
-  const isAdmin = entrypoint === ENTRYPOINT_ADMIN;
+  const isAdmin = isAdminEntrypoint(entrypoint);
+  const isHistory = entrypoint === ENTRYPOINT_ADMIN_HISTORY;
+  const subtitle = entrypointLoginSubtitle(entrypoint);
 
   return (
     <div
       className={`flex min-h-screen items-center justify-center p-4 text-white ${
-        isAdmin ? 'bg-indigo-950' : 'bg-slate-900'
+        isHistory ? 'bg-teal-950' : isAdmin ? 'bg-indigo-950' : 'bg-slate-900'
       }`}
     >
       <div
         className={`w-full max-w-md rounded-xl border p-8 shadow-2xl ${
-          isAdmin
+          isHistory
+            ? 'border-teal-700 bg-teal-900/80'
+            : isAdmin
             ? 'border-indigo-700 bg-indigo-900/80'
             : 'border-slate-700 bg-slate-800'
         }`}
       >
-        <h1 className="mb-8 text-center text-3xl font-bold text-yellow-500">
+        <h1 className={`${subtitle ? 'mb-1' : 'mb-8'} text-center text-3xl font-bold text-yellow-500`}>
           Что? Где? Когда?
         </h1>
+        {subtitle && (
+          <div
+            className={`mb-8 text-center text-xs font-bold uppercase tracking-[0.2em] ${
+              isHistory ? 'text-teal-200' : 'text-indigo-200'
+            }`}
+          >
+            {subtitle}
+          </div>
+        )}
 
         {sessionNotice && (
           <p
@@ -169,7 +189,12 @@ export function LoginScreen({ socket, entrypoint, sessionNotice = '' }) {
         )}
 
         {isAdmin
-          ? <AdminLoginForm socket={socket} />
+          ? (
+              <AdminLoginForm
+                socket={socket}
+                historyOnly={entrypoint === ENTRYPOINT_ADMIN_HISTORY}
+              />
+            )
           : <PlayerLoginForm socket={socket} />}
       </div>
     </div>

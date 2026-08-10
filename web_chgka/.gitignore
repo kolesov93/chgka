@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 venv/
 .env
+runtime-data/
 
 # Node.js
 node_modules/
@@ -20,4 +21,3 @@ yarn-error.log*
 
 # Docker (optional, if you don't want to commit local overrides)
 # docker-compose.override.yml
-

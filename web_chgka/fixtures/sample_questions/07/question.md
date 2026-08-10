@@ -1,4 +1,5 @@
 ---
+id: 42b504cf-fff3-4f7f-aaf1-ef8a0135b5fa
 title: Суперблиц — Космос
 type: superblitz
 author: Сергей Николаев

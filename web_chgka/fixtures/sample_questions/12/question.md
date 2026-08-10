@@ -1,4 +1,5 @@
 ---
+id: 49d5a873-9a8a-4a51-808e-50b49c828bb4
 title: Спортивный рекорд
 author: Алексей Громов
 author_photo: author.jpg

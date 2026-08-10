@@ -41,6 +41,18 @@ test('admin entrypoint restores only an admin token', () => {
   );
 });
 
+test('admin history entrypoint restores the same admin token', () => {
+  const storage = createStorage({
+    [ADMIN_TOKEN_KEY]: 'admin-token',
+    [PLAYER_TOKEN_KEY]: 'player-token',
+  });
+
+  assert.deepEqual(getSessionRestorePayload(storage, 'admin-history'), {
+    token: 'admin-token',
+    client_kind: 'history',
+  });
+});
+
 test('player entrypoint restores only a player token', () => {
   const storage = createStorage({
     [ADMIN_TOKEN_KEY]: 'admin-token',

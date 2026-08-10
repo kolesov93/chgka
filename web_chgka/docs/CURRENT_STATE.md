@@ -1,12 +1,26 @@
 # CHGKA Web Current State
 
-- Snapshot date: 2026-08-09
+- Snapshot date: 2026-08-10
 - Latest completed task: `docs/tasks/0019-ui-russian-localization.md`
-- Active task: none
-- Branch: `web`
-- Status: task 0019 is accepted and merged locally; pushing `web` and remote CI are pending.
+- Active task: `docs/tasks/0020-game-event-journal.md`
+- Branch: `task/game-event-journal`
+- Status: implementation and automated verification are complete; focused host/player browser acceptance is next.
 
 ## Repository checkpoint
+
+- `web` and `origin/web` are synchronized at `67df9a4` before task 0020.
+- Task 0020 adds durable structured game-session history without changing the existing in-memory recovery boundary.
+- Required explicit question UUIDs, part-level blitz history, one regular/debug mode and a mounted SQLite file are accepted decisions.
+- Task 0020 planning commit: `b5e324d` (`Plan game event journal task`).
+- Question-ID commit: `b28cf8e` (`Add persistent question identifiers`).
+- Implementation commit: `d0b2bb5` (`Implement durable game event journal`) adds versioned SQLite sessions/events, typed transition logging, exact `question_opened` metadata, regular-only history queries, mode correction, admin-only history UI, and durable Compose storage.
+- History-route follow-up: `8a12ddf` (`Move game history to separate admin page`) removes history/mode from all `/admin` game phases and adds the password-protected `/admin/history` entrypoint with a non-roster history socket.
+- History-filter follow-up: `7ce0f1c` (`Filter game history sessions by mode`) adds server-side «Обычные / Тестовые / Все» filtering before the session limit; `/admin/history` defaults to ordinary games.
+- Current-mode UI follow-up: `6387980` (`Move current game mode to host panel`) keeps the mode visible in the `/admin` waiting room and live panel, removes its dedicated block from `/admin/history`, and synchronizes mode changes/reset through an admin-only socket event.
+- History-theme follow-up: `9fc92bb` (`Give game history a distinct background`) gives `/admin/history` and its login screen a dark teal background distinct from both player and live-host surfaces.
+- Entrypoint-label follow-up: `1dc5d73` (`Label admin entrypoints in login and title`) adds `[ведущий]` / `[история игр]` login subtitles and route-specific document titles while leaving `/play` unchanged.
+- Local verification: 207 backend tests with warnings as errors, 11 frontend test files, production frontend build, direct `/admin/history` SPA response, and sample-pack validation pass. Native Compose validation remains blocked by the installed Snap `snap-confine` capability failure; independent YAML/mount assertions pass.
+- Next continuation point: run the focused smoke in `docs/tasks/0020-game-event-journal.md`, then close and merge only after acceptance.
 
 - `web` and `origin/web` are synchronized at `e086f39` before task 0019.
 - Task 0019 translates rendered copy, display labels, server messages and logs while preserving all internal English identifiers and wire contracts.

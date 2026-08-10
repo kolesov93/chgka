@@ -1,4 +1,5 @@
 ---
+id: c7bb8ee8-dd36-4708-a146-71e7119a4a3e
 title: Первый отказник
 author: Ольга Петрова
 author_photo: author.jpg

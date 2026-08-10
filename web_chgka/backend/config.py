@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import os
+from pathlib import Path
 from typing import Mapping, Optional
 from urllib.parse import urlsplit
 
@@ -23,6 +24,7 @@ class AppConfig:
     admin_password: str
     allowed_origins: tuple[str, ...]
     admin_token_ttl_seconds: int
+    database_path: str
 
     @property
     def is_development(self) -> bool:
@@ -110,9 +112,17 @@ def load_app_config(environ: Optional[Mapping[str, str]] = None) -> AppConfig:
             f"{MIN_ADMIN_TOKEN_TTL_SECONDS} and {MAX_ADMIN_TOKEN_TTL_SECONDS}"
         )
 
+    database_path = _required_value(source, "CHGKA_DB_PATH")
+    if environment == PRODUCTION:
+        if database_path == ":memory:":
+            raise ConfigError("Production CHGKA_DB_PATH must use durable storage")
+        if not Path(database_path).is_absolute():
+            raise ConfigError("Production CHGKA_DB_PATH must be an absolute path")
+
     return AppConfig(
         environment=environment,
         admin_password=admin_password,
         allowed_origins=allowed_origins,
         admin_token_ttl_seconds=admin_token_ttl_seconds,
+        database_path=database_path,
     )

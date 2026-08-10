@@ -1,4 +1,5 @@
 ---
+id: ff8229e1-44cb-47d4-b702-102431b1b9d1
 title: Картины и художник
 author: Елена Орлова
 author_photo: author.jpg

@@ -1,5 +1,6 @@
 import { GameLog } from './GameLog';
 import { LiveOpsPanel } from './LiveOpsPanel';
+import { CurrentGameModeControl } from './CurrentGameModeControl';
 import { socket } from '../socket';
 
 export function AdminControls({
@@ -10,6 +11,9 @@ export function AdminControls({
   onTenSeconds,
   stopAllSounds,
   addNotification,
+  currentGameMode,
+  gameModeLoading,
+  onGameModeChange,
 }) {
   const usedQuestions = gameState?.used_questions || [];
   const phase = gameState?.phase || 'LOGIN';
@@ -79,6 +83,12 @@ export function AdminControls({
             </button>
           </div>
         </div>
+
+        <CurrentGameModeControl
+          mode={currentGameMode}
+          loading={gameModeLoading}
+          onModeChange={onGameModeChange}
+        />
 
         {!isGameOver && !isIntro && (
           <div className="flex flex-col gap-3 border border-slate-700 p-3 rounded bg-slate-900/30">

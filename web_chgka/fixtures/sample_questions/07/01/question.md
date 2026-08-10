@@ -1,4 +1,5 @@
 ---
+id: a1ef5894-6f77-4e64-b6cc-fab685570cd8
 title: Первый спутник
 author: Сергей Николаев
 author_photo: author.jpg
