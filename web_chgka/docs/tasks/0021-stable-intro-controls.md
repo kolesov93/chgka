@@ -54,7 +54,11 @@ Status: Awaiting browser smoke
 
 - `npm test`: 11 test files pass, включая состояния управления до запуска, во время и после завершения музыки.
 - `npm run build`: production build passes.
+- `python3 -W error -m pytest -q`: 207 backend tests pass on local Python 3.10.
+- Точная CI-среда Python 3.14.6: 207 backend tests pass with `-W error` after adding deterministic teardown for every SQLite journal created by `test_game_journal.py`.
 - `git diff --check`: passes.
+
+GitHub runs `#37` and `#38` failed only in the backend job because Python 3.14 reports an unclosed `sqlite3.Connection` as `ResourceWarning`, promoted to an error by CI. Commit `700f1d5` fixes test resource ownership without changing application runtime; production already closes the journal in the FastAPI lifespan.
 
 ## Focused browser smoke
 

@@ -10,9 +10,10 @@
 
 - Task 0021 planning commit: `a093068` (`Plan stable intro controls task`).
 - Task 0021 implementation commit: `afaed4e` (`Stabilize intro host controls`).
+- Backend CI regression fix: `700f1d5` (`Close journal resources in backend tests`) closes every SQLite journal created by the game-journal tests. This resolves the Python 3.14 `ResourceWarning` that failed Web CI runs 37 and 38; runtime journal ownership was already correct.
 - Intro navigation now lives in a fixed-height section near the top of the existing sticky host sidebar; the slide, one/three author cards and intro speech no longer participate in its geometry.
 - The music action keeps its reserved slot after start/completion, so the primary next-slide button remains at one desktop position while only its label changes.
-- Local verification: all 11 frontend test files and the production build pass; focused host/player browser smoke is pending.
+- Local verification: all 11 frontend test files, the production build, and all 207 backend tests pass; the backend suite also passes under the exact Python 3.14.6 `-W error` CI conditions. Focused host/player browser smoke is pending.
 - Next continuation point: run the six-step smoke from task 0021; after acceptance, close the task, remove roadmap item 18 and merge the task branch into `web`.
 
 - Task 0020 closure commit: `233e590` (`Close game event journal task`).
