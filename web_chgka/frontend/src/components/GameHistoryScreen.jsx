@@ -4,11 +4,11 @@ import { GameHistoryPanel } from './GameHistoryPanel';
 
 export function GameHistoryScreen({ socket, addNotification }) {
   return (
-    <main className="min-h-screen bg-indigo-950 px-4 py-20 text-white">
+    <main className="min-h-screen bg-teal-950 px-4 py-20 text-white">
       <div className="mx-auto w-full max-w-4xl">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-300">
+            <div className="text-xs font-bold uppercase tracking-[0.2em] text-teal-300">
               Что? Где? Когда?
             </div>
             <h1 className="mt-1 text-3xl font-black text-white">История игр</h1>

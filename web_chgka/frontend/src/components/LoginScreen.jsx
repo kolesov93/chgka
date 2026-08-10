@@ -144,16 +144,19 @@ function AdminLoginForm({ socket, historyOnly = false }) {
 
 export function LoginScreen({ socket, entrypoint, sessionNotice = '' }) {
   const isAdmin = isAdminEntrypoint(entrypoint);
+  const isHistory = entrypoint === ENTRYPOINT_ADMIN_HISTORY;
 
   return (
     <div
       className={`flex min-h-screen items-center justify-center p-4 text-white ${
-        isAdmin ? 'bg-indigo-950' : 'bg-slate-900'
+        isHistory ? 'bg-teal-950' : isAdmin ? 'bg-indigo-950' : 'bg-slate-900'
       }`}
     >
       <div
         className={`w-full max-w-md rounded-xl border p-8 shadow-2xl ${
-          isAdmin
+          isHistory
+            ? 'border-teal-700 bg-teal-900/80'
+            : isAdmin
             ? 'border-indigo-700 bg-indigo-900/80'
             : 'border-slate-700 bg-slate-800'
         }`}
