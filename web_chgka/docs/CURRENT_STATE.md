@@ -1,14 +1,16 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-10
-- Latest completed task: `docs/tasks/0019-ui-russian-localization.md`
-- Active task: `docs/tasks/0020-game-event-journal.md`
-- Branch: `task/game-event-journal`
-- Status: implementation and automated verification are complete; focused host/player browser acceptance is next.
+- Latest completed task: `docs/tasks/0020-game-event-journal.md`
+- Active task: none
+- Branch: `web`
+- Status: task 0020 is accepted and merged locally; publication of `web` is pending.
 
 ## Repository checkpoint
 
-- `web` and `origin/web` are synchronized at `67df9a4` before task 0020.
+- Task 0020 closure commit: `233e590` (`Close game event journal task`).
+- Task 0020 merge commit: `51214c5` (`Merge game event journal task`).
+- Local `web` contains the accepted merge; `origin/web` remains at the pre-task commit `67df9a4` until the user pushes it.
 - Task 0020 adds durable structured game-session history without changing the existing in-memory recovery boundary.
 - Required explicit question UUIDs, part-level blitz history, one regular/debug mode and a mounted SQLite file are accepted decisions.
 - Task 0020 planning commit: `b5e324d` (`Plan game event journal task`).
@@ -20,7 +22,8 @@
 - History-theme follow-up: `9fc92bb` (`Give game history a distinct background`) gives `/admin/history` and its login screen a dark teal background distinct from both player and live-host surfaces.
 - Entrypoint-label follow-up: `1dc5d73` (`Label admin entrypoints in login and title`) adds `[ведущий]` / `[история игр]` login subtitles and route-specific document titles while leaving `/play` unchanged.
 - Local verification: 207 backend tests with warnings as errors, 11 frontend test files, production frontend build, direct `/admin/history` SPA response, and sample-pack validation pass. Native Compose validation remains blocked by the installed Snap `snap-confine` capability failure; independent YAML/mount assertions pass.
-- Next continuation point: run the focused smoke in `docs/tasks/0020-game-event-journal.md`, then close and merge only after acceptance.
+- The focused host/player smoke, including history filters, current-mode synchronization, persistence, distinct entrypoint backgrounds, subtitles and document titles, was accepted by the user on 2026-08-10.
+- Next continuation point: choose the next roadmap task; the remaining P1 item is stable intro-control layout.
 
 - `web` and `origin/web` are synchronized at `e086f39` before task 0019.
 - Task 0019 translates rendered copy, display labels, server messages and logs while preserving all internal English identifiers and wire contracts.
