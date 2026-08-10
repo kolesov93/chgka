@@ -68,5 +68,6 @@ Development startup is documented in `README.md`. The backend requires `QUESTION
 - Preserve user changes and unrelated untracked files.
 - Follow the branch/task workflow in `ROADMAP.md`.
 - Add or update tests for behavior changes. At minimum, run backend tests for backend work and the frontend build for frontend work.
+- For every change that needs manual acceptance, keep an exact focused smoke checklist in the task file and reproduce the complete current checklist in the user-facing handoff message. Never provide only a link to the Markdown checklist.
 - `frontend/package-lock.json` is committed and is the dependency source of truth. Keep it synchronized with `package.json` through npm and use `npm ci` for clean installs, Docker, and CI.
 - When a task changes architecture or the handoff point, update `docs/ARCHITECTURE.md` or `docs/CURRENT_STATE.md`. Keep stable rules here and time-sensitive status in `CURRENT_STATE.md`.
