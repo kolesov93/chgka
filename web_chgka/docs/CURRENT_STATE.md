@@ -18,6 +18,7 @@
 - History-filter follow-up: `7ce0f1c` (`Filter game history sessions by mode`) adds server-side «Обычные / Тестовые / Все» filtering before the session limit; `/admin/history` defaults to ordinary games.
 - Current-mode UI follow-up: `6387980` (`Move current game mode to host panel`) keeps the mode visible in the `/admin` waiting room and live panel, removes its dedicated block from `/admin/history`, and synchronizes mode changes/reset through an admin-only socket event.
 - History-theme follow-up: `9fc92bb` (`Give game history a distinct background`) gives `/admin/history` and its login screen a dark teal background distinct from both player and live-host surfaces.
+- Entrypoint-label follow-up: `1dc5d73` (`Label admin entrypoints in login and title`) adds `[ведущий]` / `[история игр]` login subtitles and route-specific document titles while leaving `/play` unchanged.
 - Local verification: 207 backend tests with warnings as errors, 11 frontend test files, production frontend build, direct `/admin/history` SPA response, and sample-pack validation pass. Native Compose validation remains blocked by the installed Snap `snap-confine` capability failure; independent YAML/mount assertions pass.
 - Next continuation point: run the focused smoke in `docs/tasks/0020-game-event-journal.md`, then close and merge only after acceptance.
 
