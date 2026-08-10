@@ -60,3 +60,25 @@ export function formatIntroRemaining(remainingMs) {
   const seconds = String(totalSeconds % 60).padStart(2, '0');
   return `${minutes}:${seconds}`;
 }
+
+export function introHostControlView(intro, localNowMs = Date.now()) {
+  const slideIndex = intro?.slide_index;
+  const canAdvance = Number.isInteger(slideIndex);
+  const musicStarted = Number.isFinite(intro?.started_at_ms);
+  const remaining = introRemainingMs(intro, localNowMs);
+  const musicFinished = musicStarted && remaining === 0;
+
+  return {
+    slideIndex,
+    slideLabel: introSlideLabel(slideIndex),
+    nextStepLabel: introNextStepLabel(slideIndex),
+    canAdvance,
+    canStartMusic: canAdvance && !musicStarted,
+    musicStatus: musicStarted ? formatIntroRemaining(remaining) : 'Не запущена',
+    musicActionLabel: musicFinished
+      ? 'Музыка завершена'
+      : musicStarted
+        ? 'Музыка запущена'
+        : 'Запустить музыку',
+  };
+}

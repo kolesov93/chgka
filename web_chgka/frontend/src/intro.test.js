@@ -5,6 +5,7 @@ import {
   formatIntroRemaining,
   INTRO_FALLBACK_AUTHOR_SOURCE,
   introAuthorCaption,
+  introHostControlView,
   introNextStepLabel,
   introRemainingMs,
   introSlideLabel,
@@ -62,4 +63,51 @@ test('malformed intro timing does not invent a countdown', () => {
     received_at_ms: 20_000,
   }, 20_000), null);
   assert.equal(formatIntroRemaining(null), '—:—');
+});
+
+
+test('host intro controls keep both action slots before and after music starts', () => {
+  const waiting = introHostControlView({ slide_index: 0, started_at_ms: null }, 20_000);
+  assert.deepEqual(waiting, {
+    slideIndex: 0,
+    slideLabel: 'Стартовый слайд',
+    nextStepLabel: 'Показать авторов сектора 1',
+    canAdvance: true,
+    canStartMusic: true,
+    musicStatus: 'Не запущена',
+    musicActionLabel: 'Запустить музыку',
+  });
+
+  const playing = introHostControlView({
+    slide_index: 7,
+    started_at_ms: 1_000,
+    duration_ms: 87_757,
+    server_now_ms: 11_000,
+    received_at_ms: 100_000,
+  }, 102_500);
+  assert.deepEqual(playing, {
+    slideIndex: 7,
+    slideLabel: 'Авторы сектора 7 из 12',
+    nextStepLabel: 'Показать авторов сектора 8',
+    canAdvance: true,
+    canStartMusic: false,
+    musicStatus: '1:16',
+    musicActionLabel: 'Музыка запущена',
+  });
+});
+
+
+test('host intro controls preserve the disabled music slot after the track ends', () => {
+  const finished = introHostControlView({
+    slide_index: 13,
+    started_at_ms: 1_000,
+    duration_ms: 10_000,
+    server_now_ms: 20_000,
+    received_at_ms: 100_000,
+  }, 100_000);
+
+  assert.equal(finished.canStartMusic, false);
+  assert.equal(finished.musicStatus, '0:00');
+  assert.equal(finished.musicActionLabel, 'Музыка завершена');
+  assert.equal(finished.nextStepLabel, 'Перейти к игре');
 });
