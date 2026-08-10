@@ -23,6 +23,7 @@
 - Entrypoint-label follow-up: `1dc5d73` (`Label admin entrypoints in login and title`) adds `[ведущий]` / `[история игр]` login subtitles and route-specific document titles while leaving `/play` unchanged.
 - Local verification: 207 backend tests with warnings as errors, 11 frontend test files, production frontend build, direct `/admin/history` SPA response, and sample-pack validation pass. Native Compose validation remains blocked by the installed Snap `snap-confine` capability failure; independent YAML/mount assertions pass.
 - The focused host/player smoke, including history filters, current-mode synchronization, persistence, distinct entrypoint backgrounds, subtitles and document titles, was accepted by the user on 2026-08-10.
+- Roadmap item 19 records future support for early answers, earned extra minutes and a distinct minute-on-credit mechanic; exact television rules must be agreed before implementation.
 - Next continuation point: choose the next roadmap task; the remaining P1 item is stable intro-control layout.
 
 - `web` and `origin/web` are synchronized at `e086f39` before task 0019.
