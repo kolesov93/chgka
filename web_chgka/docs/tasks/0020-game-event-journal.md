@@ -1,7 +1,7 @@
 # 0020: Журнал игр и история сыгранных вопросов
 
 Branch: `task/game-event-journal`
-Status: Ready for browser acceptance
+Status: Accepted
 
 ## Goal
 
@@ -60,7 +60,7 @@ Status: Ready for browser acceptance
 - Direct Vite request to `/admin/history`: HTTP 200 with SPA entrypoint.
 - `python3 -m validate_pack ../fixtures/sample_questions`: passed, 13 sectors / 19 authored question units / 6 blitz parts.
 - Compose YAML and the `/data` journal mount were parsed and asserted independently. Native `docker compose config --quiet` is blocked before reading the project by the installed Snap `snap-confine` capability error (`cap_dac_override`), the same environment defect recorded for earlier tasks.
-- Focused two-browser host/player smoke: pending.
+- Focused two-browser host/player smoke: passed and accepted by the user on 2026-08-10.
 
 ## Focused browser smoke
 
