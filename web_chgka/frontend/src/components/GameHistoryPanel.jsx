@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 
 import {
+  DEFAULT_GAME_SESSION_FILTER,
+  GAME_SESSION_FILTERS,
   formatJournalTimestamp,
   gameModeLabel,
   gameScoreLabel,
@@ -10,12 +12,12 @@ import {
 import { responseMessage } from '../uiText';
 
 const modeButtonClass = 'flex-1 rounded px-2 py-2 text-[10px] font-black uppercase tracking-wider transition-colors disabled:opacity-40';
-
 export function GameHistoryPanel({ socket, addNotification, initiallyOpen = false }) {
   const [isOpen, setIsOpen] = useState(initiallyOpen);
   const [history, setHistory] = useState(null);
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [sessionFilter, setSessionFilter] = useState(DEFAULT_GAME_SESSION_FILTER);
 
   const warn = (response, fallback) => {
     addNotification?.({
@@ -24,15 +26,22 @@ export function GameHistoryPanel({ socket, addNotification, initiallyOpen = fals
     });
   };
 
-  const loadHistory = () => {
+  const loadHistory = (filter = sessionFilter) => {
     setLoading(true);
-    socket.emit('admin_get_game_history', null, (response) => {
+    socket.emit('admin_get_game_history', { mode: filter }, (response) => {
       setLoading(false);
       if (!response?.ok) {
         warn(response, 'Не удалось загрузить историю игр');
         return;
       }
       setHistory(response.history);
+      setDetail((current) => (
+        current && !response.history.sessions.some(
+          (session) => session.id === current.session.id,
+        )
+          ? null
+          : current
+      ));
     });
   };
 
@@ -56,7 +65,7 @@ export function GameHistoryPanel({ socket, addNotification, initiallyOpen = fals
         warn(response, 'Не удалось изменить режим игры');
         return;
       }
-      setHistory(response.history);
+      loadHistory();
     });
   };
 
@@ -71,10 +80,7 @@ export function GameHistoryPanel({ socket, addNotification, initiallyOpen = fals
           warn(response, 'Не удалось изменить режим сохранённой игры');
           return;
         }
-        setHistory(response.history);
-        if (detail?.session?.id === session.id) {
-          selectSession(session.id);
-        }
+        loadHistory();
       },
     );
   };
@@ -124,8 +130,8 @@ export function GameHistoryPanel({ socket, addNotification, initiallyOpen = fals
       {isOpen && (
         <div className="flex flex-col gap-4 border-t border-indigo-800/60 p-3">
           <div className="flex items-center justify-between text-[10px] text-slate-500">
-            <span>Сыграно уникальных вопросов: {usedQuestions.length}</span>
-            <button type="button" onClick={loadHistory} className="font-bold uppercase text-indigo-300 hover:text-indigo-200">
+            <span>В обычных играх сыграно уникальных вопросов: {usedQuestions.length}</span>
+            <button type="button" onClick={() => loadHistory()} className="font-bold uppercase text-indigo-300 hover:text-indigo-200">
               Обновить
             </button>
           </div>
@@ -150,8 +156,28 @@ export function GameHistoryPanel({ socket, addNotification, initiallyOpen = fals
             <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
               Сессии
             </div>
+            <div className="mb-3 grid grid-cols-3 gap-1">
+              {GAME_SESSION_FILTERS.map((filter) => (
+                <button
+                  key={filter.value}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => {
+                    setSessionFilter(filter.value);
+                    loadHistory(filter.value);
+                  }}
+                  className={`rounded px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider transition-colors disabled:opacity-40 ${
+                    sessionFilter === filter.value
+                      ? 'bg-indigo-700 text-white ring-1 ring-indigo-400'
+                      : 'bg-slate-800 text-slate-500 hover:bg-slate-700 hover:text-slate-300'
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
             <div className="max-h-48 space-y-2 overflow-y-auto">
-              {sessions.length === 0 && <div className="text-xs italic text-slate-600">История пока пуста</div>}
+              {sessions.length === 0 && <div className="text-xs italic text-slate-600">В этом фильтре игр пока нет</div>}
               {sessions.map((session) => (
                 <div
                   key={session.id}

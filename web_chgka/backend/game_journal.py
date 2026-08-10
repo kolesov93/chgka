@@ -369,35 +369,65 @@ class GameJournal:
             "opened_questions": opened_count,
         }
 
-    def list_sessions(self, *, limit: int = 50) -> list[dict]:
+    def _opened_question_count(self, session_id: str) -> int:
+        event_rows = self._db().execute(
+            """
+            SELECT payload_json FROM game_events
+            WHERE session_id = ? AND event_type = 'question_opened'
+            """,
+            (session_id,),
+        ).fetchall()
+        return len(
+            {
+                payload.get("question_id")
+                for event_row in event_rows
+                for payload in [json.loads(event_row["payload_json"])]
+                if payload.get("question_id")
+            }
+        )
+
+    def _session_summary(self, session_id: str) -> dict | None:
+        row = self._db().execute(
+            "SELECT * FROM game_sessions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return self._session_dict(row, self._opened_question_count(session_id))
+
+    def list_sessions(
+        self,
+        *,
+        limit: int = 50,
+        mode: str | None = None,
+    ) -> list[dict]:
         if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 200:
             raise JournalError("Session limit must be between 1 and 200")
+        normalized_mode = None if mode is None else self._validate_mode(mode)
         with self._lock:
-            rows = self._db().execute(
-                """
-                SELECT * FROM game_sessions
-                ORDER BY created_at DESC, id DESC
-                LIMIT ?
-                """,
-                (limit,),
-            ).fetchall()
-            result = []
-            for row in rows:
-                event_rows = self._db().execute(
+            if normalized_mode is None:
+                rows = self._db().execute(
                     """
-                    SELECT payload_json FROM game_events
-                    WHERE session_id = ? AND event_type = 'question_opened'
+                    SELECT * FROM game_sessions
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT ?
                     """,
-                    (row["id"],),
+                    (limit,),
                 ).fetchall()
-                question_ids = {
-                    payload.get("question_id")
-                    for event_row in event_rows
-                    for payload in [json.loads(event_row["payload_json"])]
-                    if payload.get("question_id")
-                }
-                result.append(self._session_dict(row, len(question_ids)))
-            return result
+            else:
+                rows = self._db().execute(
+                    """
+                    SELECT * FROM game_sessions
+                    WHERE mode = ?
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT ?
+                    """,
+                    (normalized_mode, limit),
+                ).fetchall()
+            return [
+                self._session_dict(row, self._opened_question_count(row["id"]))
+                for row in rows
+            ]
 
     def get_session(self, session_id: object) -> dict:
         if not isinstance(session_id, str) or not session_id:
@@ -486,20 +516,14 @@ class GameJournal:
                 reverse=True,
             )
 
-    def snapshot(self, *, limit: int = 50) -> dict:
-        current = None
-        if self._current_session_id is not None:
-            current = next(
-                (
-                    session
-                    for session in self.list_sessions(limit=200)
-                    if session["id"] == self._current_session_id
-                ),
-                None,
-            )
-        return {
-            "current_mode": current["mode"] if current else self._pending_mode,
-            "current_session": current,
-            "sessions": self.list_sessions(limit=limit),
-            "used_questions": self.used_questions(),
-        }
+    def snapshot(self, *, limit: int = 50, mode: str | None = None) -> dict:
+        with self._lock:
+            current = None
+            if self._current_session_id is not None:
+                current = self._session_summary(self._current_session_id)
+            return {
+                "current_mode": current["mode"] if current else self._pending_mode,
+                "current_session": current,
+                "sessions": self.list_sessions(limit=limit, mode=mode),
+                "used_questions": self.used_questions(),
+            }

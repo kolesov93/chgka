@@ -1268,6 +1268,23 @@ def test_game_history_handlers_are_admin_only_and_can_reclassify(monkeypatch):
         history = await main.admin_get_game_history("admin")
         assert history["ok"] is True
         assert history["history"]["current_mode"] == MODE_DEBUG
+        assert history["history"]["sessions"] == []
+
+        debug_history = await main.admin_get_game_history(
+            "admin",
+            {"mode": MODE_DEBUG},
+        )
+        assert [
+            session["id"] for session in debug_history["history"]["sessions"]
+        ] == [session_id]
+
+        all_history = await main.admin_get_game_history(
+            "admin",
+            {"mode": "all"},
+        )
+        assert [
+            session["id"] for session in all_history["history"]["sessions"]
+        ] == [session_id]
 
         changed = await main.admin_set_game_session_mode(
             "admin",
@@ -1275,6 +1292,9 @@ def test_game_history_handlers_are_admin_only_and_can_reclassify(monkeypatch):
         )
         assert changed["ok"] is True
         assert changed["history"]["sessions"][0]["mode"] == MODE_REGULAR
+
+        regular_history = await main.admin_get_game_history("admin")
+        assert regular_history["history"]["sessions"][0]["id"] == session_id
 
         detail = await main.admin_get_game_session(
             "admin",
@@ -1288,6 +1308,12 @@ def test_game_history_handlers_are_admin_only_and_can_reclassify(monkeypatch):
             {"mode": "production"},
         )
         assert invalid["ok"] is False
+
+        invalid_filter = await main.admin_get_game_history(
+            "admin",
+            {"mode": "production"},
+        )
+        assert invalid_filter["ok"] is False
 
         monkeypatch.setattr(main, "require_admin", _deny_admin)
         denied = await main.admin_get_game_history("player")

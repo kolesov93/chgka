@@ -11,6 +11,13 @@ const STATUS_LABELS = {
   interrupted: 'Прервана',
 };
 
+export const DEFAULT_GAME_SESSION_FILTER = 'regular';
+export const GAME_SESSION_FILTERS = Object.freeze([
+  { value: 'regular', label: 'Обычные' },
+  { value: 'debug', label: 'Тестовые' },
+  { value: 'all', label: 'Все' },
+]);
+
 export function gameModeLabel(mode) {
   return MODE_LABELS[mode] || 'Неизвестный режим';
 }

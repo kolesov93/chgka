@@ -1847,8 +1847,14 @@ def _journal_error_payload(error: JournalError) -> dict:
 async def admin_get_game_history(sid, data=None):
     if not await require_admin(sid):
         return {"ok": False, "error": "not_admin"}
+    payload = data if isinstance(data, dict) else {}
+    requested_mode = payload.get("mode", MODE_REGULAR)
+    session_mode = None if requested_mode == "all" else requested_mode
     try:
-        return {"ok": True, "history": game_journal.snapshot()}
+        return {
+            "ok": True,
+            "history": game_journal.snapshot(mode=session_mode),
+        }
     except JournalError as error:
         return _journal_error_payload(error)
 

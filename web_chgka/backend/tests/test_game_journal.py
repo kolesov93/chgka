@@ -102,6 +102,18 @@ def test_regular_mode_is_the_only_question_history_filter(tmp_path):
         _opened("regular-question", title="Настоящий", sector=2),
     )
 
+    assert [item["id"] for item in journal.list_sessions(mode=MODE_REGULAR)] == [
+        "regular-session"
+    ]
+    assert [item["id"] for item in journal.list_sessions(mode=MODE_DEBUG)] == [
+        "debug-session"
+    ]
+    debug_snapshot = journal.snapshot(mode=MODE_DEBUG)
+    assert debug_snapshot["current_session"]["id"] == "regular-session"
+    assert [item["id"] for item in debug_snapshot["sessions"]] == [
+        "debug-session"
+    ]
+
     assert [item["question_id"] for item in journal.used_questions()] == [
         "regular-question"
     ]
@@ -114,6 +126,24 @@ def test_regular_mode_is_the_only_question_history_filter(tmp_path):
     journal.set_session_mode("regular-session", MODE_DEBUG)
     assert [item["question_id"] for item in journal.used_questions()] == [
         "debug-question"
+    ]
+
+
+def test_session_mode_filter_is_applied_before_limit(tmp_path):
+    ids = iter(("regular-session", "newer-debug-session"))
+    journal = _journal(tmp_path, id_factory=lambda: next(ids))
+    journal.set_current_mode(MODE_REGULAR)
+    journal.mark_started()
+    journal.rotate_after_reset({"znatoki": 0, "tv": 0})
+
+    assert [
+        item["id"] for item in journal.list_sessions(limit=1, mode=MODE_REGULAR)
+    ] == ["regular-session"]
+    assert [
+        item["id"] for item in journal.list_sessions(limit=1, mode=MODE_DEBUG)
+    ] == ["newer-debug-session"]
+    assert [item["id"] for item in journal.list_sessions(limit=1)] == [
+        "newer-debug-session"
     ]
 
 

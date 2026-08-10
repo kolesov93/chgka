@@ -2,12 +2,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  DEFAULT_GAME_SESSION_FILTER,
+  GAME_SESSION_FILTERS,
   formatJournalTimestamp,
   gameModeLabel,
   gameScoreLabel,
   gameStatusLabel,
   questionHistoryLabel,
 } from './gameHistory.js';
+
+test('game session history defaults to regular games and offers all filters', () => {
+  assert.equal(DEFAULT_GAME_SESSION_FILTER, 'regular');
+  assert.deepEqual(
+    GAME_SESSION_FILTERS.map((filter) => filter.value),
+    ['regular', 'debug', 'all'],
+  );
+});
 
 test('journal labels are Russian and have safe fallbacks', () => {
   assert.equal(gameModeLabel('regular'), 'Обычная');
