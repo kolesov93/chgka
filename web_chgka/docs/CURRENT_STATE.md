@@ -15,7 +15,8 @@
 - Question-ID commit: `b28cf8e` (`Add persistent question identifiers`).
 - Implementation commit: `d0b2bb5` (`Implement durable game event journal`) adds versioned SQLite sessions/events, typed transition logging, exact `question_opened` metadata, regular-only history queries, mode correction, admin-only history UI, and durable Compose storage.
 - History-route follow-up: `8a12ddf` (`Move game history to separate admin page`) removes history/mode from all `/admin` game phases and adds the password-protected `/admin/history` entrypoint with a non-roster history socket.
-- Local verification: 206 backend tests with warnings as errors, 11 frontend test files, production frontend build, direct `/admin/history` SPA response, and sample-pack validation pass. Native Compose validation remains blocked by the installed Snap `snap-confine` capability failure; independent YAML/mount assertions pass.
+- History-filter follow-up: `7ce0f1c` (`Filter game history sessions by mode`) adds server-side «Обычные / Тестовые / Все» filtering before the session limit; `/admin/history` defaults to ordinary games.
+- Local verification: 207 backend tests with warnings as errors, 11 frontend test files, production frontend build, direct `/admin/history` SPA response, and sample-pack validation pass. Native Compose validation remains blocked by the installed Snap `snap-confine` capability failure; independent YAML/mount assertions pass.
 - Next continuation point: run the focused smoke in `docs/tasks/0020-game-event-journal.md`, then close and merge only after acceptance.
 
 - `web` and `origin/web` are synchronized at `e086f39` before task 0019.
