@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from game_journal import (
     MODE_DEBUG,
     MODE_REGULAR,
@@ -36,6 +38,21 @@ def _journal(tmp_path, *, mode=MODE_DEBUG, id_factory=None):
     return journal
 
 
+@pytest.fixture
+def journal_factory(tmp_path):
+    journals = []
+
+    def create(*, mode=MODE_DEBUG, id_factory=None):
+        journal = _journal(tmp_path, mode=mode, id_factory=id_factory)
+        journals.append(journal)
+        return journal
+
+    yield create
+
+    for journal in reversed(journals):
+        journal.close()
+
+
 def _opened(question_id, *, title, sector, part_index=None):
     return {
         "question_id": question_id,
@@ -47,8 +64,8 @@ def _opened(question_id, *, title, sector, part_index=None):
     }
 
 
-def test_journal_persists_ordered_full_log_and_part_level_questions(tmp_path):
-    journal = _journal(tmp_path)
+def test_journal_persists_ordered_full_log_and_part_level_questions(journal_factory):
+    journal = journal_factory()
     journal.record_event("player_joined", "Игрок присоединился", {"name": "Иван"})
     journal.mark_started()
     journal.record_event(
@@ -85,9 +102,9 @@ def test_journal_persists_ordered_full_log_and_part_level_questions(tmp_path):
     assert snapshot["used_questions"] == []
 
 
-def test_regular_mode_is_the_only_question_history_filter(tmp_path):
+def test_regular_mode_is_the_only_question_history_filter(journal_factory):
     ids = iter(("debug-session", "regular-session"))
-    journal = _journal(tmp_path, id_factory=lambda: next(ids))
+    journal = journal_factory(id_factory=lambda: next(ids))
     journal.mark_started()
     journal.record_event(
         "question_opened",
@@ -131,9 +148,9 @@ def test_regular_mode_is_the_only_question_history_filter(tmp_path):
     ]
 
 
-def test_session_mode_filter_is_applied_before_limit(tmp_path):
+def test_session_mode_filter_is_applied_before_limit(journal_factory):
     ids = iter(("regular-session", "newer-debug-session"))
-    journal = _journal(tmp_path, id_factory=lambda: next(ids))
+    journal = journal_factory(id_factory=lambda: next(ids))
     journal.set_current_mode(MODE_REGULAR)
     journal.mark_started()
     journal.rotate_after_reset({"znatoki": 0, "tv": 0})
@@ -149,9 +166,9 @@ def test_session_mode_filter_is_applied_before_limit(tmp_path):
     ]
 
 
-def test_reset_rotates_session_and_restart_marks_open_session_interrupted(tmp_path):
+def test_reset_rotates_session_and_restart_marks_open_session_interrupted(journal_factory):
     ids = iter(("session-before-reset", "session-after-reset"))
-    journal = _journal(tmp_path, id_factory=lambda: next(ids))
+    journal = journal_factory(id_factory=lambda: next(ids))
     journal.mark_started()
     journal.record_event("spin_started", "Вращение", {})
     new_session_id = journal.rotate_after_reset({"znatoki": 2, "tv": 1})
@@ -163,12 +180,7 @@ def test_reset_rotates_session_and_restart_marks_open_session_interrupted(tmp_pa
     assert sessions["session-after-reset"]["mode"] == MODE_DEBUG
 
     journal.close()
-    restarted = GameJournal(
-        tmp_path / "journal.sqlite3",
-        default_mode=MODE_DEBUG,
-        clock=Clock(),
-    )
-    restarted.initialize()
+    restarted = journal_factory()
     assert restarted.recover_interrupted_sessions() == 1
     sessions = {item["id"]: item for item in restarted.list_sessions()}
     assert sessions["session-after-reset"]["status"] == STATUS_INTERRUPTED
