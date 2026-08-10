@@ -235,6 +235,10 @@ class GameJournal:
                     )
         return normalized
 
+    def current_mode(self) -> str:
+        with self._lock:
+            return self._pending_mode
+
     def set_session_mode(self, session_id: object, mode: object) -> str:
         if not isinstance(session_id, str) or not session_id:
             raise JournalError("Session id is required")

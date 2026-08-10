@@ -1261,10 +1261,31 @@ def test_game_history_handlers_are_admin_only_and_can_reclassify(monkeypatch):
     fake_sio = FakeSio(yield_on_emit=False)
     monkeypatch.setattr(main, "sio", fake_sio)
     monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(
+        main,
+        "players_list",
+        [_authorized_admin(monkeypatch, fake_sio)],
+    )
     main.game_journal.record_event("player_joined", "Игрок присоединился", {})
     session_id = main.game_journal.list_sessions()[0]["id"]
 
     async def run():
+        current_mode = await main.admin_get_current_game_mode("admin")
+        assert current_mode == {"ok": True, "mode": MODE_DEBUG}
+
+        set_current = await main.admin_set_current_game_mode(
+            "admin",
+            {"mode": MODE_REGULAR},
+        )
+        assert set_current == {"ok": True, "mode": MODE_REGULAR}
+        assert any(
+            event == "admin_game_mode_update"
+            and data == {"mode": MODE_REGULAR}
+            and kwargs == {"to": "admin"}
+            for event, data, kwargs in fake_sio.events
+        )
+
+        await main.admin_set_current_game_mode("admin", {"mode": MODE_DEBUG})
         history = await main.admin_get_game_history("admin")
         assert history["ok"] is True
         assert history["history"]["current_mode"] == MODE_DEBUG
@@ -1318,6 +1339,8 @@ def test_game_history_handlers_are_admin_only_and_can_reclassify(monkeypatch):
         monkeypatch.setattr(main, "require_admin", _deny_admin)
         denied = await main.admin_get_game_history("player")
         assert denied == {"ok": False, "error": "not_admin"}
+        denied_mode = await main.admin_get_current_game_mode("player")
+        assert denied_mode == {"ok": False, "error": "not_admin"}
 
     asyncio.run(run())
 
@@ -1339,6 +1362,7 @@ def test_live_ops_reset_to_intro_stops_audio_and_waits_for_manual_music(monkeypa
         "players_list",
         [_authorized_admin(monkeypatch, fake_sio)],
     )
+    main.game_journal.set_current_mode(MODE_REGULAR)
 
     response = asyncio.run(main.admin_reset_to_intro("admin"))
 
@@ -1357,6 +1381,12 @@ def test_live_ops_reset_to_intro_stops_audio_and_waits_for_manual_music(monkeypa
         if event == "state_update" and data["phase"] == PHASE_INTRO
     )
     assert stop_index < state_index
+    assert any(
+        event == "admin_game_mode_update"
+        and data == {"mode": MODE_DEBUG}
+        and kwargs == {"to": "admin"}
+        for event, data, kwargs in fake_sio.events
+    )
     assert not any(
         event == "play_sound" and data == {"sound": "intro"}
         for event, data, _kwargs in fake_sio.events

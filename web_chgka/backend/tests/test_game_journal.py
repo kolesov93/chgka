@@ -96,6 +96,7 @@ def test_regular_mode_is_the_only_question_history_filter(tmp_path):
     )
     journal.rotate_after_reset({"znatoki": 0, "tv": 0})
     journal.set_current_mode(MODE_REGULAR)
+    assert journal.current_mode() == MODE_REGULAR
     journal.record_event(
         "question_opened",
         "Обычный вопрос",
@@ -124,6 +125,7 @@ def test_regular_mode_is_the_only_question_history_filter(tmp_path):
         "regular-question",
     }
     journal.set_session_mode("regular-session", MODE_DEBUG)
+    assert journal.current_mode() == MODE_DEBUG
     assert [item["question_id"] for item in journal.used_questions()] == [
         "debug-question"
     ]

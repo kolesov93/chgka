@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { isAdminEntrypoint } from '../entrypoint';
+import { ENTRYPOINT_ADMIN_HISTORY, isAdminEntrypoint } from '../entrypoint';
 import { socket } from '../socket';
 import {
   ADMIN_TOKEN_KEY,
@@ -9,6 +9,7 @@ import {
   getSessionRestorePayload,
   saveAdminToken,
 } from '../session';
+import { responseMessage } from '../uiText';
 
 export function useGameSession(entrypoint) {
   const [gameState, setGameState] = useState(null);
@@ -24,6 +25,8 @@ export function useGameSession(entrypoint) {
   const [notifications, setNotifications] = useState([]);
   const [sessionNotice, setSessionNotice] = useState('');
   const [adminExpiresAtMs, setAdminExpiresAtMs] = useState(null);
+  const [currentGameMode, setCurrentGameMode] = useState(null);
+  const [gameModeLoading, setGameModeLoading] = useState(false);
 
   const expireAdminSession = useCallback((data) => {
     const expired = getExpiredAdminSession(data);
@@ -36,6 +39,8 @@ export function useGameSession(entrypoint) {
     setAdminQuestion(expired.adminQuestion);
     setSessionNotice(expired.notice);
     setAdminExpiresAtMs(null);
+    setCurrentGameMode(null);
+    setGameModeLoading(false);
   }, []);
 
   useEffect(() => {
@@ -69,6 +74,47 @@ export function useGameSession(entrypoint) {
   }, [entrypoint]);
 
   useEffect(() => {
+    if (myRole !== 'admin' || entrypoint === ENTRYPOINT_ADMIN_HISTORY) {
+      setCurrentGameMode(null);
+      setGameModeLoading(false);
+      return undefined;
+    }
+
+    let active = true;
+    setGameModeLoading(true);
+    socket.emit('admin_get_current_game_mode', null, (response) => {
+      if (!active) return;
+      setGameModeLoading(false);
+      if (response?.ok) {
+        setCurrentGameMode(response.mode);
+        return;
+      }
+      addNotification({
+        type: 'warning',
+        message: responseMessage(response, 'Не удалось загрузить режим игры'),
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, [addNotification, entrypoint, myRole]);
+
+  const changeCurrentGameMode = useCallback((mode) => {
+    setGameModeLoading(true);
+    socket.emit('admin_set_current_game_mode', { mode }, (response) => {
+      setGameModeLoading(false);
+      if (response?.ok) {
+        setCurrentGameMode(response.mode);
+        return;
+      }
+      addNotification({
+        type: 'warning',
+        message: responseMessage(response, 'Не удалось изменить режим игры'),
+      });
+    });
+  }, [addNotification]);
+
+  useEffect(() => {
     function onConnect() {
       setIsConnected(true);
 
@@ -80,6 +126,8 @@ export function useGameSession(entrypoint) {
       setIsConnected(false);
       setMyRole('player');
       setMyName('');
+      setCurrentGameMode(null);
+      setGameModeLoading(false);
     }
 
     function onStateUpdate(newState) {
@@ -99,7 +147,18 @@ export function useGameSession(entrypoint) {
     function onRoleUpdate(data) {
       if (data?.role) {
         setMyRole(data.role);
-        if (data.role !== 'admin') setAdminExpiresAtMs(null);
+        if (data.role !== 'admin') {
+          setAdminExpiresAtMs(null);
+          setCurrentGameMode(null);
+          setGameModeLoading(false);
+        }
+      }
+    }
+
+    function onAdminGameModeUpdate(data) {
+      if (data?.mode === 'regular' || data?.mode === 'debug') {
+        setCurrentGameMode(data.mode);
+        setGameModeLoading(false);
       }
     }
 
@@ -195,6 +254,7 @@ export function useGameSession(entrypoint) {
     socket.on('admin_notification', addNotification);
     socket.on('pack_info', onPackInfo);
     socket.on('admin_question', onAdminQuestion);
+    socket.on('admin_game_mode_update', onAdminGameModeUpdate);
 
     return () => {
       socket.off('connect', onConnect);
@@ -213,6 +273,7 @@ export function useGameSession(entrypoint) {
       socket.off('admin_notification', addNotification);
       socket.off('pack_info', onPackInfo);
       socket.off('admin_question', onAdminQuestion);
+      socket.off('admin_game_mode_update', onAdminGameModeUpdate);
     };
   }, [addNotification, entrypoint, expireAdminSession]);
 
@@ -234,6 +295,8 @@ export function useGameSession(entrypoint) {
     setAdminQuestion(null);
     setSessionNotice('');
     setAdminExpiresAtMs(null);
+    setCurrentGameMode(null);
+    setGameModeLoading(false);
 
     socket.connect();
   }, []);
@@ -246,6 +309,8 @@ export function useGameSession(entrypoint) {
     myName,
     packInfo,
     adminQuestion,
+    currentGameMode,
+    gameModeLoading,
     isConnected,
     hasJoined,
     isPending,
@@ -253,6 +318,7 @@ export function useGameSession(entrypoint) {
     notifications,
     addNotification,
     dismissNotification,
+    changeCurrentGameMode,
     logout,
   };
 }

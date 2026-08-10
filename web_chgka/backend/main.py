@@ -485,6 +485,14 @@ async def _clear_admin_question_for_admins() -> None:
             await sio.emit("admin_question", None, to=player["sid"])
 
 
+async def _emit_current_game_mode_to_admins() -> None:
+    """Keep the live host UI synchronized with journal mode changes."""
+    payload = {"mode": game_journal.current_mode()}
+    for player in players_list:
+        if _admin_record_is_authorized(player):
+            await sio.emit("admin_game_mode_update", payload, to=player["sid"])
+
+
 def _journal_payload(event: GameEvent) -> dict[str, object]:
     """Enrich authoritative question-open events with immutable pack metadata."""
     payload = dict(event.payload)
@@ -562,6 +570,7 @@ async def _emit_transition_error(sid: str, error: TransitionError) -> None:
 
 async def _apply_transition_effects(effects: TransitionEffects) -> None:
     """Deliver side effects after a transition has atomically mutated state."""
+    game_mode_changed = False
     if effects.clear_media_tokens:
         _clear_all_media_tokens()
     if any(
@@ -576,6 +585,7 @@ async def _apply_transition_effects(effects: TransitionEffects) -> None:
             game_journal.complete_current(payload.get("score", {}))
         elif event.event_type == "game_reset":
             game_journal.rotate_after_reset(payload.get("score", {}))
+            game_mode_changed = True
     if effects.stop_sounds:
         _supersede_sound_fade(mode="stopped")
         await emit_settings_update()
@@ -586,6 +596,8 @@ async def _apply_transition_effects(effects: TransitionEffects) -> None:
     for sound in effects.sounds:
         await sio.emit("play_sound", {"sound": sound})
     await emit_state_update()
+    if game_mode_changed:
+        await _emit_current_game_mode_to_admins()
     if effects.clear_admin_question:
         await _clear_admin_question_for_admins()
     elif effects.refresh_admin_question:
@@ -1874,13 +1886,21 @@ async def admin_get_game_session(sid, data):
 
 
 @sio.event
+async def admin_get_current_game_mode(sid, data=None):
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+    return {"ok": True, "mode": game_journal.current_mode()}
+
+
+@sio.event
 async def admin_set_current_game_mode(sid, data):
     if not await require_admin(sid):
         return {"ok": False, "error": "not_admin"}
     payload = data if isinstance(data, dict) else {}
     try:
         mode = game_journal.set_current_mode(payload.get("mode"))
-        return {"ok": True, "mode": mode, "history": game_journal.snapshot()}
+        await _emit_current_game_mode_to_admins()
+        return {"ok": True, "mode": mode}
     except JournalError as error:
         return _journal_error_payload(error)
 
@@ -1895,6 +1915,7 @@ async def admin_set_game_session_mode(sid, data):
             payload.get("session_id"),
             payload.get("mode"),
         )
+        await _emit_current_game_mode_to_admins()
         return {"ok": True, "mode": mode, "history": game_journal.snapshot()}
     except JournalError as error:
         return _journal_error_payload(error)

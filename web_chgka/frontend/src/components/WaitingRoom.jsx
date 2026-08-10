@@ -1,6 +1,13 @@
 import { useState } from 'react';
+import { CurrentGameModeControl } from './CurrentGameModeControl';
 
-export function WaitingRoom({ socket, players = [] }) {
+export function WaitingRoom({
+  socket,
+  players = [],
+  currentGameMode,
+  gameModeLoading,
+  onGameModeChange,
+}) {
   const [isStarting, setIsStarting] = useState(false);
 
   const handleStartGame = () => {
@@ -29,6 +36,14 @@ export function WaitingRoom({ socket, players = [] }) {
         <p className="text-center text-slate-400 mb-8">
           Игроков: {playerCount}
         </p>
+
+        <div className="mb-8">
+          <CurrentGameModeControl
+            mode={currentGameMode}
+            loading={gameModeLoading}
+            onModeChange={onGameModeChange}
+          />
+        </div>
 
         {/* Список игроков */}
         <div className="mb-8">

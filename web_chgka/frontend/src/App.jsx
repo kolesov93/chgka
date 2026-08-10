@@ -29,6 +29,8 @@ function GameApp({ entrypoint }) {
     myName,
     packInfo,
     adminQuestion,
+    currentGameMode,
+    gameModeLoading,
     isConnected,
     hasJoined,
     isPending,
@@ -36,6 +38,7 @@ function GameApp({ entrypoint }) {
     notifications,
     addNotification,
     dismissNotification,
+    changeCurrentGameMode,
     logout,
   } = useGameSession(entrypoint);
 
@@ -102,7 +105,13 @@ function GameApp({ entrypoint }) {
         <>
           {notificationsPanel}
           {userHeader}
-          <WaitingRoom socket={socket} players={players} />
+          <WaitingRoom
+            socket={socket}
+            players={players}
+            currentGameMode={currentGameMode}
+            gameModeLoading={gameModeLoading}
+            onGameModeChange={changeCurrentGameMode}
+          />
         </>
       );
     }
@@ -205,6 +214,9 @@ function GameApp({ entrypoint }) {
           onTenSeconds={markTenSecondsNotified}
           stopAllSounds={stopAllSounds}
           addNotification={addNotification}
+          currentGameMode={currentGameMode}
+          gameModeLoading={gameModeLoading}
+          onGameModeChange={changeCurrentGameMode}
         />
       )}
     </div>

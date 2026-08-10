@@ -11,7 +11,6 @@ import {
 } from '../gameHistory';
 import { responseMessage } from '../uiText';
 
-const modeButtonClass = 'flex-1 rounded px-2 py-2 text-[10px] font-black uppercase tracking-wider transition-colors disabled:opacity-40';
 export function GameHistoryPanel({ socket, addNotification, initiallyOpen = false }) {
   const [isOpen, setIsOpen] = useState(initiallyOpen);
   const [history, setHistory] = useState(null);
@@ -59,16 +58,6 @@ export function GameHistoryPanel({ socket, addNotification, initiallyOpen = fals
     });
   };
 
-  const setCurrentMode = (mode) => {
-    socket.emit('admin_set_current_game_mode', { mode }, (response) => {
-      if (!response?.ok) {
-        warn(response, 'Не удалось изменить режим игры');
-        return;
-      }
-      loadHistory();
-    });
-  };
-
   const togglePastMode = (session) => {
     const mode = session.mode === 'regular' ? 'debug' : 'regular';
     if (!confirm(`Пометить эту игру как «${gameModeLabel(mode).toLowerCase()}»?`)) return;
@@ -85,43 +74,15 @@ export function GameHistoryPanel({ socket, addNotification, initiallyOpen = fals
     );
   };
 
-  const currentMode = history?.current_mode || null;
   const sessions = history?.sessions || [];
   const usedQuestions = history?.used_questions || [];
 
   return (
     <div className="rounded-lg border border-indigo-700/70 bg-indigo-950/20">
-      <div className="p-3">
-        <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-indigo-300">
-          Режим текущей игры
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => setCurrentMode('regular')}
-            className={`${modeButtonClass} ${currentMode === 'regular' ? 'bg-emerald-700 text-white ring-1 ring-emerald-400' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-          >
-            Обычная
-          </button>
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => setCurrentMode('debug')}
-            className={`${modeButtonClass} ${currentMode === 'debug' ? 'bg-amber-700 text-white ring-1 ring-amber-400' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-          >
-            Тестовая
-          </button>
-        </div>
-        <p className="mt-2 text-[10px] leading-relaxed text-slate-500">
-          В общую историю сыгранных вопросов входят только обычные игры.
-        </p>
-      </div>
-
       <button
         type="button"
         onClick={() => setIsOpen((current) => !current)}
-        className="flex w-full items-center justify-between border-t border-indigo-800/60 px-3 py-2 text-xs font-bold uppercase tracking-widest text-indigo-300 hover:bg-indigo-950/30"
+        className="flex w-full items-center justify-between px-3 py-2 text-xs font-bold uppercase tracking-widest text-indigo-300 hover:bg-indigo-950/30"
       >
         <span>История игр</span>
         <span>{isOpen ? '▲' : '▼'}</span>
