@@ -2,11 +2,15 @@
 
 - Snapshot date: 2026-08-11
 - Latest completed task: `docs/tasks/0021-stable-intro-controls.md`
-- Active task: none
-- Branch: `web`
-- Status: task 0021 is accepted and merged locally; publication of `web` is pending.
+- Active task: `docs/tasks/0022-participant-groups-respondents.md`
+- Branch: `task/participant-groups-respondents`
+- Status: task 0022 is in progress; participant-group and respondent-attribution decisions are fixed before implementation.
 
 ## Repository checkpoint
+
+- Task 0022 starts from local `web` commit `0438766`.
+- One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.
+- Ordinary questions and blitz parts require one respondent after «Ответ команды»; superblitz requires one respondent before discussion and retains that participant for all parts. The future decisive round follows the same pre-question exception.
 
 - Task 0021 planning commit: `a093068` (`Plan stable intro controls task`).
 - Task 0021 implementation commit: `afaed4e` (`Stabilize intro host controls`).
