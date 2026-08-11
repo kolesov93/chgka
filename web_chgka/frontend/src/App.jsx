@@ -11,6 +11,7 @@ import { IntroScreen } from './components/IntroScreen';
 import { NotificationsPanel } from './components/NotificationsPanel';
 import { SharedMediaRenderer } from './components/SharedMediaRenderer';
 import { UserHeader } from './components/UserHeader';
+import { RespondentBanner } from './components/RespondentBanner';
 import { useDiscussionTimer } from './hooks/useDiscussionTimer';
 import { useGameSession } from './hooks/useGameSession';
 import { useGameSound } from './hooks/useGameSound';
@@ -149,6 +150,13 @@ function GameApp({ entrypoint }) {
         </div>
 
         {!isIntro && <ScoreBoard score={gameState?.score} />}
+
+        {!isIntro && !isGameOver && (
+          <RespondentBanner
+            respondent={round?.respondent}
+            superblitz={round?.kind === 'superblitz'}
+          />
+        )}
 
         {blackbox && (
           <div className="w-full">

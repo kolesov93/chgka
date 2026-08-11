@@ -2,7 +2,15 @@ import { GameLog } from './GameLog';
 import { IntroHostControls } from './IntroHostControls';
 import { LiveOpsPanel } from './LiveOpsPanel';
 import { CurrentGameModeControl } from './CurrentGameModeControl';
+import { ParticipantRoster } from './ParticipantRoster';
 import { socket } from '../socket';
+import {
+  approvedParticipantOptions,
+  groupDisplayName,
+  participantCount,
+  participantGroups,
+} from '../participants';
+import { responseMessage } from '../uiText';
 
 export function AdminControls({
   gameState,
@@ -33,9 +41,12 @@ export function AdminControls({
   const partLabel = isBlitzRound && partIndex !== null ? `${partIndex + 1}/3` : null;
   const blitzHasNextPart = isBlitzRound && round?.advance_next_part === true;
   const hasWinner = (gameState?.score?.znatoki ?? 0) >= 6 || (gameState?.score?.tv ?? 0) >= 6;
-  const regularPlayers = players.filter((player) => player.role !== 'admin');
-  const approvedPlayerCount = regularPlayers.filter((player) => !player.pending).length;
-  const pendingPlayerCount = regularPlayers.filter((player) => player.pending).length;
+  const groups = participantGroups(players);
+  const approvedPlayerCount = participantCount(groups, { pending: false });
+  const pendingPlayerCount = participantCount(groups.filter((group) => group.pending));
+  const respondentOptions = approvedParticipantOptions(players);
+  const respondent = round?.respondent || null;
+  const isSuperblitz = roundKind === 'superblitz';
 
   const spinForced = (sectorId) => {
     if (confirm(`Крутим на сектор ${sectorId}?`)) {
@@ -64,11 +75,64 @@ export function AdminControls({
     stopAllSounds();
   };
 
-  const kickPlayer = (playerName) => {
-    if (confirm(`Отключить игрока "${playerName}"?`)) {
-      socket.emit('admin_kick', { name: playerName });
+  const kickGroup = (group) => {
+    if (confirm(`Отключить группу «${groupDisplayName(group)}»?`)) {
+      socket.emit('admin_kick', { group_id: group.group_id });
     }
   };
+
+  const selectRespondent = (participantId) => {
+    if (!participantId) return;
+    socket.emit(
+      'admin_select_respondent',
+      { participant_id: participantId },
+      (response) => {
+        if (!response?.ok) {
+          addNotification({
+            type: 'warning',
+            message: responseMessage(response, 'Не удалось выбрать отвечавшего'),
+          });
+        }
+      },
+    );
+  };
+
+  const respondentSelector = (
+    <div className="mb-2 rounded border border-violet-800/60 bg-violet-950/25 p-2">
+      <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-violet-300">
+        {isSuperblitz ? 'Участник суперблица' : 'Кто отвечал'}
+      </div>
+      {respondentOptions.length === 0 ? (
+        <div className="rounded border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-slate-500">
+          Нет допущенных участников
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-1.5">
+          {respondentOptions.map((option) => {
+            const isSelected = respondent?.participant_id === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={isSelected}
+                onClick={() => selectRespondent(option.value)}
+                className={`min-h-9 rounded border px-2 py-1.5 text-left text-xs font-bold transition-colors ${
+                  isSelected
+                    ? 'border-violet-400 bg-violet-700 text-white ring-1 ring-violet-400'
+                    : option.online
+                      ? 'border-slate-600 bg-slate-800 text-slate-100 hover:border-violet-500 hover:bg-slate-700'
+                      : 'border-slate-700 bg-slate-900 text-slate-500 hover:border-violet-700 hover:text-slate-300'
+                }`}
+              >
+                {option.label}
+                {!option.online && <span className="ml-1 font-normal">(оффлайн)</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="w-full lg:w-[600px] flex flex-col gap-4">
@@ -138,13 +202,20 @@ export function AdminControls({
           <div className="border border-slate-700 p-3 rounded bg-slate-900/30">
             <div className="w-full">
             {isQuestionReading && (
-              <button
-                onClick={() => socket.emit('admin_start_discussion')}
-                disabled={blackboxActive}
-                className="w-full bg-blue-700 hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40 text-white py-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-xs"
-              >
-                {blackboxActive ? 'Сначала завершите чёрный ящик' : 'Начать обсуждение'}
-              </button>
+              <>
+                {isSuperblitz && (!respondent || partIndex === 0) && respondentSelector}
+                <button
+                  onClick={() => socket.emit('admin_start_discussion')}
+                  disabled={blackboxActive || (isSuperblitz && !respondent)}
+                  className="w-full bg-blue-700 hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40 text-white py-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-xs"
+                >
+                  {blackboxActive
+                    ? 'Сначала завершите чёрный ящик'
+                    : isSuperblitz && !respondent
+                      ? 'Сначала выберите участника'
+                      : 'Начать обсуждение'}
+                </button>
+              </>
             )}
             {isDiscussion && (
               <div className="flex flex-col gap-2">
@@ -179,10 +250,13 @@ export function AdminControls({
               </div>
             )}
             {isTeamAnswer && (
-              <div className="flex gap-2">
+              <div>
+                {!isSuperblitz && respondentSelector}
+                <div className="flex gap-2">
                 <button
                   onClick={() => socket.emit('admin_score', { winner: 'znatoki' })}
-                  className="flex-1 bg-green-800 hover:bg-green-700 text-white py-2 rounded shadow active:scale-95 transition-all flex flex-col items-center"
+                  disabled={!respondent}
+                  className="flex-1 bg-green-800 hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-40 text-white py-2 rounded shadow active:scale-95 transition-all flex flex-col items-center"
                 >
                   <span className="text-[10px] uppercase opacity-70 font-bold">
                     {isBlitzRound && partIndex !== null && partIndex < 2
@@ -196,13 +270,15 @@ export function AdminControls({
 
                 <button
                   onClick={() => socket.emit('admin_score', { winner: 'tv' })}
-                  className="flex-1 bg-red-800 hover:bg-red-700 text-white py-2 rounded shadow active:scale-95 transition-all flex flex-col items-center"
+                  disabled={!respondent}
+                  className="flex-1 bg-red-800 hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40 text-white py-2 rounded shadow active:scale-95 transition-all flex flex-col items-center"
                 >
                   <span className="text-[10px] uppercase opacity-70 font-bold">
                     {isBlitzRound ? 'Неверно (ТВ +1)' : 'Телезрители'}
                   </span>
                   <span className="text-xl font-bold leading-none">+1</span>
                 </button>
+                </div>
               </div>
             )}
             {isPostRound && (
@@ -279,60 +355,12 @@ export function AdminControls({
             )}
           </div>
           <div className="space-y-1 max-h-40 overflow-y-auto">
-            {regularPlayers.length === 0 ? (
-              <div className="text-xs text-slate-600 italic">Нет игроков</div>
-            ) : (
-              regularPlayers.map((player, index) => (
-                <div
-                  key={index}
-                  className={`flex items-center justify-between px-2 py-1.5 rounded ${
-                    player.pending
-                      ? 'bg-yellow-900/30 border border-yellow-700/50'
-                      : 'bg-slate-800'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        player.pending
-                          ? 'bg-yellow-500 animate-pulse'
-                          : player.online
-                            ? 'bg-green-500'
-                            : 'bg-slate-600'
-                      }`}
-                    />
-                    <span
-                      className={`text-sm ${
-                        player.pending
-                          ? 'text-yellow-300'
-                          : player.online
-                            ? 'text-white'
-                            : 'text-slate-500'
-                      }`}
-                    >
-                      {player.name}
-                      {player.pending && <span className="text-xs ml-1">(ждёт)</span>}
-                    </span>
-                  </div>
-                  <div className="flex gap-1">
-                    {player.pending && (
-                      <button
-                        onClick={() => socket.emit('admin_approve', { name: player.name })}
-                        className="text-[10px] bg-green-700 hover:bg-green-600 text-white px-2 py-0.5 rounded font-bold uppercase transition-colors"
-                      >
-                        Пустить
-                      </button>
-                    )}
-                    <button
-                      onClick={() => kickPlayer(player.name)}
-                      className="text-[10px] bg-red-900/50 hover:bg-red-800 text-red-300 hover:text-white px-2 py-0.5 rounded font-bold uppercase transition-colors"
-                    >
-                      Отключить
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
+            <ParticipantRoster
+              groups={groups}
+              compact
+              onApprove={(group) => socket.emit('admin_approve', { group_id: group.group_id })}
+              onKick={kickGroup}
+            />
           </div>
         </div>
 

@@ -37,6 +37,15 @@ test('blitz question history is labeled by its individual part', () => {
     questionHistoryLabel({ sector: 3, part_index: null, title: 'Обычный вопрос' }),
     'Сектор 3 — Обычный вопрос',
   );
+  assert.equal(
+    questionHistoryLabel({
+      sector: 7,
+      part_index: 0,
+      title: 'Суперблиц',
+      respondent: { name: 'Мария' },
+    }),
+    'Сектор 7, часть 1/3 — Суперблиц · отвечает: Мария',
+  );
 });
 
 test('invalid journal timestamp uses a stable placeholder', () => {

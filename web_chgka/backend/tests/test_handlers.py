@@ -7,6 +7,7 @@ import pytest
 
 import main
 from auth import AdminTokenStore
+from game_events import game_event
 from game_journal import MODE_DEBUG, MODE_REGULAR, STATUS_COMPLETED, GameJournal
 from questions import parse_question_pack
 from sound_control import begin_fade, create_sound_control_state
@@ -49,6 +50,14 @@ async def _allow_admin(_sid):
 
 async def _deny_admin(_sid):
     return False
+
+
+def _respondent(name="Иван"):
+    return {
+        "participant_id": "participant-1",
+        "group_id": "group-1",
+        "name": name,
+    }
 
 
 def _authorized_admin(monkeypatch, fake_sio, *, sid="admin"):
@@ -120,6 +129,9 @@ def test_blitz_open_events_use_each_part_id(monkeypatch):
         )
         await main._apply_transition_effects(main.transition_team_answer(state))
         await main._apply_transition_effects(
+            main.transition_select_respondent(state, **_respondent())
+        )
+        await main._apply_transition_effects(
             main.transition_score(
                 state,
                 winner="znatoki",
@@ -151,7 +163,11 @@ def test_public_status_message_is_russian():
 def test_concurrent_score_handlers_award_only_one_point(monkeypatch):
     fake_sio = FakeSio()
     state = create_initial_app_state(phase=PHASE_TEAM_ANSWER)
-    state["game"]["round"] = {"kind": "normal", "sector": 1}
+    state["game"]["round"] = {
+        "kind": "normal",
+        "sector": 1,
+        "respondent": _respondent(),
+    }
     monkeypatch.setattr(main, "sio", fake_sio)
     monkeypatch.setattr(main, "require_admin", _allow_admin)
     monkeypatch.setattr(main, "app_state", state)
@@ -571,9 +587,14 @@ def test_pending_player_stays_pending_after_restore(monkeypatch):
     fake_sio = FakeSio()
     player = {
         "sid": "old",
-        "name": "Pending Player",
+        "name": "Pending Player, Second Player",
         "role": "player",
         "token": "player-token",
+        "group_id": "group-1",
+        "participants": [
+            {"id": "participant-1", "name": "Pending Player"},
+            {"id": "participant-2", "name": "Second Player"},
+        ],
         "online": False,
         "pending": True,
     }
@@ -591,6 +612,151 @@ def test_pending_player_stays_pending_after_restore(monkeypatch):
     assert restored_events == ["join_pending"]
     assert player["sid"] == "new"
     assert player["pending"] is True
+    pending_payload = next(
+        data for event, data, _kwargs in fake_sio.events if event == "join_pending"
+    )
+    assert pending_payload["group_id"] == "group-1"
+    assert [item["name"] for item in pending_payload["participants"]] == [
+        "Pending Player",
+        "Second Player",
+    ]
+
+
+def test_participant_group_join_approval_roster_and_kick_are_atomic(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    admin = _authorized_admin(monkeypatch, fake_sio)
+    generated = iter(("player-token", "group-1", "participant-1", "participant-2"))
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", create_initial_app_state(phase=PHASE_PRE_ROUND))
+    monkeypatch.setattr(main, "players_list", [admin])
+    monkeypatch.setattr(main.secrets, "token_urlsafe", lambda _length: next(generated))
+
+    async def run():
+        await main.join_game(
+            "group-browser",
+            {"participants": ["Иван", " Мария "]},
+        )
+        group = main.players_list[1]
+        assert group["pending"] is True
+        assert group["group_id"] == "group-1"
+        assert group["participants"] == [
+            {"id": "participant-1", "name": "Иван"},
+            {"id": "participant-2", "name": "Мария"},
+        ]
+        await main.join_game(
+            "group-browser",
+            {"participants": ["Иван", "Мария"]},
+        )
+        assert len(main.players_list) == 2
+        await main.admin_approve("admin", {"group_id": "group-1"})
+        assert group["pending"] is False
+        await main.admin_kick("admin", {"group_id": "group-1"})
+
+    asyncio.run(run())
+
+    roster = next(
+        data["players"]
+        for event, data, _kwargs in fake_sio.events
+        if event == "players_update" and len(data["players"]) == 2
+    )
+    public_group = roster[1]
+    assert public_group["group_id"] == "group-1"
+    assert [item["name"] for item in public_group["participants"]] == ["Иван", "Мария"]
+    assert [record["role"] for record in main.players_list] == ["admin"]
+    assert any(event == "join_pending" for event, _data, _kwargs in fake_sio.events)
+    assert any(event == "join_success" for event, _data, _kwargs in fake_sio.events)
+    assert any(event == "kicked" for event, _data, _kwargs in fake_sio.events)
+
+
+def test_participant_group_join_validates_the_complete_name_list(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "players_list", [])
+
+    async def run():
+        await main.join_game("empty", {"participants": ["Иван", " "]})
+        await main.join_game(
+            "too-many",
+            {"participants": [f"Игрок {index}" for index in range(13)]},
+        )
+        await main.join_game("too-long", {"participants": ["x" * 51]})
+
+    asyncio.run(run())
+
+    assert main.players_list == []
+    messages = [
+        data["message"]
+        for event, data, _kwargs in fake_sio.events
+        if event == "join_failed"
+    ]
+    assert messages == [
+        "Имя участника не может быть пустым",
+        "Укажите от 1 до 12 участников",
+        "Имя участника слишком длинное",
+    ]
+
+
+def test_select_respondent_broadcasts_and_enriches_question_history(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    pack = parse_question_pack(SAMPLE_PACK)
+    state = create_initial_app_state(phase=PHASE_TEAM_ANSWER)
+    state["game"]["round"] = {"kind": "normal", "sector": 1}
+    group = {
+        "sid": "group-browser",
+        "name": "Иван, Мария",
+        "role": "player",
+        "token": "player-token",
+        "group_id": "group-1",
+        "participants": [
+            {"id": "participant-1", "name": "Иван"},
+            {"id": "participant-2", "name": "Мария"},
+        ],
+        "online": False,
+        "pending": False,
+    }
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", pack)
+    monkeypatch.setattr(main, "players_list", [group])
+    opened = game_event(
+        "question_opened",
+        "Открыт вопрос",
+        sector=1,
+        kind="normal",
+        part_index=None,
+    )
+    main.game_journal.record_event(
+        opened.event_type,
+        opened.message,
+        main._journal_payload(opened),
+    )
+
+    response = asyncio.run(
+        main.admin_select_respondent(
+            "admin",
+            {"participant_id": "participant-2"},
+        )
+    )
+
+    assert response == {"ok": True}
+    assert state["game"]["round"]["respondent"] == {
+        "participant_id": "participant-2",
+        "group_id": "group-1",
+        "name": "Мария",
+    }
+    state_payload = next(
+        data for event, data, _kwargs in reversed(fake_sio.events) if event == "state_update"
+    )
+    assert state_payload["round"]["respondent"]["name"] == "Мария"
+    session_id = main.game_journal.list_sessions()[0]["id"]
+    detail = main.game_journal.get_session(session_id)
+    assert detail["opened_questions"][0]["respondent"] == {
+        "participant_id": "participant-2",
+        "group_id": "group-1",
+        "name": "Мария",
+    }
 
 
 def test_admin_login_replaces_previous_token_and_session(monkeypatch):

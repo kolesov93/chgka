@@ -1,12 +1,21 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-11
-- Latest completed task: `docs/tasks/0021-stable-intro-controls.md`
+- Latest completed task: `docs/tasks/0022-participant-groups-respondents.md`
 - Active task: none
-- Branch: `web`
-- Status: task 0021 is accepted and merged locally; publication of `web` is pending.
+- Branch: `task/participant-groups-respondents`
+- Status: task 0022 automated verification and focused browser smoke passed; the task branch is ready for local merge into `web`.
 
 ## Repository checkpoint
+
+- Task 0022 starts from local `web` commit `0438766`.
+- One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.
+- Ordinary questions and blitz parts require one respondent after «Ответ команды»; superblitz requires one respondent before discussion and retains that participant for all parts. The future decisive round follows the same pre-question exception.
+- The implementation adds 1–12-person login groups, group-level reconnect/admission/kick, alternating group roster rows, one-click respondent buttons, public reconnect-safe respondent display, scoring guards, and exact question/part journal attribution.
+- Local verification: 214 backend tests pass with warnings as errors, all 12 frontend test files and the production build pass, and the sample pack validates. Native Compose validation remains blocked by the known installed Snap `snap-confine` capability defect.
+- Focused browser smoke passed and was accepted on 2026-08-11, including grouped login/admission/kick/reconnect, one-click ordinary/blitz attribution, fixed superblitz attribution, and history display.
+- Roadmap item 22 records a separate future discussion about showing pack-backed author photos to host and players after sector selection and during question reading; its presentation lifecycle and relation to managed media remain intentionally undecided.
+- Next continuation point: merge the accepted task branch into `web`, then push `web` to publish it and run the merged-branch CI gate.
 
 - Task 0021 planning commit: `a093068` (`Plan stable intro controls task`).
 - Task 0021 implementation commit: `afaed4e` (`Stabilize intro host controls`).

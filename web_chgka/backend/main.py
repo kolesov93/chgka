@@ -72,6 +72,7 @@ from transitions import (
     transition_advance_intro,
     transition_end_round,
     transition_reset,
+    transition_select_respondent,
     transition_end_blackbox,
     transition_score,
     transition_start_discussion,
@@ -103,6 +104,7 @@ NORMAL_DISCUSSION_SECONDS = 60
 BLITZ_DISCUSSION_SECONDS = 20
 TEN_SECONDS = 10
 HISTORY_CLIENT_KIND = "history"
+MAX_PARTICIPANTS_PER_GROUP = 12
 
 # Media access
 MEDIA_TOKEN_TTL_SECONDS = 10 * 60  # 10 minutes
@@ -256,9 +258,72 @@ def _supersede_sound_fade(*, mode: str) -> int:
     """Synchronously invalidate pending fade completion before network awaits."""
     return supersede_fade(global_settings["sound_control"], mode=mode)
 
-# Хранилище игроков (теперь отдельно)
-# [{"sid": "...", "name": "...", "role": "player|admin", "token": "..."}]
+# In-memory connection roster. Player records own a stable participant group;
+# admin records intentionally keep their smaller role/token shape.
 players_list = []
+
+
+def _participant_group_name(participants: list[dict]) -> str:
+    return ", ".join(participant["name"] for participant in participants)
+
+
+def _normalize_participant_names(data: object) -> list[str]:
+    payload = data if isinstance(data, dict) else {}
+    raw_names = payload.get("participants")
+    if not isinstance(raw_names, list) or not 1 <= len(raw_names) <= MAX_PARTICIPANTS_PER_GROUP:
+        raise ValueError(
+            f"Укажите от 1 до {MAX_PARTICIPANTS_PER_GROUP} участников"
+        )
+
+    names: list[str] = []
+    for value in raw_names:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("Имя участника не может быть пустым")
+        name = value.strip()
+        if len(name) > 50:
+            raise ValueError("Имя участника слишком длинное")
+        names.append(name)
+    return names
+
+
+def _public_roster_record(record: dict) -> dict:
+    public = {
+        "name": record["name"],
+        "role": record["role"],
+        "online": record.get("online", False),
+        "pending": record.get("pending", False),
+    }
+    if record.get("role") == "player":
+        public.update(
+            {
+                "group_id": record["group_id"],
+                "participants": [dict(item) for item in record["participants"]],
+            }
+        )
+    return public
+
+
+def _player_join_payload(record: dict, *, include_token: bool = False) -> dict:
+    payload = {
+        "name": record["name"],
+        "group_id": record["group_id"],
+        "participants": [dict(item) for item in record["participants"]],
+    }
+    if include_token:
+        payload["token"] = record["token"]
+    return payload
+
+
+def _find_approved_participant(participant_id: object) -> Optional[tuple[dict, dict]]:
+    if not isinstance(participant_id, str) or not participant_id:
+        return None
+    for group in players_list:
+        if group.get("role") != "player" or group.get("pending", False):
+            continue
+        for participant in group.get("participants", []):
+            if participant.get("id") == participant_id:
+                return group, participant
+    return None
 
 # Хранилище состояния игры
 app_state = create_initial_app_state()
@@ -494,12 +559,12 @@ async def _emit_current_game_mode_to_admins() -> None:
 
 
 def _journal_payload(event: GameEvent) -> dict[str, object]:
-    """Enrich authoritative question-open events with immutable pack metadata."""
+    """Enrich question and respondent events with immutable pack metadata."""
     payload = dict(event.payload)
-    if event.event_type != "question_opened":
+    if event.event_type not in ("question_opened", "respondent_selected"):
         return payload
     if loaded_pack is None:
-        raise JournalError("Question pack is unavailable for question-open event")
+        raise JournalError("Question pack is unavailable for question event")
 
     sector = payload.get("sector")
     if not isinstance(sector, int) or isinstance(sector, bool) or not 1 <= sector <= 13:
@@ -658,15 +723,7 @@ def calculate_spin_result(force_sector=None, used_questions=None):
 async def broadcast_players(target_sid=None):
     """Рассылает список игроков. Админам полный, остальным - ничего (или кол-во)"""
     
-    public_list = [
-        {
-            'name': p['name'], 
-            'role': p['role'], 
-            'online': p.get('online', False),
-            'pending': p.get('pending', False)
-        } 
-        for p in players_list
-    ]
+    public_list = [_public_roster_record(record) for record in players_list]
     
     # Если нужно послать конкретному клиенту
     if target_sid:
@@ -818,7 +875,7 @@ async def restore_session(sid, data):
         
         if player_record:
             # Игрок найден - восстанавливаем сессию
-            session_data['player_name'] = player_record['name']
+            session_data['player_group_id'] = player_record['group_id']
             await sio.save_session(sid, session_data)
             
             # Обновляем SID (перехват)
@@ -830,9 +887,9 @@ async def restore_session(sid, data):
             await sio.emit('role_update', {'role': 'player'}, to=sid)
             await emit_state_update(to=sid)
             if player_record.get('pending', False):
-                await sio.emit('join_pending', {'name': player_record['name']}, to=sid)
+                await sio.emit('join_pending', _player_join_payload(player_record), to=sid)
             else:
-                await sio.emit('join_success', {'name': player_record['name']}, to=sid)
+                await sio.emit('join_success', _player_join_payload(player_record), to=sid)
             # Уведомляем админов об изменении статуса
             await broadcast_players()
             return
@@ -933,64 +990,93 @@ async def authenticate_admin(sid, data):
 
 @sio.event
 async def join_game(sid, data):
-    """Игрок вводит имя и присоединяется к игре"""
-    player_name = data.get('name', '').strip()
-    
-    if not player_name or len(player_name) < 1:
-        await sio.emit('join_failed', {'message': 'Имя не может быть пустым'}, to=sid)
+    """Create one immutable participant group for this browser login."""
+    try:
+        participant_names = _normalize_participant_names(data)
+    except ValueError as error:
+        await sio.emit('join_failed', {'message': str(error)}, to=sid)
         return
-    
-    if len(player_name) > 50:
-        await sio.emit('join_failed', {'message': 'Имя слишком длинное'}, to=sid)
-        return
-    
-    # Проверяем, не занято ли имя другим игроком
-    name_taken = any(p['name'] == player_name for p in players_list)
-    if name_taken:
-        await sio.emit('join_failed', {'message': 'Это имя уже занято'}, to=sid)
-        return
-    
-    # Генерируем токен для игрока
-    player_token = secrets.token_urlsafe(16)
 
-    # Сохраняем в сессии
+    existing_group = next(
+        (
+            record for record in players_list
+            if record.get("role") == "player" and record.get("sid") == sid
+        ),
+        None,
+    )
+    if existing_group is not None:
+        event = "join_pending" if existing_group.get("pending", False) else "join_success"
+        await sio.emit(
+            event,
+            _player_join_payload(existing_group, include_token=True),
+            to=sid,
+        )
+        return
+
+    player_token = secrets.token_urlsafe(16)
+    group_id = secrets.token_urlsafe(12)
+    participants = [
+        {"id": secrets.token_urlsafe(12), "name": name}
+        for name in participant_names
+    ]
+    group_name = _participant_group_name(participants)
+
     session = await sio.get_session(sid)
-    session['player_name'] = player_name
+    session['player_group_id'] = group_id
     await sio.save_session(sid, session)
     
     # Если игра уже началась (не LOGIN), требуется одобрение админа
     needs_approval = app_state["game"]["phase"] != PHASE_LOGIN
     
     # Добавляем нового игрока
-    players_list.append({
+    group = {
         'sid': sid, 
-        'name': player_name, 
+        'name': group_name,
         'role': 'player', 
         'token': player_token, 
+        'group_id': group_id,
+        'participants': participants,
         'online': True,
         'pending': needs_approval  # Ожидает одобрения
-    })
+    }
+    players_list.append(group)
+
+    journal_payload = {
+        "group_id": group_id,
+        "participants": [dict(item) for item in participants],
+    }
     
     if needs_approval:
         add_log(
-            f"{player_name} ожидает одобрения",
+            f"{group_name} ожидают одобрения",
             event_type="player_waiting",
-            payload={"name": player_name},
+            payload=journal_payload,
         )
         await broadcast_players()
         # Уведомляем админа о новом игроке
-        await notify_admin('player_waiting', {'name': player_name})
+        await notify_admin(
+            'player_waiting',
+            {"name": group_name, "group_id": group_id},
+        )
         # Игроку сообщаем, что он ждёт одобрения
-        await sio.emit('join_pending', {'token': player_token, 'name': player_name}, to=sid)
+        await sio.emit(
+            'join_pending',
+            _player_join_payload(group, include_token=True),
+            to=sid,
+        )
     else:
         add_log(
-            f"{player_name} присоединился к игре",
+            f"{group_name} присоединились к игре",
             event_type="player_joined",
-            payload={"name": player_name},
+            payload=journal_payload,
         )
         await broadcast_players()
         # Отправляем успех клиенту вместе с токеном
-        await sio.emit('join_success', {'token': player_token, 'name': player_name}, to=sid)
+        await sio.emit(
+            'join_success',
+            _player_join_payload(group, include_token=True),
+            to=sid,
+        )
 
 async def notify_admin(event_type, data):
     """Отправляет уведомление всем онлайн админам"""
@@ -1000,31 +1086,41 @@ async def notify_admin(event_type, data):
 
 @sio.event
 async def admin_approve(sid, data):
-    """Админ одобряет игрока"""
+    """Approve an entire pending participant group."""
     if not await require_admin(sid):
         return
     
-    player_name = data.get('name')
-    if not player_name:
+    payload = data if isinstance(data, dict) else {}
+    group_id = payload.get('group_id')
+    if not group_id:
         return
     
     # Ищем pending игрока
-    player = next((p for p in players_list if p['name'] == player_name and p.get('pending')), None)
-    if not player:
+    group = next(
+        (
+            record for record in players_list
+            if record.get('group_id') == group_id and record.get('pending')
+        ),
+        None,
+    )
+    if not group:
         return
     
     # Одобряем
-    player['pending'] = False
+    group['pending'] = False
     add_log(
-        f"{player_name} допущен к игре",
+        f"{group['name']} допущены к игре",
         event_type="player_approved",
-        payload={"name": player_name},
+        payload={
+            "group_id": group_id,
+            "participants": [dict(item) for item in group["participants"]],
+        },
     )
     
     await broadcast_players()
     
     # Уведомляем игрока
-    await sio.emit('join_success', {'name': player_name}, to=player['sid'])
+    await sio.emit('join_success', _player_join_payload(group), to=group['sid'])
 
 @sio.event
 async def start_game(sid):
@@ -1097,7 +1193,12 @@ async def leave_game(sid):
             add_log(
                 f"{player_name} вышел из игры",
                 event_type="player_left",
-                payload={"name": player_name},
+                payload={
+                    "group_id": player.get("group_id"),
+                    "participants": [
+                        dict(item) for item in player.get("participants", [])
+                    ],
+                },
             )
         
         logger.info(f"Player {player_name} left the game (explicit logout)")
@@ -1698,6 +1799,36 @@ async def admin_team_answer(sid, data=None):
 
 
 @sio.event
+async def admin_select_respondent(sid, data):
+    """Select one approved physical participant for the current question part."""
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+    payload = data if isinstance(data, dict) else {}
+    found = _find_approved_participant(payload.get("participant_id"))
+    if found is None:
+        error = TransitionError(
+            "participant_unavailable",
+            "Участник не найден или ещё не допущен к игре",
+        )
+        await _emit_transition_error(sid, error)
+        return {"ok": False, "error": error.code, "message": error.message}
+
+    group, participant = found
+    try:
+        effects = transition_select_respondent(
+            app_state,
+            participant_id=participant["id"],
+            group_id=group["group_id"],
+            name=participant["name"],
+        )
+    except TransitionError as error:
+        await _emit_transition_error(sid, error)
+        return {"ok": False, "error": error.code, "message": error.message}
+    await _apply_transition_effects(effects)
+    return {"ok": True}
+
+
+@sio.event
 async def admin_ten_seconds(sid, data=None):
     """
     Force 10 seconds left: play warning signal to everyone and reset timer to 10 seconds.
@@ -1806,32 +1937,44 @@ async def admin_fade_sounds(sid, data=None):
 
 @sio.event
 async def admin_kick(sid, data):
-    """Админ отключает игрока"""
+    """Disconnect and remove one entire participant group."""
     global players_list
     
     if not await require_admin(sid):
         return
     
-    player_name = data.get('name')
-    if not player_name:
+    payload = data if isinstance(data, dict) else {}
+    group_id = payload.get('group_id')
+    if not group_id:
         return
     
-    # Ищем игрока по имени (не админа)
-    player = next((p for p in players_list if p['name'] == player_name and p['role'] != 'admin'), None)
-    if not player:
+    group = next(
+        (
+            record for record in players_list
+            if record.get('group_id') == group_id and record.get('role') == 'player'
+        ),
+        None,
+    )
+    if not group:
         return
     
-    player_sid = player['sid']
+    player_sid = group['sid']
     
     # Удаляем из списка
-    players_list = [p for p in players_list if p['name'] != player_name or p['role'] == 'admin']
+    players_list = [
+        record for record in players_list
+        if record.get('group_id') != group_id
+    ]
     
     add_log(
-        f"{player_name} был отключён ведущим",
+        f"{group['name']} отключены ведущим",
         event_type="player_kicked",
-        payload={"name": player_name},
+        payload={
+            "group_id": group_id,
+            "participants": [dict(item) for item in group["participants"]],
+        },
     )
-    logger.info(f"Player {player_name} kicked by admin")
+    logger.info("Participant group %s kicked by admin", group_id)
     
     # Отправляем игроку событие что его кикнули
     # Не отключаем сокет программно — пусть клиент сам переподключится

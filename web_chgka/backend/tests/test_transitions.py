@@ -17,6 +17,7 @@ from transitions import (
     transition_complete_spin,
     transition_end_round,
     transition_reset,
+    transition_select_respondent,
     transition_score,
     transition_start_discussion,
     transition_start_blackbox,
@@ -27,6 +28,14 @@ from transitions import (
     transition_team_answer,
     transition_ten_seconds,
 )
+
+
+def _respondent(name="Иван"):
+    return {
+        "participant_id": "participant-1",
+        "group_id": "group-1",
+        "name": name,
+    }
 
 
 def _shared_image():
@@ -251,6 +260,74 @@ def test_discussion_to_team_answer_flow_sets_timer_and_sound():
     assert effects.sounds == ("sig1",)
 
 
+def test_normal_respondent_is_selected_only_after_team_answer_and_required_for_score():
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "normal", "sector": 2}
+
+    with pytest.raises(TransitionError) as exc_info:
+        transition_select_respondent(state, **_respondent())
+    assert exc_info.value.code == "bad_phase"
+
+    transition_start_discussion(state, deadline_ms=60_000)
+    transition_team_answer(state)
+    with pytest.raises(TransitionError) as exc_info:
+        transition_score(
+            state,
+            winner="znatoki",
+            correct_sound="yes1",
+            incorrect_sound="no1",
+        )
+    assert exc_info.value.code == "respondent_required"
+
+    effects = transition_select_respondent(state, **_respondent())
+    assert state["game"]["round"]["respondent"] == _respondent()
+    assert effects.events[0].event_type == "respondent_selected"
+    assert effects.events[0].payload["part_index"] is None
+
+
+def test_superblitz_requires_one_early_respondent_and_retains_them_for_next_part():
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {
+        "kind": "superblitz",
+        "sector": 7,
+        "part_index": 0,
+    }
+
+    with pytest.raises(TransitionError) as exc_info:
+        transition_start_discussion(state, deadline_ms=20_000)
+    assert exc_info.value.code == "respondent_required"
+
+    transition_select_respondent(state, **_respondent("Мария"))
+    transition_start_discussion(state, deadline_ms=20_000)
+    transition_team_answer(state)
+    transition_score(
+        state,
+        winner="znatoki",
+        correct_sound="yes1",
+        incorrect_sound="no1",
+    )
+    effects = transition_end_round(state, gong_sound="gong1")
+
+    assert state["game"]["round"]["part_index"] == 1
+    assert state["game"]["round"]["respondent"] == _respondent("Мария")
+    assert [event.event_type for event in effects.events] == [
+        "question_opened",
+        "respondent_selected",
+    ]
+    assert effects.events[1].payload["retained"] is True
+    assert effects.events[1].payload["part_index"] == 1
+
+    with pytest.raises(TransitionError) as exc_info:
+        transition_select_respondent(
+            state,
+            participant_id="participant-2",
+            group_id="group-2",
+            name="Алексей",
+        )
+    assert exc_info.value.code == "respondent_locked"
+    assert state["game"]["round"]["respondent"] == _respondent("Мария")
+
+
 def test_ten_seconds_requires_discussion():
     state = create_initial_app_state(phase=PHASE_PRE_ROUND)
 
@@ -263,7 +340,11 @@ def test_ten_seconds_requires_discussion():
 
 def test_normal_score_is_atomic_and_second_score_is_rejected():
     state = create_initial_app_state(phase=PHASE_TEAM_ANSWER)
-    state["game"]["round"] = {"kind": "normal", "sector": 2}
+    state["game"]["round"] = {
+        "kind": "normal",
+        "sector": 2,
+        "respondent": _respondent(),
+    }
 
     effects = transition_score(
         state,
@@ -289,7 +370,11 @@ def test_normal_score_is_atomic_and_second_score_is_rejected():
 
 def test_sixth_point_stays_in_post_round_until_explicit_final_action():
     state = create_initial_app_state(phase=PHASE_TEAM_ANSWER)
-    state["game"]["round"] = {"kind": "normal", "sector": 6}
+    state["game"]["round"] = {
+        "kind": "normal",
+        "sector": 6,
+        "respondent": _respondent(),
+    }
     state["game"]["score"]["znatoki"] = 5
     state["presentation"]["shared_media"] = _shared_image()
     state["timer"]["discussion_deadline_ms"] = 123
@@ -398,7 +483,12 @@ def test_ambiguous_recovery_score_must_be_fixed_before_finalization():
 
 def test_blitz_correct_intermediate_answer_advances_after_post_round():
     state = create_initial_app_state(phase=PHASE_TEAM_ANSWER)
-    state["game"]["round"] = {"kind": "blitz", "sector": 4, "part_index": 0}
+    state["game"]["round"] = {
+        "kind": "blitz",
+        "sector": 4,
+        "part_index": 0,
+        "respondent": _respondent(),
+    }
 
     score_effects = transition_score(
         state,
@@ -423,7 +513,12 @@ def test_blitz_correct_intermediate_answer_advances_after_post_round():
 
 def test_blitz_wrong_answer_awards_tv_and_ends_round():
     state = create_initial_app_state(phase=PHASE_TEAM_ANSWER)
-    state["game"]["round"] = {"kind": "superblitz", "sector": 7, "part_index": 1}
+    state["game"]["round"] = {
+        "kind": "superblitz",
+        "sector": 7,
+        "part_index": 1,
+        "respondent": _respondent(),
+    }
 
     effects = transition_score(
         state,
@@ -439,7 +534,12 @@ def test_blitz_wrong_answer_awards_tv_and_ends_round():
 
 def test_last_blitz_answer_awards_znatoki():
     state = create_initial_app_state(phase=PHASE_TEAM_ANSWER)
-    state["game"]["round"] = {"kind": "blitz", "sector": 4, "part_index": 2}
+    state["game"]["round"] = {
+        "kind": "blitz",
+        "sector": 4,
+        "part_index": 2,
+        "respondent": _respondent(),
+    }
 
     effects = transition_score(
         state,

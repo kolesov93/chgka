@@ -465,6 +465,14 @@ class GameJournal:
             ]
             opened: dict[str, dict] = {}
             for event in events:
+                if event["event_type"] == "respondent_selected":
+                    question_id = event["payload"].get("question_id")
+                    if question_id in opened:
+                        opened[question_id]["respondent"] = {
+                            key: event["payload"].get(key)
+                            for key in ("participant_id", "group_id", "name")
+                        }
+                    continue
                 if event["event_type"] != "question_opened":
                     continue
                 question_id = event["payload"].get("question_id")

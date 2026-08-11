@@ -48,6 +48,14 @@ class ScoreState(TypedDict):
     tv: int
 
 
+class RespondentState(TypedDict):
+    """Immutable public snapshot of the physical participant answering now."""
+
+    participant_id: str
+    group_id: str
+    name: str
+
+
 class RoundState(TypedDict, total=False):
     """Current round context.
 
@@ -60,6 +68,7 @@ class RoundState(TypedDict, total=False):
     sector: int
     part_index: int
     advance_next_part: bool
+    respondent: RespondentState
 
 
 class SharedMediaState(TypedDict):

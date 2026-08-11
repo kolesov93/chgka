@@ -135,7 +135,15 @@ def test_public_game_state_flattens_app_state_for_current_frontend():
     state = create_initial_app_state(question_types=["normal"])
     state["game"]["used_questions"].append(3)
     state["game"]["score"]["znatoki"] = 1
-    state["game"]["round"] = {"kind": "normal", "sector": 3}
+    state["game"]["round"] = {
+        "kind": "normal",
+        "sector": 3,
+        "respondent": {
+            "participant_id": "participant-1",
+            "group_id": "group-1",
+            "name": "Иван",
+        },
+    }
     state["wheel"]["current_sector"] = 3
     state["wheel"]["target_angle"] = 12.5
     state["wheel"]["playing_sector"] = 3
@@ -159,7 +167,15 @@ def test_public_game_state_flattens_app_state_for_current_frontend():
         "logs": ["hello"],
         "question_types": ["normal"],
         "discussion_deadline_ms": 12345,
-        "round": {"kind": "normal", "sector": 3},
+        "round": {
+            "kind": "normal",
+            "sector": 3,
+            "respondent": {
+                "participant_id": "participant-1",
+                "group_id": "group-1",
+                "name": "Иван",
+            },
+        },
         "intro": None,
         "shared_media": {
             "type": "image",
@@ -184,10 +200,12 @@ def test_public_game_state_flattens_app_state_for_current_frontend():
     payload["score"]["znatoki"] = 6
     payload["used_questions"].append(4)
     payload["round"]["sector"] = 4
+    payload["round"]["respondent"]["name"] = "Мария"
 
     assert state["game"]["score"]["znatoki"] == 1
     assert state["game"]["used_questions"] == [3]
     assert state["game"]["round"]["sector"] == 3
+    assert state["game"]["round"]["respondent"]["name"] == "Иван"
 
 
 def test_public_game_state_serializes_intro_timing_for_reconnect():

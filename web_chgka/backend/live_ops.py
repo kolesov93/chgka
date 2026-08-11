@@ -259,6 +259,16 @@ def live_ops_force_phase(
     new_phase: GamePhase = phase
     old_phase = state["game"]["phase"]
     round_ctx = None if new_phase == PHASE_PRE_ROUND else _require_round(state)
+    if (
+        round_ctx
+        and round_ctx.get("kind") == "superblitz"
+        and new_phase in (PHASE_DISCUSSION, PHASE_TEAM_ANSWER, PHASE_POST_ROUND)
+        and not round_ctx.get("respondent")
+    ):
+        raise TransitionError(
+            "respondent_required",
+            "Сначала выберите участника суперблица",
+        )
     was_spinning = _invalidate_spin(state)
     had_blackbox = clear_blackbox_presentation(state)
 
@@ -292,6 +302,11 @@ def live_ops_force_phase(
         PHASE_TEAM_ANSWER,
     ):
         round_ctx.pop("advance_next_part", None)
+    if (
+        new_phase in (PHASE_QUESTION_READING, PHASE_DISCUSSION)
+        and round_ctx.get("kind") != "superblitz"
+    ):
+        round_ctx.pop("respondent", None)
     state["game"]["phase"] = new_phase
     clear_media = new_phase == PHASE_QUESTION_READING
     if clear_media:
