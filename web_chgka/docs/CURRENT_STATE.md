@@ -17,7 +17,7 @@
 - The music action keeps its reserved slot after start/completion, so the primary next-slide button remains at one desktop position while only its label changes.
 - Local verification: all 11 frontend test files, the production build, and all 207 backend tests pass; the backend suite also passes under the exact Python 3.14.6 `-W error` CI conditions.
 - GitHub Web CI run 39 passed all jobs on task handoff commit `5972b2e`; the focused host/player smoke was accepted on 2026-08-11.
-- Local `web` contains the accepted merge and is seven commits ahead of `origin/web`; push `web` to publish the task and trigger the merged-branch CI gate.
+- Local `web` contains the accepted merge and is ahead of `origin/web`; push `web` to publish the task and trigger the merged-branch CI gate.
 - Next continuation point: after the `web` push is green, choose the next P2 roadmap item.
 
 - Task 0020 closure commit: `233e590` (`Close game event journal task`).
