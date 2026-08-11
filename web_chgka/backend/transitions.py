@@ -12,6 +12,7 @@ from game_events import GameEvent, game_event
 from state import (
     AppState,
     GamePhase,
+    RespondentState,
     PHASE_DISCUSSION,
     PHASE_GAME_OVER,
     PHASE_INTRO,
@@ -382,6 +383,12 @@ def transition_complete_spin(state: AppState, *, spin_id: int) -> TransitionEffe
 
 def transition_start_discussion(state: AppState, *, deadline_ms: int) -> TransitionEffects:
     _require_phase(state, PHASE_QUESTION_READING)
+    round_ctx = state["game"].get("round") or {}
+    if round_ctx.get("kind") == "superblitz" and not round_ctx.get("respondent"):
+        raise TransitionError(
+            "respondent_required",
+            "Сначала выберите участника суперблица",
+        )
     if state["presentation"].get("blackbox") is not None:
         raise TransitionError(
             "blackbox_active",
@@ -409,6 +416,73 @@ def transition_team_answer(state: AppState) -> TransitionEffects:
             ),
         ),
         sounds=("sig1",),
+    )
+
+
+def transition_select_respondent(
+    state: AppState,
+    *,
+    participant_id: str,
+    group_id: str,
+    name: str,
+) -> TransitionEffects:
+    """Select the one physical participant answering the active question part."""
+
+    round_ctx = state["game"].get("round")
+    if not round_ctx:
+        raise TransitionError("no_round", "Нет активного вопроса")
+    kind = round_ctx.get("kind", "normal")
+    phase = state["game"]["phase"]
+    if kind == "superblitz":
+        if phase != PHASE_QUESTION_READING:
+            raise TransitionError(
+                "bad_phase",
+                "Участника суперблица выбирают до начала обсуждения",
+            )
+        current = round_ctx.get("respondent")
+        part_index = int(round_ctx.get("part_index", 0))
+        if (
+            current
+            and part_index > 0
+            and current.get("participant_id") != participant_id
+        ):
+            raise TransitionError(
+                "respondent_locked",
+                "Участник суперблица уже выбран на все три части",
+            )
+    elif phase != PHASE_TEAM_ANSWER:
+        raise TransitionError(
+            "bad_phase",
+            "Отвечавшего выбирают после «Ответ команды»",
+        )
+
+    if not all(isinstance(value, str) and value for value in (participant_id, group_id, name)):
+        raise TransitionError("invalid_respondent", "Некорректный участник")
+
+    respondent: RespondentState = {
+        "participant_id": participant_id,
+        "group_id": group_id,
+        "name": name,
+    }
+    round_ctx["respondent"] = respondent
+    part_index = (
+        int(round_ctx.get("part_index", 0))
+        if kind in ("blitz", "superblitz")
+        else None
+    )
+    return TransitionEffects(
+        events=(
+            game_event(
+                "respondent_selected",
+                f"Отвечает: {name}",
+                participant_id=participant_id,
+                group_id=group_id,
+                name=name,
+                sector=round_ctx.get("sector"),
+                kind=kind,
+                part_index=part_index,
+            ),
+        ),
     )
 
 
@@ -443,6 +517,11 @@ def transition_score(
     round_ctx = state["game"]["round"]
     if not round_ctx:
         raise TransitionError("no_round", "Нет активного раунда")
+    if not round_ctx.get("respondent"):
+        raise TransitionError(
+            "respondent_required",
+            "Сначала выберите отвечавшего",
+        )
     kind = round_ctx.get("kind", "normal")
 
     if kind in ("blitz", "superblitz"):
@@ -580,6 +659,11 @@ def transition_end_round(state: AppState, *, gong_sound: str) -> TransitionEffec
     next_part_index = int(round_ctx.get("part_index", 0)) + 1
     if advances_blitz and next_part_index >= BLITZ_PARTS:
         raise TransitionError("invalid_round", "У блица нет следующей части")
+    if advances_blitz and kind == "superblitz" and not round_ctx.get("respondent"):
+        raise TransitionError(
+            "respondent_required",
+            "Не выбран участник суперблица",
+        )
 
     state["presentation"]["shared_media"] = None
     state["timer"]["discussion_deadline_ms"] = None
@@ -587,19 +671,36 @@ def transition_end_round(state: AppState, *, gong_sound: str) -> TransitionEffec
     if advances_blitz:
         round_ctx["part_index"] = next_part_index
         round_ctx.pop("advance_next_part", None)
+        if kind == "blitz":
+            round_ctx.pop("respondent", None)
         state["game"]["round"] = round_ctx
         state["game"]["phase"] = PHASE_QUESTION_READING
-        return TransitionEffects(
-            events=(
+        events = [
+            game_event(
+                "question_opened",
+                f"Переходим к части {next_part_index + 1}/{BLITZ_PARTS}. "
+                "Фаза: зачитывание вопроса",
+                sector=round_ctx["sector"],
+                kind=kind,
+                part_index=next_part_index,
+            ),
+        ]
+        if kind == "superblitz":
+            respondent = round_ctx.get("respondent")
+            events.append(
                 game_event(
-                    "question_opened",
-                    f"Переходим к части {next_part_index + 1}/{BLITZ_PARTS}. "
-                    "Фаза: зачитывание вопроса",
+                    "respondent_selected",
+                    f"Суперблиц, часть {next_part_index + 1}: отвечает "
+                    f"{respondent['name']}",
+                    **respondent,
                     sector=round_ctx["sector"],
                     kind=kind,
                     part_index=next_part_index,
-                ),
-            ),
+                    retained=True,
+                )
+            )
+        return TransitionEffects(
+            events=tuple(events),
             clear_media_tokens=True,
             refresh_admin_question=True,
         )

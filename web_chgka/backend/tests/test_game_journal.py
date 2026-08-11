@@ -102,6 +102,34 @@ def test_journal_persists_ordered_full_log_and_part_level_questions(journal_fact
     assert snapshot["used_questions"] == []
 
 
+def test_session_detail_links_structured_respondent_to_exact_question_part(journal_factory):
+    journal = journal_factory()
+    journal.record_event(
+        "question_opened",
+        "Открыта часть 2",
+        _opened("part-2", title="Второй вопрос", sector=4, part_index=1),
+    )
+    journal.record_event(
+        "respondent_selected",
+        "Отвечает: Мария",
+        {
+            "question_id": "part-2",
+            "participant_id": "participant-2",
+            "group_id": "group-1",
+            "name": "Мария",
+        },
+    )
+
+    detail = journal.get_session("session-1")
+
+    assert detail["opened_questions"][0]["respondent"] == {
+        "participant_id": "participant-2",
+        "group_id": "group-1",
+        "name": "Мария",
+    }
+    assert detail["events"][1]["payload"]["participant_id"] == "participant-2"
+
+
 def test_regular_mode_is_the_only_question_history_filter(journal_factory):
     ids = iter(("debug-session", "regular-session"))
     journal = journal_factory(id_factory=lambda: next(ids))

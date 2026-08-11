@@ -207,7 +207,16 @@ def test_force_phases_normalize_timer_media_and_round_context():
 
 def test_force_discussion_uses_blitz_duration():
     state = _state(phase=PHASE_QUESTION_READING)
-    state["game"]["round"] = {"kind": "superblitz", "sector": 7, "part_index": 2}
+    state["game"]["round"] = {
+        "kind": "superblitz",
+        "sector": 7,
+        "part_index": 2,
+        "respondent": {
+            "participant_id": "participant-1",
+            "group_id": "group-1",
+            "name": "Иван",
+        },
+    }
 
     live_ops_force_phase(
         state,
@@ -218,6 +227,23 @@ def test_force_discussion_uses_blitz_duration():
     )
 
     assert state["timer"]["discussion_deadline_ms"] == 21_000
+
+
+def test_force_superblitz_past_reading_requires_selected_participant():
+    state = _state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "superblitz", "sector": 7, "part_index": 0}
+
+    with pytest.raises(TransitionError) as error:
+        live_ops_force_phase(
+            state,
+            phase=PHASE_DISCUSSION,
+            now_ms=1_000,
+            normal_discussion_seconds=60,
+            blitz_discussion_seconds=20,
+        )
+
+    assert error.value.code == "respondent_required"
+    assert state["game"]["phase"] == PHASE_QUESTION_READING
 
 
 def test_reset_to_intro_clears_progress_and_restarts_timeline():

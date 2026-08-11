@@ -4,13 +4,16 @@
 - Latest completed task: `docs/tasks/0021-stable-intro-controls.md`
 - Active task: `docs/tasks/0022-participant-groups-respondents.md`
 - Branch: `task/participant-groups-respondents`
-- Status: task 0022 is in progress; participant-group and respondent-attribution decisions are fixed before implementation.
+- Status: task 0022 implementation and automated verification are complete; focused browser smoke is pending.
 
 ## Repository checkpoint
 
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.
 - Ordinary questions and blitz parts require one respondent after «Ответ команды»; superblitz requires one respondent before discussion and retains that participant for all parts. The future decisive round follows the same pre-question exception.
+- The implementation adds 1–12-person login groups, group-level reconnect/admission/kick, alternating group roster rows, exact one-person respondent selection, public reconnect-safe respondent display, scoring guards, and exact question/part journal attribution.
+- Local verification: 214 backend tests pass with warnings as errors, all 12 frontend test files and the production build pass, and the sample pack validates. Native Compose validation remains blocked by the known installed Snap `snap-confine` capability defect.
+- Next continuation point: run the focused smoke in `docs/tasks/0022-participant-groups-respondents.md`; after acceptance, close the roadmap item and merge the task branch into `web`.
 
 - Task 0021 planning commit: `a093068` (`Plan stable intro controls task`).
 - Task 0021 implementation commit: `afaed4e` (`Stabilize intro host controls`).

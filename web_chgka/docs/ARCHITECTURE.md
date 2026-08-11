@@ -17,7 +17,7 @@ FastAPI + python-socketio (backend/main.py)
     |-- AppState in memory
     |-- synchronous game transitions (backend/transitions.py)
     |-- synchronous admin recovery operations (backend/live_ops.py)
-    |-- players and session tokens in memory
+    |-- participant groups and session tokens in memory
     |-- question pack loaded from the filesystem
     |-- temporary media tokens -> GET /media/{media_id}
     `-- durable game/event journal -> SQLite at CHGKA_DB_PATH
@@ -31,7 +31,8 @@ FastAPI + python-socketio (backend/main.py)
 - `frontend/src/hooks/useGameSession.js` owns session restore, shared server state, players, pack/admin data, notifications, logout, and non-audio socket listeners.
 - `frontend/src/hooks/useDiscussionTimer.js` owns the admin countdown and one-shot local ten-second notification; `useSocketSoundEvents.js` bridges sound events to `useGameSound.js`.
 - `frontend/src/hooks/useSoundFade.js` derives one reconnect-aware emergency fade multiplier from the server sound-control snapshot. Shared media, effects, and the wheel consume that multiplier; the wheel also retains its intrinsic end-of-spin fade.
-- `frontend/src/components/` contains the shared intro screen with host-only speech/navigation, the admin question/media panel with private inline image thumbnails and black-box controls, synchronized black-box audio/static player screen, the shared final screen, normal admin controls with the always-visible game-mode and director-sound blocks, the standalone admin-only `/admin/history` screen with its own teal page/login background, the separate danger-styled Live Ops recovery panel, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
+- `frontend/src/components/` contains the shared intro screen with host-only speech/navigation, the admin question/media panel with private inline image thumbnails and black-box controls, synchronized black-box audio/static player screen, the shared respondent banner, grouped participant roster, the shared final screen, normal admin controls with the always-visible game-mode and director-sound blocks, the standalone admin-only `/admin/history` screen with its own teal page/login background, the separate danger-styled Live Ops recovery panel, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
+- `frontend/src/participants.js` owns pure participant-group counts and the approved physical-participant options used by the host selector.
 - `frontend/src/intro.js` owns the static `00`/`13` boundary, fallback author asset, host next-step labels, and reconnect-aware music countdown math. Author photos for slides 1–12 come from the backend origin.
 - `frontend/src/inlineMedia.js` safely turns resolved image placeholders into host-only thumbnail markup. Non-image and unknown placeholders remain unchanged.
 - `frontend/src/blackbox.js` owns the static image/music sources and converts the public black-box timeline into the existing synchronized playback shape.
@@ -39,22 +40,22 @@ FastAPI + python-socketio (backend/main.py)
 
 The frontend receives the shared game snapshot through `state_update`. Admin-only data uses separate events such as `players_update`, `pack_info`, and `admin_question`.
 
-`/play` renders only the player-name form and restores only `chgka_player_token`; `/admin` renders the live host application, while `/admin/history` renders only history. Both admin entrypoints use the host-password form and restore only `chgka_admin_token`. Their login screens are distinguished by `[ведущий]` / `[история игр]` subtitles and route-specific document titles; the player login keeps the unqualified product title and no subtitle. The other stored token is ignored rather than treated as a fallback. A history-only socket is authorized but is not inserted into the live host/player roster, does not create a journal session merely by logging in, and does not take over the live host record when restoring the same token. Logout and expiry stay on the current path. These paths are a UX boundary only: all privileged events still require backend role-plus-token authorization.
+`/play` renders the participant-group form and restores only `chgka_player_token`; one login can declare up to twelve fixed physical participants. `/admin` renders the live host application, while `/admin/history` renders only history. Both admin entrypoints use the host-password form and restore only `chgka_admin_token`. Their login screens are distinguished by `[ведущий]` / `[история игр]` subtitles and route-specific document titles; the player login keeps the unqualified product title and no subtitle. The other stored token is ignored rather than treated as a fallback. A history-only socket is authorized but is not inserted into the live host/player roster, does not create a journal session merely by logging in, and does not take over the live host record when restoring the same token. Logout and expiry stay on the current path. These paths are a UX boundary only: all privileged events still require backend role-plus-token authorization.
 
 UI components may emit existing user actions through the shared socket, but they do not create connections or own session restoration. The decomposition preserves the existing Socket.IO event names, payloads, and flat `state_update` contract.
 
 ### Backend
 
-- `backend/main.py` creates the FastAPI/Socket.IO application and currently contains authentication, player lifecycle, phase handlers, scoring, spin orchestration, media access, logging, and emits.
+- `backend/main.py` creates the FastAPI/Socket.IO application and currently contains authentication, participant-group lifecycle, respondent resolution, phase handlers, scoring, spin orchestration, media access, logging, and emits.
 - `backend/config.py` validates the explicit development/production environment, admin password, exact browser-origin allowlist, admin-token TTL, and SQLite path before the application starts.
 - `backend/auth.py` owns the single active opaque admin token and its fixed in-memory expiry/revocation lifecycle; every privileged Socket.IO action validates the role plus current token.
 - `backend/safe_html.py` owns the `nh3` allowlist used after Markdown conversion for question sections and intro speech.
 - `backend/state.py` defines the typed internal `AppState` and serializes it to the flat public payload expected by the frontend.
-- `backend/transitions.py` owns synchronous intro, black-box presentation, phase, spin, scoring, blitz, round-end, and reset rules. It mutates `AppState` before network awaits and returns typed events plus transport effects such as sounds, media-token cleanup, and admin-question refresh.
+- `backend/transitions.py` owns synchronous intro, black-box presentation, respondent timing, phase, spin, scoring, blitz, round-end, and reset rules. It mutates `AppState` before network awaits and returns typed events plus transport effects such as sounds, media-token cleanup, and admin-question refresh.
 - `backend/live_ops.py` owns exceptional admin recovery rules: exact score/sector edits, direct round opening, normalized phase forcing, stuck-spin cancellation, and timer repair. It uses the same transport effects without weakening normal transition guards.
 - `backend/sound_control.py` owns the pure generation-based `normal`/`fading`/`stopped` lifecycle and synchronized fade progress math.
 - `backend/questions.py` parses and validates filesystem question packs, mandatory unique UUIDs, required author/optional city/direct author-photo/strict black-box metadata, section-aware opaque question-media references, and Markdown sections. `backend/assign_question_ids.py` performs the one-time migration of an otherwise valid old pack.
-- `backend/game_journal.py` owns the SQLite schema, game-session lifecycle, regular/debug classification, ordered structured events, and question-history queries. It does not restore `AppState`.
+- `backend/game_journal.py` owns the SQLite schema, game-session lifecycle, regular/debug classification, ordered structured events, and question-history queries. `respondent_selected` stores physical/group IDs plus the name snapshot and is joined to the exact opened question/part in session detail. It does not restore `AppState`.
 - `backend/media.py` builds the media catalog for the exact current round/blitz part, creates and validates media-token context, and owns synchronous playback-state transitions.
 - `backend/validate_pack.py` exposes that same parser as the pre-start `python -m validate_pack` CLI; it does not define separate validation rules.
 
@@ -86,7 +87,9 @@ LOGIN -> INTRO -> PRE_ROUND -> QUESTION_READING -> DISCUSSION
 
 `start_game` enters `INTRO` on static slide `00` without autoplay. A separate guarded host action records the start timestamp and broadcasts the one-shot `meeting.mp3`; until then the timeline is explicitly not started. Slides 1–12 use pack-backed author cards: one top-level card for a normal question, or three part cards in one row for blitz/superblitz. Every card has its own optional city and pack photo or static fallback. Slide 13 is the existing special-sector graphic. The action after `13` stops intro sound and enters `PRE_ROUND`. Music and slide actions are independent, and repeated/concurrent requests cannot start the track twice or skip a slide. Reconnecting clients recover the current slide/authors/countdown snapshot, but the one-shot audio is deliberately not replayed or seeked after reconnect.
 
-Blitz and superblitz use the later game phases plus `round.part_index` and the temporary `advance_next_part` flag.
+Blitz and superblitz use the later game phases plus `round.part_index` and the temporary `advance_next_part` flag. `round.respondent` is an immutable `{participant_id, group_id, name}` snapshot exposed in `state_update`: normal questions and each blitz part set it in `TEAM_ANSWER`, while superblitz sets it in `QUESTION_READING`, requires it before discussion, and retains it for all three parts. Scoring is rejected without the required snapshot. The snapshot survives browser reconnect and remains meaningful if the source group later disconnects or is kicked.
+
+The in-memory roster stores one record per browser group, not per person. Its player-token, SID, online/pending status, admission and kick lifecycle are group-level; nested participants have separate opaque IDs and fixed display names. `players_update` remains admin-only and contains the group boundary, allowing the UI to render one row per person with alternating group backgrounds. Duplicate display names are valid because all actions use IDs. A selected respondent may come from an approved offline group but never from a pending group.
 
 The sixth point still enters `POST_ROUND`, preserving the host's answer/commentary review. The following end-round action enters `GAME_OVER` instead of `PRE_ROUND`, clears round/media/timer/wheel context, stops older effects, and then broadcasts the one-shot `final` sound. `GAME_OVER` is stable in the public snapshot, so reconnecting clients recover the final score/winner screen without replaying the sound. Normal game actions remain guarded by their expected phases; reset starts a new `PRE_ROUND` game with the same pack and connected players.
 

@@ -2,7 +2,10 @@ export function UserHeader({ name, role, onLogout }) {
   return (
     <div className="absolute top-4 right-4 flex items-center gap-4">
       {name && (
-        <div className="text-slate-400 text-sm font-bold">
+        <div
+          className="max-w-[55vw] truncate text-right text-sm font-bold text-slate-400"
+          title={role === 'admin' ? 'Ведущий' : name}
+        >
           {role === 'admin' ? <span className="text-yellow-500">Ведущий</span> : name}
         </div>
       )}

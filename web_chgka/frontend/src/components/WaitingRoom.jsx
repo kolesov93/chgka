@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { CurrentGameModeControl } from './CurrentGameModeControl';
+import { ParticipantRoster } from './ParticipantRoster';
+import { groupDisplayName, participantCount, participantGroups } from '../participants';
 
 export function WaitingRoom({
   socket,
@@ -17,15 +19,14 @@ export function WaitingRoom({
     }
   };
 
-  const handleKickPlayer = (playerName) => {
-    if (confirm(`Отключить игрока "${playerName}"?`)) {
-      socket.emit('admin_kick', { name: playerName });
+  const handleKickGroup = (group) => {
+    if (confirm(`Отключить группу «${groupDisplayName(group)}»?`)) {
+      socket.emit('admin_kick', { group_id: group.group_id });
     }
   };
 
-  // Считаем только не-админов
-  const regularPlayers = players.filter(p => p.role !== 'admin');
-  const playerCount = regularPlayers.length;
+  const groups = participantGroups(players);
+  const playerCount = participantCount(groups, { pending: false });
 
   return (
     <div className="min-h-screen bg-indigo-950 text-white flex items-center justify-center p-4">
@@ -34,7 +35,7 @@ export function WaitingRoom({
           Ожидание игроков
         </h1>
         <p className="text-center text-slate-400 mb-8">
-          Игроков: {playerCount}
+          Участников: {playerCount} · подключений: {groups.filter((group) => !group.pending).length}
         </p>
 
         <div className="mb-8">
@@ -47,40 +48,7 @@ export function WaitingRoom({
 
         {/* Список игроков */}
         <div className="mb-8">
-          {playerCount === 0 ? (
-            <p className="text-center text-slate-500 italic">Пока никого нет</p>
-          ) : (
-            <div className="space-y-2">
-              {regularPlayers.map((player, idx) => (
-                <div
-                  key={idx}
-                  className={`p-3 rounded-lg border ${
-                    player.online
-                      ? 'bg-slate-700/50 border-slate-600'
-                      : 'bg-slate-800/50 border-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className={`w-2.5 h-2.5 rounded-full ${player.online ? 'bg-green-500' : 'bg-slate-600'}`} />
-                      <span className={`font-bold ${player.online ? 'text-white' : 'text-slate-500'}`}>
-                        {player.name}
-                      </span>
-                      {!player.online && (
-                        <span className="text-xs text-slate-600">(оффлайн)</span>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => handleKickPlayer(player.name)}
-                      className="text-xs bg-red-900/50 hover:bg-red-800 text-red-300 hover:text-white px-3 py-1 rounded font-bold uppercase transition-colors"
-                    >
-                      Отключить
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <ParticipantRoster groups={groups} onKick={handleKickGroup} />
         </div>
 
         {/* Кнопка "Начать" */}

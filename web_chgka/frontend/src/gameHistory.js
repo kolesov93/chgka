@@ -39,7 +39,10 @@ export function questionHistoryLabel(question) {
     ? `, часть ${question.part_index + 1}/3`
     : '';
   const title = question?.title ? ` — ${question.title}` : '';
-  return `${sector}${part}${title}`;
+  const respondent = question?.respondent?.name
+    ? ` · отвечает: ${question.respondent.name}`
+    : '';
+  return `${sector}${part}${title}${respondent}`;
 }
 
 export function formatJournalTimestamp(value, { withDate = true } = {}) {
