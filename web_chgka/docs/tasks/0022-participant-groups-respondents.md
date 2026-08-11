@@ -1,6 +1,6 @@
 # Task 0022: группы участников и фиксация отвечавших
 
-Статус: в работе.
+Статус: выполнено и принято 2026-08-11.
 
 Branch: `task/participant-groups-respondents`.
 
@@ -43,6 +43,13 @@ Branch: `task/participant-groups-respondents`.
 - `python3 -m validate_pack ../fixtures/sample_questions`: passed.
 - `npm ci && npm test && npm run build`: 12 frontend test files passed, production build passed.
 - Native `docker compose config --quiet` по-прежнему блокируется до чтения проекта дефектом установленного Snap `snap-confine` (`cap_dac_override`), уже зафиксированным в текущем baseline.
+
+## Приёмка
+
+- Полный browser smoke ниже пройден пользователем после замены dropdown на однокликовые кнопки.
+- Planning commit: `5e07aa1`.
+- Implementation commit: `e80fe19`.
+- One-click selector follow-up: `d05cae5`.
 
 ## Ручной smoke
 
