@@ -11,7 +11,7 @@
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.
 - Ordinary questions and blitz parts require one respondent after «Ответ команды»; superblitz requires one respondent before discussion and retains that participant for all parts. The future decisive round follows the same pre-question exception.
-- The implementation adds 1–12-person login groups, group-level reconnect/admission/kick, alternating group roster rows, exact one-person respondent selection, public reconnect-safe respondent display, scoring guards, and exact question/part journal attribution.
+- The implementation adds 1–12-person login groups, group-level reconnect/admission/kick, alternating group roster rows, one-click respondent buttons, public reconnect-safe respondent display, scoring guards, and exact question/part journal attribution.
 - Local verification: 214 backend tests pass with warnings as errors, all 12 frontend test files and the production build pass, and the sample pack validates. Native Compose validation remains blocked by the known installed Snap `snap-confine` capability defect.
 - Next continuation point: run the focused smoke in `docs/tasks/0022-participant-groups-respondents.md`; after acceptance, close the roadmap item and merge the task branch into `web`.
 

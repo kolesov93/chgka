@@ -99,28 +99,38 @@ export function AdminControls({
 
   const respondentSelector = (
     <div className="mb-2 rounded border border-violet-800/60 bg-violet-950/25 p-2">
-      <label
-        htmlFor="respondent-select"
-        className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-violet-300"
-      >
+      <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-violet-300">
         {isSuperblitz ? 'Участник суперблица' : 'Кто отвечал'}
-      </label>
-      <select
-        id="respondent-select"
-        value={respondent?.participant_id || ''}
-        onChange={(event) => selectRespondent(event.target.value)}
-        disabled={respondentOptions.length === 0}
-        className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-2 text-sm text-white disabled:opacity-40"
-      >
-        <option value="" disabled>
-          {respondentOptions.length === 0 ? 'Нет допущенных участников' : 'Выберите участника'}
-        </option>
-        {respondentOptions.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}{option.online ? '' : ' (оффлайн)'}
-          </option>
-        ))}
-      </select>
+      </div>
+      {respondentOptions.length === 0 ? (
+        <div className="rounded border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-slate-500">
+          Нет допущенных участников
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-1.5">
+          {respondentOptions.map((option) => {
+            const isSelected = respondent?.participant_id === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={isSelected}
+                onClick={() => selectRespondent(option.value)}
+                className={`min-h-9 rounded border px-2 py-1.5 text-left text-xs font-bold transition-colors ${
+                  isSelected
+                    ? 'border-violet-400 bg-violet-700 text-white ring-1 ring-violet-400'
+                    : option.online
+                      ? 'border-slate-600 bg-slate-800 text-slate-100 hover:border-violet-500 hover:bg-slate-700'
+                      : 'border-slate-700 bg-slate-900 text-slate-500 hover:border-violet-700 hover:text-slate-300'
+                }`}
+              >
+                {option.label}
+                {!option.online && <span className="ml-1 font-normal">(оффлайн)</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 
