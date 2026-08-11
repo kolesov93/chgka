@@ -1,4 +1,5 @@
 import { GameLog } from './GameLog';
+import { IntroHostControls } from './IntroHostControls';
 import { LiveOpsPanel } from './LiveOpsPanel';
 import { CurrentGameModeControl } from './CurrentGameModeControl';
 import { socket } from '../socket';
@@ -90,6 +91,8 @@ export function AdminControls({
           onModeChange={onGameModeChange}
         />
 
+        {isIntro && <IntroHostControls intro={gameState?.intro} />}
+
         {!isGameOver && !isIntro && (
           <div className="flex flex-col gap-3 border border-slate-700 p-3 rounded bg-slate-900/30">
           <div className="text-xs text-yellow-600 uppercase font-bold tracking-widest text-center">
@@ -131,8 +134,9 @@ export function AdminControls({
           </div>
         )}
 
-        <div className="border border-slate-700 p-3 rounded bg-slate-900/30">
-          <div className="w-full">
+        {!isIntro && (
+          <div className="border border-slate-700 p-3 rounded bg-slate-900/30">
+            <div className="w-full">
             {isQuestionReading && (
               <button
                 onClick={() => socket.emit('admin_start_discussion')}
@@ -222,18 +226,14 @@ export function AdminControls({
                 Фаза: ожидание вращения
               </div>
             )}
-            {isIntro && (
-              <div className="rounded border border-blue-800/60 bg-blue-950/20 px-3 py-3 text-center text-xs font-bold uppercase tracking-widest text-blue-300">
-                Интро управляется рядом со слайдом
-              </div>
-            )}
             {isGameOver && (
               <div className="rounded border border-yellow-800/60 bg-yellow-950/20 px-3 py-3 text-center text-xs font-bold uppercase tracking-widest text-yellow-300">
                 Игра завершена
               </div>
             )}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700 flex flex-col gap-3">
           <div className="flex items-center gap-3">

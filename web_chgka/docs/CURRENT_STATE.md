@@ -1,12 +1,21 @@
 # CHGKA Web Current State
 
-- Snapshot date: 2026-08-10
-- Latest completed task: `docs/tasks/0020-game-event-journal.md`
+- Snapshot date: 2026-08-11
+- Latest completed task: `docs/tasks/0021-stable-intro-controls.md`
 - Active task: none
-- Branch: `web`
-- Status: task 0020 is accepted and merged locally; publication of `web` is pending.
+- Branch: `task/stable-intro-controls`
+- Status: task 0021 is accepted, closed and ready for local merge into `web`.
 
 ## Repository checkpoint
+
+- Task 0021 planning commit: `a093068` (`Plan stable intro controls task`).
+- Task 0021 implementation commit: `afaed4e` (`Stabilize intro host controls`).
+- Backend CI regression fix: `700f1d5` (`Close journal resources in backend tests`) closes every SQLite journal created by the game-journal tests. This resolves the Python 3.14 `ResourceWarning` that failed Web CI runs 37 and 38; runtime journal ownership was already correct.
+- Intro navigation now lives in a fixed-height section near the top of the existing sticky host sidebar; the slide, one/three author cards and intro speech no longer participate in its geometry.
+- The music action keeps its reserved slot after start/completion, so the primary next-slide button remains at one desktop position while only its label changes.
+- Local verification: all 11 frontend test files, the production build, and all 207 backend tests pass; the backend suite also passes under the exact Python 3.14.6 `-W error` CI conditions.
+- GitHub Web CI run 39 passed all jobs on task handoff commit `5972b2e`; the focused host/player smoke was accepted on 2026-08-11.
+- Next continuation point: merge the closed task into `web`, then choose the next P2 roadmap item.
 
 - Task 0020 closure commit: `233e590` (`Close game event journal task`).
 - Task 0020 merge commit: `51214c5` (`Merge game event journal task`).
