@@ -50,6 +50,8 @@ Branch: `task/participant-groups-respondents`.
 - Planning commit: `5e07aa1`.
 - Implementation commit: `e80fe19`.
 - One-click selector follow-up: `d05cae5`.
+- Closure commit: `3fffa2f`.
+- Local merge commit: `e97597b`.
 
 ## Ручной smoke
 
