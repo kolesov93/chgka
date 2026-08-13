@@ -55,6 +55,7 @@ jobs:
       - run: npm audit
       - run: npm test
       - run: npm run build
+      - run: VITE_BASE_PATH=/chgka/ npm run build
 
   compose:
     runs-on: ubuntu-latest

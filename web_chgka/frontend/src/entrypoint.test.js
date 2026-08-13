@@ -58,6 +58,25 @@ test('nested admin-looking paths do not expose the host entrypoint', () => {
 });
 
 
+test('entrypoints preserve a configured application prefix', () => {
+  const basePath = '/chgka/';
+  assert.deepEqual(resolveEntrypoint('/chgka/admin', basePath), {
+    entrypoint: ENTRYPOINT_ADMIN,
+    canonicalPath: '/chgka/admin',
+  });
+  assert.deepEqual(resolveEntrypoint('/chgka/admin/history/', basePath), {
+    entrypoint: ENTRYPOINT_ADMIN_HISTORY,
+    canonicalPath: '/chgka/admin/history',
+  });
+  for (const path of ['/chgka', '/chgka/', '/chgka/unknown', '/admin']) {
+    assert.deepEqual(resolveEntrypoint(path, basePath), {
+      entrypoint: ENTRYPOINT_PLAYER,
+      canonicalPath: '/chgka/play',
+    });
+  }
+});
+
+
 test('entrypoints provide distinct document titles and admin login subtitles', () => {
   assert.equal(
     entrypointDocumentTitle(ENTRYPOINT_ADMIN),

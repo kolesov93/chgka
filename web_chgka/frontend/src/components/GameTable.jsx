@@ -1,16 +1,17 @@
 import React from 'react';
+import { currentAppPath } from '../appPaths';
 
 const SECTORS_COUNT = 13;
 const RADIUS = 42; 
 
 const IMAGES = {
-  table: '/images/table.png',
-  tableNo13: '/images/table_all_arrows.png',
-  letter: '/images/letter.png',
-  blitz: '/images/blitz.png',
-  superblitz: '/images/superblitz.png',
-  arrow: '/images/red_arrow.png',
-  volchok: '/images/volchok.png',
+  table: currentAppPath('images/table.png'),
+  tableNo13: currentAppPath('images/table_all_arrows.png'),
+  letter: currentAppPath('images/letter.png'),
+  blitz: currentAppPath('images/blitz.png'),
+  superblitz: currentAppPath('images/superblitz.png'),
+  arrow: currentAppPath('images/red_arrow.png'),
+  volchok: currentAppPath('images/volchok.png'),
 };
 
 export function GameTable({

@@ -1,20 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
+import { currentAppPath } from '../appPaths';
 
 const SOUNDS = {
-  volchok: '/sounds/volchok.mp3',
-  gong1: '/sounds/gong1.mp3',
-  gong2: '/sounds/gong2.mp3',
-  gong3: '/sounds/gong3.mp3',
-  sig1: '/sounds/sig1.mp3',
-  sig2: '/sounds/sig2.mp3',
-  sig3: '/sounds/sig3.mp3',
-  intro: '/sounds/meeting.mp3',
-  yes1: '/sounds/yes1.mp3',
-  yes2: '/sounds/yes2.mp3',
-  no1: '/sounds/no1.mp3',
-  no2: '/sounds/no2.mp3',
-  sector13: '/sounds/sector13.mp3',
-  final: '/sounds/final.mp3',
+  volchok: currentAppPath('sounds/volchok.mp3'),
+  gong1: currentAppPath('sounds/gong1.mp3'),
+  gong2: currentAppPath('sounds/gong2.mp3'),
+  gong3: currentAppPath('sounds/gong3.mp3'),
+  sig1: currentAppPath('sounds/sig1.mp3'),
+  sig2: currentAppPath('sounds/sig2.mp3'),
+  sig3: currentAppPath('sounds/sig3.mp3'),
+  intro: currentAppPath('sounds/meeting.mp3'),
+  yes1: currentAppPath('sounds/yes1.mp3'),
+  yes2: currentAppPath('sounds/yes2.mp3'),
+  no1: currentAppPath('sounds/no1.mp3'),
+  no2: currentAppPath('sounds/no2.mp3'),
+  sector13: currentAppPath('sounds/sector13.mp3'),
+  final: currentAppPath('sounds/final.mp3'),
 };
 
 export function useGameSound(gameState, globalVolume = 1.0, soundFadeMultiplier = 1.0) {

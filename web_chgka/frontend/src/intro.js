@@ -1,13 +1,15 @@
+import { currentAppPath } from './appPaths.js';
+
 export const INTRO_LAST_SLIDE = 13;
-export const INTRO_FALLBACK_AUTHOR_SOURCE = '/images/intro/author-fallback.png';
+export const INTRO_FALLBACK_AUTHOR_SOURCE = currentAppPath('images/intro/author-fallback.png');
 
 export function introSlideSource(slideIndex) {
   if (!Number.isInteger(slideIndex) || slideIndex < 0 || slideIndex > INTRO_LAST_SLIDE) {
     return null;
   }
 
-  if (slideIndex === 0) return '/images/intro/00_owl.png';
-  if (slideIndex === INTRO_LAST_SLIDE) return '/images/intro/13.png';
+  if (slideIndex === 0) return currentAppPath('images/intro/00_owl.png');
+  if (slideIndex === INTRO_LAST_SLIDE) return currentAppPath('images/intro/13.png');
   return null;
 }
 
