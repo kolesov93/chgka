@@ -2,9 +2,9 @@
 
 - Snapshot date: 2026-08-13
 - Latest completed task: `docs/tasks/0029-promote-web-to-root.md`
-- Active task: none.
-- Branch: `main`
-- Status: task 0029 is accepted and merged: task merge into `web` is `341fb48`, and replacement merge into `main` is `7b3366c`. The web application is the only tracked root product; `main` and annotated tag `legacy-pyglet-final` await the user's push and main-branch CI.
+- Active task: `docs/tasks/0030-fix-sqlite-resource-warnings.md`.
+- Branch: `task/fix-sqlite-resource-warnings`
+- Status: main-branch CI exposed nine unclosed short-lived SQLite connections under Python 3.14 warnings-as-errors. Task 0030 will make their lifecycle explicit and add a direct regression check.
 
 ## Repository checkpoint
 
