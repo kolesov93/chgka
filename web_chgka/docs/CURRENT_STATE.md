@@ -25,6 +25,8 @@
 - Browser acceptance: the complete 13-step host/two-player smoke passed on 2026-08-13, including the repayment-request follow-up.
 - Roadmap item 23 records a separate mini-task for a host button that skips the remaining intro author photos and goes directly to `PRE_ROUND`.
 - Task 0024 starts from `a1a185a` on `task/skip-intro`. It adds one confirmed host-only skip action in the stable intro panel, backed by an atomic expected-slide transition; exact scope and smoke are in `docs/tasks/0024-skip-intro.md`.
+- Task 0024 planning commit: `b244f87` (`Plan skip intro task`).
+- Task 0024 implementation commit: `fa5f501` (`Add host intro skip action`).
 - The implementation adds `admin_skip_intro`, a synchronous expected-slide transition, `intro_skipped` journal event, immediate synchronized sound stop, and a reserved secondary `Перейти к игре` slot on slides `00`–`12`; the duplicate action is hidden on slide `13`.
 - Local in-app browser verification confirms the button layout, cancel path and synchronized accepted transition for both host and player from slide `00`.
 - Local verification passes: `npm ci`, 251 backend tests with warnings treated as errors, all 13 frontend tests, the production build, sample-pack validation, native Compose configuration validation and `git diff --check`.
