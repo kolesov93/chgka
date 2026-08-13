@@ -2,9 +2,9 @@
 
 - Snapshot date: 2026-08-13
 - Latest completed task: `docs/tasks/0026-remove-browser-dialogs.md`
-- Active task: none.
-- Branch: `web`
-- Status: task 0026 is accepted and merged locally; `web` awaits the user's push and GitHub CI.
+- Active task: `docs/tasks/0027-configurable-base-path.md`.
+- Branch: `codex/configurable-base-path`
+- Status: task 0027 is implementing configurable root/`/chgka/` frontend deployment paths; actual VPS/Nginx deployment remains a separate step.
 
 ## Repository checkpoint
 
