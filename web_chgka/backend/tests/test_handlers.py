@@ -248,6 +248,62 @@ def test_intro_advance_requires_admin(monkeypatch):
     assert fake_sio.events == []
 
 
+def test_intro_skip_handler_is_admin_only_atomic_and_journaled(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state()
+    main.transition_start_game(state)
+    state["presentation"]["intro"].update(
+        {"slide_index": 6, "started_at_ms": 10_000}
+    )
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", None)
+    monkeypatch.setattr(main, "players_list", [])
+
+    async def run():
+        return await asyncio.gather(
+            main.admin_skip_intro("admin", {"expected_slide": 6}),
+            main.admin_skip_intro("admin", {"expected_slide": 6}),
+        )
+
+    responses = asyncio.run(run())
+
+    assert sorted(response["ok"] for response in responses) == [False, True]
+    assert state["game"]["phase"] == PHASE_PRE_ROUND
+    assert state["presentation"]["intro"] is None
+    assert sum(event == "stop_sound" for event, _data, _kwargs in fake_sio.events) == 1
+    final_states = [
+        data
+        for event, data, _kwargs in fake_sio.events
+        if event == "state_update" and data["phase"] == PHASE_PRE_ROUND
+    ]
+    assert len(final_states) == 1
+    events = main.game_journal.get_session(
+        main.game_journal.list_sessions()[0]["id"]
+    )["events"]
+    skipped = [event for event in events if event["event_type"] == "intro_skipped"]
+    assert len(skipped) == 1
+    assert skipped[0]["payload"]["slide_index"] == 6
+
+
+def test_intro_skip_requires_admin(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state()
+    main.transition_start_game(state)
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _deny_admin)
+    monkeypatch.setattr(main, "app_state", state)
+
+    response = asyncio.run(
+        main.admin_skip_intro("player", {"expected_slide": 0})
+    )
+
+    assert response == {"ok": False, "error": "not_admin"}
+    assert state["game"]["phase"] == PHASE_INTRO
+    assert fake_sio.events == []
+
+
 def test_intro_author_photo_is_pack_backed_and_current_slide_only(tmp_path, monkeypatch):
     pack_path = tmp_path / "pack"
     shutil.copytree(SAMPLE_PACK, pack_path)

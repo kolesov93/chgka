@@ -242,6 +242,45 @@ def transition_advance_intro(
     )
 
 
+def transition_skip_intro(
+    state: AppState,
+    *,
+    expected_slide: int,
+) -> TransitionEffects:
+    """Skip the remaining host-controlled intro in one guarded mutation."""
+    _require_phase(state, PHASE_INTRO)
+    if (
+        not isinstance(expected_slide, int)
+        or isinstance(expected_slide, bool)
+        or not 0 <= expected_slide <= INTRO_LAST_SLIDE
+    ):
+        raise TransitionError("invalid_intro_slide", "Некорректный номер слайда интро")
+
+    intro = state["presentation"]["intro"]
+    if intro is None:
+        raise TransitionError("missing_intro", "Нет активного интро")
+    current_slide = intro["slide_index"]
+    if current_slide != expected_slide:
+        raise TransitionError(
+            "stale_intro",
+            f"Слайд интро уже изменился: сейчас {current_slide:02d}",
+        )
+
+    state["presentation"]["intro"] = None
+    state["game"]["phase"] = PHASE_PRE_ROUND
+    return TransitionEffects(
+        events=(
+            game_event(
+                "intro_skipped",
+                "Оставшаяся часть вступления пропущена. "
+                "Фаза: ожидание первого вращения",
+                slide_index=current_slide,
+            ),
+        ),
+        stop_sounds=True,
+    )
+
+
 def clear_blackbox_presentation(state: AppState) -> bool:
     """End the active black-box presentation and invalidate stale commands."""
     if state["presentation"].get("blackbox") is None:

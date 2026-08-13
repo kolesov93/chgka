@@ -1,14 +1,14 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-13
-- Latest completed task: `docs/tasks/0023-earned-minutes-credit.md`
-- Active task: none; choose the next roadmap item after publishing task 0023.
-- Branch: `web`
-- Status: task 0023 is merged locally; `web` must be pushed for merged-branch CI.
+- Latest completed task: `docs/tasks/0024-skip-intro.md`
+- Active task: none; next requested mini-task is host-driven game completion at any score.
+- Branch: `task/skip-intro`
+- Status: task 0024 is implemented, locally verified and browser-accepted; it is ready for closure and local merge into `web`.
 
 ## Repository checkpoint
 
-- Local `web` contains task 0023 merge `0e36d43` and is ahead of `origin/web`; only `web` needs to be pushed.
+- `web` and `origin/web` are synchronized at `a1a185a`; GitHub Web CI run 41 passed for this exact commit.
 - Task 0023 starts from `8dd4aa2` on `task/earned-minutes-credit`.
 - Accepted product choices: captain-driven strategic actions with host fallbacks; captain early-answer window of 5 seconds versus the full base minute for the host; sequential spending of multiple earned minutes; exact `X:5` single-use credit; voluntary future repayment forced at `5:5`; television-style blitz/superblitz restrictions.
 - The captain is one physical participant selected by the host. A shared player login necessarily shares captain controls with the whole participant group on that browser.
@@ -24,7 +24,14 @@
 - Local verification passes: 234 backend tests with warnings treated as errors, all 13 frontend tests, the production build, sample-pack validation, and native Compose configuration validation.
 - Browser acceptance: the complete 13-step host/two-player smoke passed on 2026-08-13, including the repayment-request follow-up.
 - Roadmap item 23 records a separate mini-task for a host button that skips the remaining intro author photos and goes directly to `PRE_ROUND`.
-- Next continuation point: push only `web`, verify merged-branch CI, then choose the next roadmap item.
+- Task 0024 starts from `a1a185a` on `task/skip-intro`. It adds one confirmed host-only skip action in the stable intro panel, backed by an atomic expected-slide transition; exact scope and smoke are in `docs/tasks/0024-skip-intro.md`.
+- Task 0024 planning commit: `b244f87` (`Plan skip intro task`).
+- Task 0024 implementation commit: `fa5f501` (`Add host intro skip action`).
+- The implementation adds `admin_skip_intro`, a synchronous expected-slide transition, `intro_skipped` journal event, immediate synchronized sound stop, and a reserved secondary `Перейти к игре` slot on slides `00`–`12`; the duplicate action is hidden on slide `13`.
+- Local in-app browser verification confirms the button layout, cancel path and synchronized accepted transition for both host and player from slide `00`.
+- Local verification passes: `npm ci`, 251 backend tests with warnings treated as errors, all 13 frontend tests, the production build, sample-pack validation, native Compose configuration validation and `git diff --check`.
+- Browser acceptance: the exact five-step skip-intro smoke passed on 2026-08-13.
+- Next continuation point: close and merge task 0024 into `web`, then create a separate task for host-driven completion at any score.
 
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.

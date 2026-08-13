@@ -73,6 +73,7 @@ export function introHostControlView(intro, localNowMs = Date.now()) {
     slideLabel: introSlideLabel(slideIndex),
     nextStepLabel: introNextStepLabel(slideIndex),
     canAdvance,
+    canSkip: canAdvance && slideIndex >= 0 && slideIndex < INTRO_LAST_SLIDE,
     canStartMusic: canAdvance && !musicStarted,
     musicStatus: musicStarted ? formatIntroRemaining(remaining) : 'Не запущена',
     musicActionLabel: musicFinished
