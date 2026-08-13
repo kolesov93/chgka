@@ -1,0 +1,89 @@
+services:
+  backend:
+    image: chgka-backend:${CHGKA_IMAGE_TAG:-latest}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.production
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      CHGKA_ENV: production
+      QUESTIONS_PACK_PATH: /questions
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in the production env file}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://example.com}
+      ADMIN_TOKEN_TTL_SECONDS: ${ADMIN_TOKEN_TTL_SECONDS:-43200}
+      CHGKA_DB_PATH: /data/chgka.sqlite3
+    volumes:
+      - type: bind
+        source: ${CHGKA_QUESTIONS_PATH:?Set CHGKA_QUESTIONS_PATH in the production env file}
+        target: /questions
+        read_only: true
+      - type: bind
+        source: ${CHGKA_DATA_PATH:?Set CHGKA_DATA_PATH in the production env file}
+        target: /data
+      - type: bind
+        source: ${CHGKA_BACKUPS_PATH:?Set CHGKA_BACKUPS_PATH in the production env file}
+        target: /backups
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    networks:
+      - app
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=3).read()"
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  frontend:
+    image: chgka-frontend:${CHGKA_IMAGE_TAG:-latest}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.production
+      args:
+        VITE_BASE_PATH: /chgka/
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${CHGKA_BIND_ADDRESS:-127.0.0.1}:${CHGKA_HTTP_PORT:-18080}:8080"
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    networks:
+      - app
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  app:
+    internal: true
