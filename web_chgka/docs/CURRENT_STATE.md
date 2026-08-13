@@ -3,8 +3,8 @@
 - Snapshot date: 2026-08-13
 - Latest completed task: `docs/tasks/0024-skip-intro.md`
 - Active task: none; next requested mini-task is host-driven game completion at any score.
-- Branch: `task/skip-intro`
-- Status: task 0024 is implemented, locally verified and browser-accepted; it is ready for closure and local merge into `web`.
+- Branch: `web`
+- Status: task 0024 is implemented, locally verified, browser-accepted and merged into local `web`.
 
 ## Repository checkpoint
 
@@ -31,7 +31,9 @@
 - Local in-app browser verification confirms the button layout, cancel path and synchronized accepted transition for both host and player from slide `00`.
 - Local verification passes: `npm ci`, 251 backend tests with warnings treated as errors, all 13 frontend tests, the production build, sample-pack validation, native Compose configuration validation and `git diff --check`.
 - Browser acceptance: the exact five-step skip-intro smoke passed on 2026-08-13.
-- Next continuation point: close and merge task 0024 into `web`, then create a separate task for host-driven completion at any score.
+- Task 0024 closure commit: `82dacc6` (`Close skip intro task`).
+- Task 0024 merge commit: `152e53d` (`Merge skip intro task`).
+- Next continuation point: create a separate task for host-driven completion at any score; local `web` must later be pushed to publish task 0024.
 
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.
