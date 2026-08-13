@@ -23,6 +23,7 @@ from transitions import (
     SECTORS_COUNT,
     TransitionEffects,
     TransitionError,
+    clear_author_presentation,
     clear_blackbox_presentation,
 )
 from ui_text import phase_label, played_label, question_kind_label, timer_label
@@ -406,6 +407,8 @@ def live_ops_force_phase(
     clear_media = new_phase == PHASE_QUESTION_READING
     if clear_media:
         state["presentation"]["shared_media"] = None
+    else:
+        clear_author_presentation(state)
     if new_phase == PHASE_DISCUSSION:
         kind = round_ctx.get("kind", "normal")
         seconds = (

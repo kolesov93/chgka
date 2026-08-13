@@ -56,6 +56,26 @@ def _question_state(*, kind="normal", score=None):
     return state
 
 
+def _show_author(state):
+    state["presentation"]["shared_media"] = {
+        "type": "image",
+        "media_id": "author-token",
+        "media_ref": "author:question-id",
+        "section": "author",
+        "name": "Елена Орлова",
+        "playback_state": "stopped",
+        "position_ms": 0,
+        "started_at_ms": None,
+        "playback_generation": 0,
+        "has_next": False,
+        "presentation_kind": "author",
+        "author_name": "Елена Орлова",
+        "author_city": None,
+        "author_asset": "photo",
+        "has_photo": True,
+    }
+
+
 def _start_base(state, *, started=10_000, seconds=60):
     transition_start_discussion(
         state,
@@ -128,8 +148,11 @@ def test_early_answer_is_direct_for_host_but_captain_request_needs_decision():
     assert rejected["game"]["phase"] == PHASE_QUESTION_READING
 
     direct = _question_state()
-    transition_early_answer(direct, now_ms=1_000, actor=HOST)
+    _show_author(direct)
+    direct_effects = transition_early_answer(direct, now_ms=1_000, actor=HOST)
     assert direct["game"]["phase"] == PHASE_TEAM_ANSWER
+    assert direct["presentation"]["shared_media"] is None
+    assert direct_effects.events[0].event_type == "author_hidden"
 
 
 def test_captain_request_has_five_seconds_but_host_has_the_full_base_minute():
@@ -390,6 +413,7 @@ def test_post_round_repayment_request_blocks_round_end_and_stale_resolution():
 
 def test_normal_repayment_enters_answer_without_timer_and_clears_debt():
     state = _question_state()
+    _show_author(state)
     state["game"]["round"]["credit_repayment"] = True
     state["game"]["team"]["credit"] = {
         "used": True,
@@ -404,6 +428,7 @@ def test_normal_repayment_enters_answer_without_timer_and_clears_debt():
 
     effects = transition_repayment_answer(state)
     assert state["game"]["phase"] == PHASE_TEAM_ANSWER
+    assert state["presentation"]["shared_media"] is None
     assert state["timer"]["discussion_deadline_ms"] is None
     assert state["game"]["team"]["credit"] == {
         "used": True,
@@ -411,7 +436,9 @@ def test_normal_repayment_enters_answer_without_timer_and_clears_debt():
         "repayment_scheduled": False,
         "forced": False,
     }
-    assert "credit_repayment_completed" in [event.event_type for event in effects.events]
+    event_types = [event.event_type for event in effects.events]
+    assert event_types[0] == "author_hidden"
+    assert "credit_repayment_completed" in event_types
 
 
 def test_blitz_credit_debt_appears_only_after_the_third_correct_part():

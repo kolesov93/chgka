@@ -1382,6 +1382,158 @@ def test_audio_resolve_share_play_pause_stop_and_http_context(monkeypatch):
     asyncio.run(run_flow())
 
 
+def test_author_is_pre_resolved_shared_reconnect_safe_and_reusable_after_hide(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "normal", "sector": 3}
+    state["wheel"]["spin_id"] = 7
+    pack = parse_question_pack(SAMPLE_PACK)
+
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", pack)
+    monkeypatch.setattr(main, "media_tokens", {})
+    monkeypatch.setattr(
+        main,
+        "players_list",
+        [_authorized_admin(monkeypatch, fake_sio)],
+    )
+
+    async def run_flow():
+        await main._emit_current_question_to_admins()
+        question_payload = next(
+            data
+            for event, data, _kwargs in fake_sio.events
+            if event == "admin_question"
+        )
+        author = question_payload["author_media"]
+        author_id = author["media_id"]
+
+        assert author == {
+            "media_id": author_id,
+            "media_ref": f"author:{pack.get_by_sector(3).id}",
+            "type": "image",
+            "section": "author",
+            "name": "Андрей Козлов",
+            "presentation_kind": "author",
+            "author_name": "Андрей Козлов",
+            "author_city": "Казань",
+            "author_asset": "photo",
+            "has_photo": True,
+        }
+        assert "path" not in author
+        assert set(main.media_tokens) == {author_id}
+
+        response = await main.get_media(author_id)
+        assert Path(response.path).name == "author.jpg"
+
+        assert await main.admin_share_media(
+            "admin",
+            {"media_id": author_id},
+        ) == {"ok": True}
+        assert state["presentation"]["shared_media"] == {
+            "media_id": author_id,
+            "media_ref": f"author:{pack.get_by_sector(3).id}",
+            "type": "image",
+            "section": "author",
+            "name": "Андрей Козлов",
+            "playback_state": "stopped",
+            "position_ms": 0,
+            "started_at_ms": None,
+            "playback_generation": 0,
+            "has_next": False,
+            "presentation_kind": "author",
+            "author_name": "Андрей Козлов",
+            "author_city": "Казань",
+            "author_asset": "photo",
+            "has_photo": True,
+        }
+        public_shared = next(
+            data["shared_media"]
+            for event, data, _kwargs in reversed(fake_sio.events)
+            if event == "state_update"
+        )
+        assert public_shared["author_name"] == "Андрей Козлов"
+        assert public_shared["author_city"] == "Казань"
+        assert "media_ref" not in public_shared
+        assert "name" not in public_shared
+
+        assert await main.admin_hide_media("admin") == {"ok": True}
+        assert state["presentation"]["shared_media"] is None
+        assert author_id in main.media_tokens
+        assert Path((await main.get_media(author_id)).path).name == "author.jpg"
+
+        assert await main.admin_share_media(
+            "admin",
+            {"media_id": author_id},
+        ) == {"ok": True}
+        assert await main.admin_hide_media("admin") == {"ok": True}
+        state["game"]["phase"] = PHASE_DISCUSSION
+        assert await main.admin_share_media(
+            "admin",
+            {"media_id": author_id},
+        ) == {
+            "ok": False,
+            "error": "author_bad_phase",
+            "message": "Автора можно показывать только во время чтения вопроса",
+        }
+        await main._emit_current_question_to_admins()
+        latest_question = next(
+            data
+            for event, data, _kwargs in reversed(fake_sio.events)
+            if event == "admin_question"
+        )
+        assert "author_media" not in latest_question
+
+        monkeypatch.setattr(main, "require_admin", _deny_admin)
+        assert await main.admin_share_media(
+            "player",
+            {"media_id": author_id},
+        ) == {"ok": False, "error": "not_admin"}
+
+    asyncio.run(run_flow())
+
+
+def test_author_token_from_previous_blitz_part_cannot_be_shared(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "blitz", "sector": 4, "part_index": 0}
+    state["wheel"]["spin_id"] = 9
+    pack = parse_question_pack(SAMPLE_PACK)
+
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", pack)
+    monkeypatch.setattr(main, "media_tokens", {})
+    monkeypatch.setattr(
+        main,
+        "players_list",
+        [_authorized_admin(monkeypatch, fake_sio)],
+    )
+
+    async def run_flow():
+        await main._emit_current_question_to_admins()
+        old_author_id = next(
+            data["author_media"]["media_id"]
+            for event, data, _kwargs in fake_sio.events
+            if event == "admin_question"
+        )
+        state["game"]["round"]["part_index"] = 1
+
+        response = await main.admin_share_media(
+            "admin",
+            {"media_id": old_author_id},
+        )
+
+        assert response == {"ok": False, "error": "media_not_current"}
+        assert old_author_id not in main.media_tokens
+        assert state["presentation"]["shared_media"] is None
+
+    asyncio.run(run_flow())
+
+
 def test_video_resolve_share_play_and_natural_end(monkeypatch):
     fake_sio = FakeSio(yield_on_emit=False)
     state = create_initial_app_state(phase=PHASE_QUESTION_READING)
@@ -1640,7 +1792,10 @@ def test_live_ops_open_round_force_phase_timer_and_clear_question(monkeypatch):
         assert opened == {"ok": True}
         assert state["game"]["phase"] == PHASE_QUESTION_READING
         assert state["game"]["round"] == {"kind": "normal", "sector": 3}
-        assert main.media_tokens == {}
+        assert len(main.media_tokens) == 1
+        author_token = next(iter(main.media_tokens.values()))
+        assert author_token["presentation_kind"] == "author"
+        assert author_token["round_key"] == (3, "normal", 0)
 
         discussion = await main.admin_force_phase(
             "admin",

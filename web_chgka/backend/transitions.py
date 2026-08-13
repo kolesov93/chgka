@@ -292,6 +292,15 @@ def clear_blackbox_presentation(state: AppState) -> bool:
     return True
 
 
+def clear_author_presentation(state: AppState) -> bool:
+    """Hide only a shared author card, leaving ordinary question media alone."""
+    shared_media = state["presentation"].get("shared_media")
+    if not shared_media or shared_media.get("presentation_kind") != "author":
+        return False
+    state["presentation"]["shared_media"] = None
+    return True
+
+
 def transition_start_blackbox(
     state: AppState,
     *,
@@ -596,6 +605,7 @@ def transition_start_discussion(
         kind = round_ctx.get("kind", "normal")
         duration_ms = 20_000 if kind in ("blitz", "superblitz") else 60_000
         started_at_ms = deadline_ms - duration_ms
+    author_hidden = clear_author_presentation(state)
     state["game"]["phase"] = PHASE_DISCUSSION
     _start_timer(
         state,
@@ -605,6 +615,11 @@ def transition_start_discussion(
     )
     return TransitionEffects(
         events=(
+            *(
+                (game_event("author_hidden", "Автор скрыт: началось обсуждение"),)
+                if author_hidden
+                else ()
+            ),
             game_event("phase_changed", "Фаза: обсуждение", phase=PHASE_DISCUSSION),
         )
     )
@@ -679,10 +694,16 @@ def transition_early_answer(
     if phase == PHASE_DISCUSSION:
         round_ctx["answer_timer_segment"] = "base"
     context = _round_event_context(round_ctx)
+    author_hidden = clear_author_presentation(state)
     _clear_timer(state)
     state["game"]["phase"] = PHASE_TEAM_ANSWER
     return TransitionEffects(
         events=(
+            *(
+                (game_event("author_hidden", "Автор скрыт: принят досрочный ответ"),)
+                if author_hidden
+                else ()
+            ),
             game_event(
                 "early_answer_declared",
                 "Заявлен досрочный ответ",
@@ -1170,9 +1191,15 @@ def transition_repayment_answer(state: AppState) -> TransitionEffects:
         raise TransitionError("no_credit_repayment", "Текущий раунд не возвращает кредит")
     if round_ctx.get("kind") == "superblitz" and not round_ctx.get("respondent"):
         raise TransitionError("respondent_required", "Сначала выберите участника суперблица")
+    author_hidden = clear_author_presentation(state)
     _clear_timer(state)
     state["game"]["phase"] = PHASE_TEAM_ANSWER
     events = [
+        *(
+            [game_event("author_hidden", "Автор скрыт: принят ответ без обсуждения")]
+            if author_hidden
+            else []
+        ),
         game_event(
             "credit_repayment_answered",
             "Ответ без обсуждения принят",
