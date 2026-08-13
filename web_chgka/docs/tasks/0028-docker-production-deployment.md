@@ -58,20 +58,30 @@ Branch: `codex/docker-production-deployment`.
 - `nginx -t`, затем внешний HTTPS smoke и regression статусов существующих routes.
 - Проверка persistence SQLite и backup после recreation backend container.
 
+## Реализация и автоматическая проверка
+
+- Planning commit: `4c66426`; production stack commit: `f14d24a`; edge-network fix после VPS smoke: `3c09e41`.
+- На VPS из официального apt repository установлены Docker Engine `29.7.2`, Compose `5.4.0` и Buildx. Docker/containerd активны и включены в автозапуск; пользователь `kolesov93` входит в группу `docker`.
+- Production release `3c09e41d3df3` установлен в `~/apps/chgka/releases/`, symlink `current` указывает на него. Закрытый mode-`0600` env-файл создан пользователем без передачи пароля агенту.
+- Оба immutable image собраны на VPS. Backend и frontend работают непривилегированными UID, с read-only root filesystem, dropped capabilities и `no-new-privileges`; оба health check зелёные.
+- Host слушает только frontend на `127.0.0.1:18080`; backend имеет только container port `8000`. Отдельная `edge`-сеть исправляет loopback publication, закрытая `app`-сеть остаётся единственной сетью backend.
+- Sample pack прошёл container validator: 13 вопросов, 19 authored entries, 6 blitz/superblitz parts и 9 media files.
+- До host Nginx проверены `200` для health/player/admin/history/static image, exact production CORS, WebSocket upgrade `101`, отсутствие error-level container logs и отказ `403` для чужого WebSocket origin.
+- После Nginx reload те же player/admin/history/static routes доступны по публичному HTTPS, WSS даёт `101`, `/chgka` перенаправляет `308` в `/chgka/`. Baseline остальных маршрутов сохранён: `/` и `/movieclub/` — `401`, `/books/` — `302`, `/books/opds/` — `401`, `/podcasts/` — `404`.
+- Online SQLite backup создан через SQLite backup API и прошёл `PRAGMA quick_check`; bind-mounted database сохранилась при принудительном recreation backend. Ежедневный backup установлен в user crontab на `04:15 UTC` с retention 30 дней.
+- Локально проходят 264 backend tests с warnings-as-errors, все 17 frontend test files, root и `/chgka/` builds, npm audit с нулём уязвимостей и `git diff --check`. Production Compose реально валидирован и собран Docker Engine на VPS; локальный Snap Compose остаётся сломан внешним `snap-confine` defect.
+- Встроенный браузер подтвердил публичную player login form, канонический `/chgka/play`, прямые `/chgka/admin` и `/chgka/admin/history`, правильные document titles и отсутствие console errors/warnings без использования production-пароля.
+
 ## Ручной production smoke
 
 Статус: не пройден.
 
-1. Открыть `https://example.com/chgka/`: URL канонизируется в `/chgka/play`, player login и все статические изображения загружаются без mixed-content/404.
-2. Прямо открыть и обновить `/chgka/admin` и `/chgka/admin/history`: обе SPA-страницы остаются на правильных entrypoints; ведущий входит production-паролем.
-3. Подключить с ноутбука player group из двух участников, разрешить группу ведущим; затем открыть `/chgka/play` с телефона в той же Wi-Fi или мобильной сети и проверить вторую группу/admission.
-4. Начать sample-игру, запустить intro music, показать author photo и перейти к игре: звук, `/chgka/images`, `/chgka/sounds` и `/chgka/intro` работают по HTTPS.
-5. Открыть сектор 2, показать inline image игрокам и запустить/остановить media audio/video: `/chgka/media` и WebSocket state synchronization работают на обеих машинах.
-6. Обновить player и admin вкладки во время игры: роли восстанавливаются, состояние синхронизируется через WSS, в browser console нет CORS/mixed-content/WebSocket ошибок.
-7. Вернуть тестовую игру в intro, отметить её тестовой и проверить `/chgka/admin/history`; затем пересоздать только backend container и убедиться, что запись истории сохранилась, а новая live-сессия ожидаемо требует повторного входа.
-8. Запустить backup SQLite, проверить появление непустого backup-файла и выполнить его integrity check без подмены рабочей базы.
-9. Проверить `https://example.com/movieclub/`, `/books/`, `/books/opds/`, `/podcasts/` и `/`: статусы и назначение совпадают с baseline до deployment.
-10. С телефона повторно открыть `/chgka/play` после container recreation: frontend доступен, новый player login и admission проходят.
+1. На ноутбуке открыть `https://example.com/chgka/`: URL становится `/chgka/play`, форма игрока и изображения загружаются. Прямо открыть/обновить `/chgka/admin` и `/chgka/admin/history`: остаются правильные формы и адреса; затем войти на `/chgka/admin` production-паролем.
+2. До старта нажать у ведущего `Тестовая`, чтобы smoke не попал в обычную историю. На ноутбуке войти игроком как группа из двух участников: группа сразу появляется у ведущего и получает игровой экран без отдельного admission.
+3. Начать игру. В intro нажать `Запустить музыку`, показать авторов сектора 1 и нажать `Перейти к игре`: музыка слышна, фото автора видно ведущему и игроку, затем обоим показывается стол.
+4. После старта с телефона, лучше через мобильный интернет, открыть `https://example.com/chgka/play` и войти новой группой. Телефон показывает ожидание; ведущий видит заявку и разрешает вход; после разрешения телефон получает тот же стол/счёт.
+5. Через Live Ops открыть сектор 2. У ведущего в тексте вопроса виден inline preview, но игроки продолжают видеть стол; после `Показать игрокам` одинаковое изображение появляется на ноутбуке и телефоне. Обновить admin и обе player-страницы: роли и текущее состояние восстанавливаются без CORS/mixed-content/WebSocket ошибок.
+6. У ведущего выполнить `Сбросить до интро`, затем открыть `/chgka/admin/history`, войти и выбрать фильтр `Тестовые`: завершённая smoke-сессия присутствует, а в её логе/открытых вопросах виден сектор 2.
 
 ## Out of scope
 

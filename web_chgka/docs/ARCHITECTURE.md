@@ -4,7 +4,7 @@
 
 `web_chgka` is the target application. The older Pyglet/VLC application in the parent Git repository is legacy and is not part of the maintained runtime.
 
-The intended end state is a public-internet web application. The repository currently provides a development topology with separate localhost frontend and backend servers; production routing and deployment have not been designed yet.
+The application is published to the public internet at `https://example.com/chgka/`. The repository keeps separate development and production topologies: split localhost Vite/backend servers for development, and a hardened two-container Compose stack behind the existing host Nginx for production.
 
 ## Runtime map
 
@@ -188,6 +188,10 @@ Socket.IO handlers are asynchronous and can overlap. UI button disabling is not 
 
 ## Deployment status
 
-`docker-compose.yml` is development-only: it bind-mounts source code, keeps SQLite in the gitignored host directory `./runtime-data`, and both Dockerfiles run development servers. The backend allowlist also contains the exact local Vite preview origin `http://localhost:4173` so a `/chgka/` production-like build can be smoke-tested through preview's prefix-stripping HTTP/WebSocket proxy. There is no reverse proxy, TLS configuration, backup policy, health check, production image, or CI deployment workflow yet. Production must mount durable storage at the absolute `CHGKA_DB_PATH` and back it up independently of container replacement.
+`docker-compose.yml` and the ordinary Dockerfiles remain development-only: they bind-mount source, keep SQLite in `./runtime-data`, run Uvicorn with `--reload`, and serve the Vite development server. The exact local preview origin `http://localhost:4173` allows a `/chgka/` production-like smoke through Vite's prefix-stripping proxy.
 
-Backend startup nevertheless has an explicit security mode. Development Compose supplies its local password and exact development/preview origins. Production requires an externally injected password and exact HTTPS origins; the same allowlist protects FastAPI CORS and Socket.IO/WebSocket handshakes. The production frontend assumes same-origin HTTP and WebSocket routing through a future TLS reverse proxy. Under `/chgka/`, that proxy must serve the frontend with SPA fallback and strip `/chgka` only when forwarding `/chgka/socket.io`, `/chgka/media`, and `/chgka/intro` to the unchanged backend routes; pathname separation itself grants no access.
+`docker-compose.production.yml` builds immutable backend and frontend images. The frontend is a multi-stage Node build served by an unprivileged Nginx process; the backend is one unprivileged Uvicorn process without reload or additional workers. Both containers use read-only roots, dropped Linux capabilities, `no-new-privileges`, health checks, restart policies and bounded `local` logging. Backend and frontend share the internal `app` network; only frontend also joins `edge` and publishes `127.0.0.1:18080`. Backend port `8000` is never published on the host.
+
+The existing host Nginx remains the only listener on public `80/443` and terminates Certbot-managed TLS. Its exact `/chgka/` locations proxy to loopback frontend; container Nginx performs SPA fallback and strips the prefix only for Socket.IO, media and intro forwarding to unchanged backend routes. The host Socket.IO location applies per-IP handshake and connection limits. Exact `https://example.com` origin validation still protects both FastAPI CORS and Socket.IO; pathname separation is not an authorization boundary.
+
+The VPS stores immutable releases under `~/apps/chgka/releases`, points `current` at one release, and keeps the mode-`0600` env, read-only question pack, SQLite and backups outside release directories. SQLite online backup runs daily through the user crontab, verifies each copy with `PRAGMA quick_check`, and retains 30 days. Release transfer uses `git archive` over SSH rather than a GitHub private key on the VPS. Deployment/update/rollback are manual and documented in `deployment/README.md`; registry-based images, zero-downtime multi-worker operation and GitHub CD are not implemented.
