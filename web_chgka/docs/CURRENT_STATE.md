@@ -2,9 +2,9 @@
 
 - Snapshot date: 2026-08-13
 - Latest completed task: `docs/tasks/0025-author-media-presentation.md`
-- Active task: none.
-- Branch: `web`
-- Status: task 0025 is accepted and merged locally; `web` awaits the user's push and GitHub CI.
+- Active task: `docs/tasks/0026-remove-browser-dialogs.md`.
+- Branch: `task/remove-browser-dialogs`
+- Status: task 0025 is accepted and merged locally; task 0026 removes browser-native dialogs while preserving the two agreed interaction guards as application UI.
 
 ## Repository checkpoint
 
@@ -46,7 +46,8 @@
 - Local verification passes: 260 backend tests, all 14 frontend test files, the production build, `git diff --check`, and native Compose configuration validation. In-app browser verification passed for normal photo/city, explicit share, player reload, hide/re-show, inline-media switching, discussion/early-answer cleanup, blitz fallback and sector 13.
 - Browser acceptance: the exact six-step author-media smoke passed on 2026-08-13.
 - Roadmap item 25 records the next proposed task: remove browser-native dialogs, retaining the answer-media safety check as an in-app confirmation and the kicked-player explanation as an in-app notice.
-- Next continuation point: push `web`, confirm GitHub CI, then agree the exact UX and start roadmap item 25 on a separate branch.
+- Task 0026 starts from local `web` commit `f2e9659` on `task/remove-browser-dialogs`. It removes every runtime browser-native dialog, keeps answer-media disclosure behind an in-app confirmation, and routes the kicked-player explanation through the existing login notice.
+- Next continuation point: implement and verify the exact scope in `docs/tasks/0026-remove-browser-dialogs.md`.
 
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.
