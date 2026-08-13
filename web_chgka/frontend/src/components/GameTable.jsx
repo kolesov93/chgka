@@ -13,7 +13,12 @@ const IMAGES = {
   volchok: '/images/volchok.png',
 };
 
-export function GameTable({ gameState, isAdmin = false, questionTitles = null }) {
+export function GameTable({
+  gameState,
+  isAdmin = false,
+  questionTitles = null,
+  fitViewport = false,
+}) {
   const { current_sector, target_angle, is_spinning, used_questions = [] } = gameState || {};
   const questionTypes = gameState?.question_types || null;
   
@@ -125,7 +130,12 @@ export function GameTable({ gameState, isAdmin = false, questionTitles = null })
   };
 
   return (
-    <div className="relative w-full max-w-[800px] aspect-square mx-auto">
+    <div
+      className="relative aspect-square w-full max-w-[800px] mx-auto"
+      style={fitViewport
+        ? { width: 'min(800px, calc(100dvh - 7rem), 100%)' }
+        : undefined}
+    >
       <img 
         src={tableImage} 
         alt="Игровой стол"

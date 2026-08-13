@@ -14,6 +14,9 @@ from transitions import (
     transition_early_answer,
     transition_end_round,
     transition_repayment_answer,
+    transition_request_credit_minute,
+    transition_request_early_answer,
+    transition_resolve_strategy_request,
     transition_schedule_credit_repayment,
     transition_score,
     transition_select_captain,
@@ -94,26 +97,62 @@ def test_captain_selection_replacement_and_group_scoped_clear():
     assert cleared.events[0].payload["reason"] == "player_kicked"
 
 
-def test_captain_has_five_seconds_but_host_has_the_full_base_minute():
+def test_early_answer_is_direct_for_host_but_captain_request_needs_decision():
+    reading = _question_state()
+    request = transition_request_early_answer(
+        reading,
+        now_ms=1_000,
+        actor=CAPTAIN,
+    )
+    assert request.events[0].event_type == "early_answer_requested"
+    assert reading["game"]["round"]["strategy_request"]["requested_phase"] == PHASE_QUESTION_READING
+    with pytest.raises(TransitionError) as error:
+        transition_start_discussion(reading, started_at_ms=2_000, deadline_ms=62_000)
+    assert error.value.code == "strategy_request_pending"
+
+    approved = transition_resolve_strategy_request(reading, approve=True, now_ms=3_000)
+    assert reading["game"]["phase"] == PHASE_TEAM_ANSWER
+    assert reading["game"]["round"]["early_answer"] is True
+    assert [event.event_type for event in approved.events][:2] == [
+        "strategy_request_approved",
+        "early_answer_declared",
+    ]
+
+    rejected = _question_state()
+    transition_request_early_answer(rejected, now_ms=1_000, actor=CAPTAIN)
+    effects = transition_resolve_strategy_request(rejected, approve=False, now_ms=2_000)
+    assert effects.events[0].event_type == "early_answer_request_rejected"
+    assert "strategy_request" not in rejected["game"]["round"]
+    assert rejected["game"]["phase"] == PHASE_QUESTION_READING
+
+    direct = _question_state()
+    transition_early_answer(direct, now_ms=1_000, actor=HOST)
+    assert direct["game"]["phase"] == PHASE_TEAM_ANSWER
+
+
+def test_captain_request_has_five_seconds_but_host_has_the_full_base_minute():
     state = _question_state()
     _start_base(state)
     generation = state["timer"]["generation"]
 
-    effects = transition_early_answer(
+    effects = transition_request_early_answer(
         state,
         now_ms=14_999,
         actor=CAPTAIN,
         expected_generation=generation,
     )
-    assert state["game"]["phase"] == PHASE_TEAM_ANSWER
-    assert state["timer"]["discussion_deadline_ms"] is None
-    assert state["game"]["round"]["early_answer"] is True
+    assert state["game"]["phase"] == PHASE_DISCUSSION
+    assert state["timer"]["discussion_deadline_ms"] == 70_000
+    assert state["game"]["round"]["strategy_request"]["type"] == "early_answer"
     assert effects.events[0].payload["actor_role"] == "captain"
+
+    transition_resolve_strategy_request(state, approve=True, now_ms=20_000)
+    assert state["game"]["phase"] == PHASE_TEAM_ANSWER
 
     state = _question_state()
     _start_base(state)
     with pytest.raises(TransitionError) as error:
-        transition_early_answer(state, now_ms=15_000, actor=CAPTAIN)
+        transition_request_early_answer(state, now_ms=15_000, actor=CAPTAIN)
     assert error.value.code == "captain_window_closed"
 
     transition_early_answer(state, now_ms=69_999, actor=HOST)
@@ -126,10 +165,29 @@ def test_captain_has_five_seconds_but_host_has_the_full_base_minute():
     assert error.value.code == "timer_finished"
 
 
-def test_correct_early_answer_awards_once_and_wrong_answer_does_not():
+def test_stale_timer_repair_keeps_pending_request_for_a_host_decision():
     state = _question_state()
     _start_base(state)
-    transition_early_answer(state, now_ms=12_000, actor=CAPTAIN)
+    transition_request_early_answer(
+        state,
+        now_ms=12_000,
+        actor=CAPTAIN,
+        expected_generation=state["timer"]["generation"],
+    )
+    state["timer"]["generation"] += 1
+
+    with pytest.raises(TransitionError) as error:
+        transition_resolve_strategy_request(state, approve=True, now_ms=13_000)
+
+    assert error.value.code == "stale_timer"
+    assert state["game"]["round"]["strategy_request"]["type"] == "early_answer"
+    assert state["game"]["phase"] == PHASE_DISCUSSION
+
+
+def test_correct_early_answer_awards_once_and_wrong_answer_does_not():
+    state = _question_state()
+    transition_request_early_answer(state, now_ms=1_000, actor=CAPTAIN)
+    transition_resolve_strategy_request(state, approve=True, now_ms=2_000)
     effects = _score(state, "znatoki")
 
     assert state["game"]["team"]["earned_minutes"] == 1
@@ -147,49 +205,57 @@ def test_correct_early_answer_awards_once_and_wrong_answer_does_not():
     assert wrong["game"]["team"]["earned_minutes"] == 0
 
 
-def test_multiple_earned_minutes_are_spent_sequentially_and_race_is_stale():
+def test_multiple_earned_minutes_follow_host_answer_without_waiting_for_deadline():
     state = _question_state()
     state["game"]["team"]["earned_minutes"] = 2
     _start_base(state, started=0)
-    base_generation = state["timer"]["generation"]
+    transition_team_answer(state)
+    answer_generation = state["timer"]["generation"]
 
     first = transition_spend_earned_minute(
         state,
-        now_ms=60_000,
+        now_ms=10_000,
         actor=CAPTAIN,
-        expected_generation=base_generation,
+        expected_generation=answer_generation,
     )
     assert state["game"]["team"]["earned_minutes"] == 1
+    assert state["game"]["phase"] == PHASE_DISCUSSION
     assert state["timer"]["segment"] == "earned"
-    assert state["timer"]["discussion_deadline_ms"] == 120_000
+    assert state["timer"]["discussion_deadline_ms"] == 70_000
     assert first.events[0].payload["balance_after"] == 1
 
     with pytest.raises(TransitionError) as error:
         transition_spend_earned_minute(
             state,
-            now_ms=60_000,
+            now_ms=10_000,
             actor=HOST,
-            expected_generation=base_generation,
+            expected_generation=answer_generation,
         )
-    assert error.value.code == "stale_timer"
+    assert error.value.code == "bad_phase"
 
-    transition_spend_earned_minute(state, now_ms=120_000, actor=HOST)
+    transition_team_answer(state)
+    transition_spend_earned_minute(state, now_ms=20_000, actor=HOST)
     assert state["game"]["team"]["earned_minutes"] == 0
     assert state["game"]["round"]["extra_minutes_spent"] == 2
-    assert state["timer"]["discussion_deadline_ms"] == 180_000
+    assert state["timer"]["discussion_deadline_ms"] == 80_000
 
 
 def test_blitz_earned_minutes_lock_to_the_first_selected_part():
     state = _question_state(kind="blitz")
     state["game"]["team"]["earned_minutes"] = 2
     _start_base(state, started=0, seconds=20)
-    transition_spend_earned_minute(state, now_ms=20_000, actor=CAPTAIN)
+    transition_team_answer(state)
+    transition_spend_earned_minute(state, now_ms=5_000, actor=CAPTAIN)
     assert state["game"]["round"]["extra_part_index"] == 0
 
+    transition_team_answer(state)
+    _score(state, "znatoki")
+    transition_end_round(state, gong_sound="gong1")
+    _start_base(state, started=20_000, seconds=20)
+    transition_team_answer(state)
     state["game"]["round"]["part_index"] = 1
-    state["timer"]["discussion_deadline_ms"] = 80_000
     with pytest.raises(TransitionError) as error:
-        transition_spend_earned_minute(state, now_ms=80_000, actor=CAPTAIN)
+        transition_spend_earned_minute(state, now_ms=30_000, actor=CAPTAIN)
     assert error.value.code == "earned_part_locked"
     assert state["game"]["team"]["earned_minutes"] == 1
 
@@ -197,11 +263,22 @@ def test_blitz_earned_minutes_lock_to_the_first_selected_part():
 def test_credit_is_one_use_at_x_to_five_and_debt_needs_a_round_win():
     state = _question_state(score={"znatoki": 2, "tv": 5})
     _start_base(state, started=0)
-    taken = transition_take_credit_minute(state, now_ms=60_000, actor=CAPTAIN)
+    transition_team_answer(state)
+    requested = transition_request_credit_minute(state, now_ms=10_000, actor=CAPTAIN)
+
+    assert requested.events[0].event_type == "credit_minute_requested"
+    assert state["game"]["team"]["credit"]["used"] is False
+    assert state["game"]["round"]["strategy_request"]["type"] == "credit"
+    with pytest.raises(TransitionError) as error:
+        _score(state, "znatoki")
+    assert error.value.code == "strategy_request_pending"
+
+    taken = transition_resolve_strategy_request(state, approve=True, now_ms=12_000)
 
     assert state["game"]["team"]["credit"]["used"] is True
+    assert state["game"]["phase"] == PHASE_DISCUSSION
     assert state["timer"]["segment"] == "credit"
-    assert taken.events[0].event_type == "credit_minute_taken"
+    assert "credit_minute_taken" in [event.event_type for event in taken.events]
 
     transition_team_answer(state)
     effects = _score(state, "znatoki")
@@ -216,7 +293,8 @@ def test_credit_is_one_use_at_x_to_five_and_debt_needs_a_round_win():
 
     wrong = _question_state(score={"znatoki": 2, "tv": 5})
     _start_base(wrong, started=0)
-    transition_take_credit_minute(wrong, now_ms=60_000, actor=HOST)
+    transition_team_answer(wrong)
+    transition_take_credit_minute(wrong, now_ms=10_000, actor=HOST)
     transition_team_answer(wrong)
     effects = _score(wrong, "tv")
     assert wrong["game"]["score"]["tv"] == 6
@@ -227,7 +305,8 @@ def test_credit_is_one_use_at_x_to_five_and_debt_needs_a_round_win():
 def test_credit_at_four_to_five_forces_next_repayment():
     state = _question_state(score={"znatoki": 4, "tv": 5})
     _start_base(state, started=0)
-    transition_take_credit_minute(state, now_ms=60_000, actor=HOST)
+    transition_team_answer(state)
+    transition_take_credit_minute(state, now_ms=10_000, actor=HOST)
     transition_team_answer(state)
     effects = _score(state, "znatoki")
 
@@ -285,7 +364,8 @@ def test_normal_repayment_enters_answer_without_timer_and_clears_debt():
 def test_blitz_credit_debt_appears_only_after_the_third_correct_part():
     state = _question_state(kind="blitz", score={"znatoki": 1, "tv": 5})
     _start_base(state, started=0, seconds=20)
-    transition_take_credit_minute(state, now_ms=20_000, actor=HOST)
+    transition_team_answer(state)
+    transition_take_credit_minute(state, now_ms=10_000, actor=HOST)
     transition_team_answer(state)
     _score(state, "znatoki")
     assert state["game"]["team"]["credit"]["debt"] is False

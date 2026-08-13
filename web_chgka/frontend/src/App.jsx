@@ -63,6 +63,7 @@ function GameApp({ entrypoint }) {
   const isGameOver = phase === 'GAME_OVER';
   const round = gameState?.round || null;
   const showTableForAdmin = isPreRound || !!gameState?.is_spinning;
+  const showPlayerGameStage = !isAdmin && !isIntro && !isGameOver;
   const sharedMedia = gameState?.shared_media || null;
   const blackbox = gameState?.blackbox || null;
   const questionPanelKey = `${round?.sector ?? ''}:${round?.kind ?? ''}:${round?.part_index ?? ''}`;
@@ -140,7 +141,7 @@ function GameApp({ entrypoint }) {
       {notificationsPanel}
       {userHeader}
 
-      <div className="flex-1 flex flex-col items-center w-full max-w-3xl">
+      <div className={`flex-1 flex flex-col items-center w-full ${isAdmin ? 'max-w-3xl' : 'max-w-[1200px]'}`}>
         <div className="w-full flex justify-between items-center mb-4">
           <h1 className="text-xl font-bold text-slate-400 flex items-center gap-2">
             Что? Где? Когда?
@@ -153,20 +154,11 @@ function GameApp({ entrypoint }) {
           )}
         </div>
 
-        {!isIntro && <ScoreBoard score={gameState?.score} />}
+        {!isIntro && !showPlayerGameStage && <ScoreBoard score={gameState?.score} />}
 
-        {!isIntro && <TeamResources team={gameState?.team} />}
+        {!isIntro && !showPlayerGameStage && <TeamResources team={gameState?.team} />}
 
-        {!isAdmin && !isIntro && !isGameOver && (
-          <CaptainControls
-            gameState={gameState}
-            myGroupId={myGroupId}
-            isConnected={isConnected}
-            addNotification={addNotification}
-          />
-        )}
-
-        {!isIntro && !isGameOver && (
+        {!isIntro && !isGameOver && !showPlayerGameStage && (
           <RespondentBanner
             respondent={round?.respondent}
             superblitz={round?.kind === 'superblitz'}
@@ -196,6 +188,35 @@ function GameApp({ entrypoint }) {
         ) : isGameOver ? (
           <div className="w-full flex justify-center mb-4">
             <FinalScreen score={gameState?.score} />
+          </div>
+        ) : showPlayerGameStage ? (
+          <div className="grid w-full items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,320px)]">
+            <div className="flex min-w-0 justify-center">
+              {blackbox ? (
+                <BlackboxScreen />
+              ) : (
+                <SharedMediaRenderer media={sharedMedia} volume={effectiveMediaVolume}>
+                  <GameTable
+                    gameState={gameState}
+                    fitViewport
+                  />
+                </SharedMediaRenderer>
+              )}
+            </div>
+            <aside className="flex w-full flex-col items-center lg:sticky lg:top-4">
+              <ScoreBoard score={gameState?.score} />
+              <TeamResources team={gameState?.team} />
+              <RespondentBanner
+                respondent={round?.respondent}
+                superblitz={round?.kind === 'superblitz'}
+              />
+              <CaptainControls
+                gameState={gameState}
+                myGroupId={myGroupId}
+                isConnected={isConnected}
+                addNotification={addNotification}
+              />
+            </aside>
           </div>
         ) : isAdmin && !showTableForAdmin ? (
           <div className="w-full flex justify-center mb-4">

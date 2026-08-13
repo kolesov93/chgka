@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 
 import {
   canScheduleRepayment,
+  canCaptainRequestEarlyAnswer,
   canTakeCreditMinute,
   canUseEarnedMinute,
   captainEarlySeconds,
-  timerServerNow,
 } from '../gameMinutes';
 import { socket } from '../socket';
 import { responseMessage } from '../uiText';
@@ -27,19 +27,17 @@ export function CaptainControls({ gameState, myGroupId, isConnected, addNotifica
   if (!isCaptainGroup) return null;
 
   const round = gameState?.round || {};
-  const serverNowMs = timerServerNow(timer, localNowMs);
   const earlySeconds = captainEarlySeconds(timer, localNowMs);
-  const showEarlyAnswer = gameState?.phase === 'DISCUSSION'
-    && round.kind === 'normal'
-    && !round.credit_repayment
-    && earlySeconds > 0
-    && Number.isFinite(timer?.discussion_deadline_ms)
-    && serverNowMs < timer.discussion_deadline_ms;
+  const showEarlyAnswer = canCaptainRequestEarlyAnswer(gameState, localNowMs);
   const showEarned = canUseEarnedMinute(gameState, localNowMs);
   const showCredit = canTakeCreditMinute(gameState, localNowMs);
   const showRepayment = canScheduleRepayment(gameState);
+  const pendingRequest = round.strategy_request;
+  const ownRequestPending = pendingRequest?.group_id === myGroupId;
 
-  if (!showEarlyAnswer && !showEarned && !showCredit && !showRepayment) return null;
+  if (!showEarlyAnswer && !showEarned && !showCredit && !showRepayment && !ownRequestPending) {
+    return null;
+  }
 
   const emitAction = (event, payload = {}) => {
     setPendingAction(event);
@@ -60,15 +58,22 @@ export function CaptainControls({ gameState, myGroupId, isConnected, addNotifica
       <div className="mb-2 text-center text-[10px] font-black uppercase tracking-widest text-amber-300">
         Управление капитана
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
+      {ownRequestPending && (
+        <div className="mb-2 rounded-lg border border-amber-700/60 bg-amber-950/50 px-3 py-3 text-center text-sm font-bold text-amber-100">
+          Запрос отправлен ведущему
+        </div>
+      )}
+      <div className="flex flex-wrap justify-center gap-2">
         {showEarlyAnswer && (
           <button
             type="button"
             disabled={!isConnected || pendingAction !== null}
             onClick={() => emitAction('captain_early_answer', timerPayload)}
-            className="rounded-lg bg-purple-700 px-4 py-3 font-black uppercase tracking-wide text-white hover:bg-purple-600 disabled:opacity-40"
+            className="w-full max-w-sm rounded-lg bg-purple-700 px-4 py-3 font-black uppercase tracking-wide text-white hover:bg-purple-600 disabled:opacity-40"
           >
-            Досрочный ответ · {earlySeconds}
+            {gameState?.phase === 'DISCUSSION'
+              ? `Досрочный ответ · ${earlySeconds}`
+              : 'Досрочный ответ'}
           </button>
         )}
         {showEarned && (
@@ -76,7 +81,7 @@ export function CaptainControls({ gameState, myGroupId, isConnected, addNotifica
             type="button"
             disabled={!isConnected || pendingAction !== null}
             onClick={() => emitAction('captain_spend_earned_minute', timerPayload)}
-            className="rounded-lg bg-sky-700 px-4 py-3 font-bold text-white hover:bg-sky-600 disabled:opacity-40"
+            className="w-full max-w-sm rounded-lg bg-sky-700 px-4 py-3 font-bold text-white hover:bg-sky-600 disabled:opacity-40"
           >
             Дополнительная минута · осталось {gameState.team.earned_minutes}
           </button>
@@ -85,14 +90,10 @@ export function CaptainControls({ gameState, myGroupId, isConnected, addNotifica
           <button
             type="button"
             disabled={!isConnected || pendingAction !== null}
-            onClick={() => {
-              if (confirm('Взять единственную минуту в кредит в этой игре?')) {
-                emitAction('captain_take_credit_minute', timerPayload);
-              }
-            }}
-            className="rounded-lg bg-rose-800 px-4 py-3 font-bold text-white hover:bg-rose-700 disabled:opacity-40"
+            onClick={() => emitAction('captain_take_credit_minute', timerPayload)}
+            className="w-full max-w-sm rounded-lg bg-rose-800 px-4 py-3 font-bold text-white hover:bg-rose-700 disabled:opacity-40"
           >
-            Взять минуту в кредит
+            Минута в кредит
           </button>
         )}
         {showRepayment && (
@@ -104,7 +105,7 @@ export function CaptainControls({ gameState, myGroupId, isConnected, addNotifica
                 emitAction('captain_schedule_credit_repayment');
               }
             }}
-            className="rounded-lg bg-rose-800 px-4 py-3 font-bold text-white hover:bg-rose-700 disabled:opacity-40 sm:col-span-2"
+            className="w-full max-w-sm rounded-lg bg-rose-800 px-4 py-3 font-bold text-white hover:bg-rose-700 disabled:opacity-40"
           >
             Вернуть кредит в следующем раунде
           </button>

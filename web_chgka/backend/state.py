@@ -40,6 +40,7 @@ QuestionTypeValue = QuestionKind
 SharedMediaType = Literal["image", "audio", "video"]
 MediaPlaybackState = Literal["stopped", "playing", "paused"]
 TimerSegment = Literal["base", "earned", "credit"]
+StrategyRequestType = Literal["early_answer", "credit"]
 
 
 class ScoreState(TypedDict):
@@ -74,6 +75,18 @@ class TeamState(TypedDict):
     credit: CreditState
 
 
+class StrategyRequestState(TypedDict, total=False):
+    """Reconnect-safe captain request awaiting an explicit host decision."""
+
+    type: StrategyRequestType
+    participant_id: str
+    group_id: str
+    name: str
+    requested_phase: GamePhase
+    requested_at_ms: int
+    timer_generation: int
+
+
 class RoundState(TypedDict, total=False):
     """Current round context.
 
@@ -95,6 +108,7 @@ class RoundState(TypedDict, total=False):
     credit_used: bool
     credit_part_index: int
     credit_repayment: bool
+    strategy_request: StrategyRequestState
 
 
 class SharedMediaState(TypedDict):

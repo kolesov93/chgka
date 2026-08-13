@@ -394,6 +394,7 @@ def live_ops_force_phase(
         PHASE_TEAM_ANSWER,
     ):
         round_ctx.pop("advance_next_part", None)
+    round_ctx.pop("strategy_request", None)
     if (
         new_phase in (PHASE_QUESTION_READING, PHASE_DISCUSSION)
         and round_ctx.get("kind") != "superblitz"

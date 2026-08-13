@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import {
   canScheduleRepayment,
+  canCaptainRequestEarlyAnswer,
+  canHostDeclareEarlyAnswer,
   canTakeCreditMinute,
   canUseEarnedMinute,
   captainEarlySeconds,
@@ -58,30 +60,61 @@ test('captain early answer countdown is limited to the first five seconds', () =
   assert.equal(captainEarlySeconds(timer({ segment: 'earned' }), 1_000), 0);
 });
 
-test('earned and credit actions require an elapsed base or earned segment', () => {
-  const elapsedTimer = timer({ discussion_deadline_ms: 15_000 });
-  const state = gameState({ timer: elapsedTimer });
-  assert.equal(canUseEarnedMinute(state, 4_000), true);
-  assert.equal(canTakeCreditMinute(state, 4_000), true);
+test('earned and credit actions appear after the host requests the team answer', () => {
+  const state = gameState({
+    phase: 'TEAM_ANSWER',
+    round: { kind: 'normal', sector: 2, answer_timer_segment: 'base' },
+  });
+  assert.equal(canUseEarnedMinute(state), true);
+  assert.equal(canTakeCreditMinute(state), true);
 
-  assert.equal(canUseEarnedMinute(gameState(), 4_000), false);
-  assert.equal(canTakeCreditMinute(gameState({ score: { znatoki: 2, tv: 4 }, timer: elapsedTimer }), 4_000), false);
+  assert.equal(canUseEarnedMinute(gameState()), false);
   assert.equal(canTakeCreditMinute(gameState({
-    timer: elapsedTimer,
+    ...state,
+    score: { znatoki: 2, tv: 4 },
+  })), false);
+  assert.equal(canTakeCreditMinute(gameState({
+    ...state,
     team: { ...state.team, credit: { ...state.team.credit, used: true } },
-  }), 4_000), false);
+  })), false);
+  assert.equal(canUseEarnedMinute(gameState({
+    ...state,
+    round: { ...state.round, early_answer: true },
+  })), false);
+});
+
+test('early answer is available while reading and keeps asymmetric timer access', () => {
+  const reading = gameState({ phase: 'QUESTION_READING' });
+  assert.equal(canCaptainRequestEarlyAnswer(reading), true);
+  assert.equal(canHostDeclareEarlyAnswer(reading), true);
+
+  assert.equal(canCaptainRequestEarlyAnswer(gameState(), 1_000), true);
+  assert.equal(canCaptainRequestEarlyAnswer(gameState(), 4_000), false);
+  assert.equal(canHostDeclareEarlyAnswer(gameState(), 4_000), true);
+  assert.equal(canHostDeclareEarlyAnswer(gameState({
+    round: { kind: 'normal', strategy_request: { type: 'early_answer' } },
+  }), 1_000), false);
 });
 
 test('blitz earned minutes stay locked to the initially selected part', () => {
-  const elapsedTimer = timer({ discussion_deadline_ms: 15_000, segment: 'earned' });
   assert.equal(canUseEarnedMinute(gameState({
-    timer: elapsedTimer,
-    round: { kind: 'blitz', part_index: 1, extra_part_index: 1 },
-  }), 4_000), true);
+    phase: 'TEAM_ANSWER',
+    round: {
+      kind: 'blitz',
+      part_index: 1,
+      extra_part_index: 1,
+      answer_timer_segment: 'earned',
+    },
+  })), true);
   assert.equal(canUseEarnedMinute(gameState({
-    timer: elapsedTimer,
-    round: { kind: 'blitz', part_index: 2, extra_part_index: 1 },
-  }), 4_000), false);
+    phase: 'TEAM_ANSWER',
+    round: {
+      kind: 'blitz',
+      part_index: 2,
+      extra_part_index: 1,
+      answer_timer_segment: 'earned',
+    },
+  })), false);
 });
 
 test('repayment scheduling and display values follow credit state', () => {

@@ -13,6 +13,7 @@ import {
 import { responseMessage } from '../uiText';
 import {
   canScheduleRepayment,
+  canHostDeclareEarlyAnswer,
   canTakeCreditMinute,
   canUseEarnedMinute,
   timerSegmentLabel,
@@ -56,15 +57,11 @@ export function AdminControls({
   const team = gameState?.team || {};
   const captain = team.captain || null;
   const timer = gameState?.timer || null;
-  const hostEarlyAnswerAvailable = isDiscussion
-    && roundKind === 'normal'
-    && !round?.credit_repayment
-    && timer?.segment === 'base'
-    && typeof discussionRemaining === 'number'
-    && discussionRemaining > 0;
+  const hostEarlyAnswerAvailable = canHostDeclareEarlyAnswer(gameState);
   const earnedMinuteAvailable = canUseEarnedMinute(gameState);
   const creditMinuteAvailable = canTakeCreditMinute(gameState);
   const repaymentCanBeScheduled = canScheduleRepayment(gameState);
+  const strategyRequest = round?.strategy_request || null;
 
   const spinForced = (sectorId) => {
     if (confirm(`Крутим на сектор ${sectorId}?`)) {
@@ -137,9 +134,17 @@ export function AdminControls({
   const timerPayload = { timer_generation: timer?.generation };
 
   const takeCredit = () => {
-    if (confirm('Взять единственную минуту в кредит в этой игре?')) {
+    if (confirm('Дать команде минуту в кредит?')) {
       emitHostAction('admin_take_credit_minute', timerPayload, 'Не удалось взять кредит');
     }
+  };
+
+  const resolveStrategyRequest = (approve) => {
+    emitHostAction(
+      'admin_resolve_strategy_request',
+      { approve },
+      'Не удалось обработать запрос капитана',
+    );
   };
 
   const scheduleRepayment = () => {
@@ -155,7 +160,7 @@ export function AdminControls({
   const respondentSelector = (
     <div className="mb-2 rounded border border-violet-800/60 bg-violet-950/25 p-2">
       <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-violet-300">
-        {isSuperblitz ? 'Участник суперблица' : 'Кто отвечал'}
+        {isSuperblitz ? 'Участник суперблица' : 'Кто отвечает'}
       </div>
       {respondentOptions.length === 0 ? (
         <div className="rounded border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-slate-500">
@@ -191,6 +196,44 @@ export function AdminControls({
 
   return (
     <div className="w-full lg:w-[600px] flex flex-col gap-4">
+      {strategyRequest && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="strategy-request-title"
+            className="w-full max-w-md rounded-2xl border border-amber-600/70 bg-slate-900 p-6 text-center shadow-2xl"
+          >
+            <div className="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-amber-400">
+              Запрос капитана
+            </div>
+            <h2 id="strategy-request-title" className="text-xl font-black text-white">
+              {strategyRequest.type === 'early_answer'
+                ? 'Принять досрочный ответ?'
+                : 'Дать минуту в кредит?'}
+            </h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Капитан: {strategyRequest.name}
+            </p>
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => resolveStrategyRequest(false)}
+                className="rounded-lg bg-slate-700 px-4 py-3 font-bold text-slate-100 hover:bg-slate-600"
+              >
+                {strategyRequest.type === 'early_answer' ? 'Не принимать' : 'Не давать'}
+              </button>
+              <button
+                type="button"
+                onClick={() => resolveStrategyRequest(true)}
+                className="rounded-lg bg-amber-600 px-4 py-3 font-black text-slate-950 hover:bg-amber-500"
+              >
+                {strategyRequest.type === 'early_answer' ? 'Принять' : 'Дать минуту'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="bg-slate-800 p-4 rounded-xl shadow-2xl border border-slate-700 flex flex-col gap-6 sticky top-4">
         <div className="flex justify-between items-center border-b border-slate-700 pb-2">
           <span className="text-sm font-bold text-slate-400 uppercase">Панель ведущего</span>
@@ -259,6 +302,19 @@ export function AdminControls({
             {isQuestionReading && (
               <>
                 {isSuperblitz && (!respondent || partIndex === 0) && respondentSelector}
+                {hostEarlyAnswerAvailable && (
+                  <button
+                    type="button"
+                    onClick={() => emitHostAction(
+                      'admin_early_answer',
+                      timerPayload,
+                      'Не удалось принять досрочный ответ',
+                    )}
+                    className="mb-2 w-full rounded bg-purple-800 py-2 text-[10px] font-black uppercase tracking-wider text-white hover:bg-purple-700"
+                  >
+                    Досрочный ответ
+                  </button>
+                )}
                 <button
                   onClick={() => round?.credit_repayment
                     ? emitHostAction(
@@ -313,32 +369,6 @@ export function AdminControls({
                     Досрочный ответ
                   </button>
                 )}
-                {(earnedMinuteAvailable || creditMinuteAvailable) && (
-                  <div className="grid grid-cols-2 gap-2">
-                    {earnedMinuteAvailable && (
-                      <button
-                        type="button"
-                        onClick={() => emitHostAction(
-                          'admin_spend_earned_minute',
-                          timerPayload,
-                          'Не удалось запустить дополнительную минуту',
-                        )}
-                        className="rounded bg-sky-800 px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-sky-700"
-                      >
-                        Доп. минута · {team.earned_minutes}
-                      </button>
-                    )}
-                    {creditMinuteAvailable && (
-                      <button
-                        type="button"
-                        onClick={takeCredit}
-                        className="rounded bg-rose-800 px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-rose-700"
-                      >
-                        Минута в кредит
-                      </button>
-                    )}
-                  </div>
-                )}
                 <div className="flex gap-2">
                   <button
                     onClick={signalTenSeconds}
@@ -357,6 +387,32 @@ export function AdminControls({
             )}
             {isTeamAnswer && (
               <div>
+                {(earnedMinuteAvailable || creditMinuteAvailable) && (
+                  <div className="mb-2 flex flex-wrap justify-center gap-2">
+                    {earnedMinuteAvailable && (
+                      <button
+                        type="button"
+                        onClick={() => emitHostAction(
+                          'admin_spend_earned_minute',
+                          timerPayload,
+                          'Не удалось запустить дополнительную минуту',
+                        )}
+                        className="w-full max-w-sm rounded bg-sky-800 px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-sky-700"
+                      >
+                        Доп. минута · {team.earned_minutes}
+                      </button>
+                    )}
+                    {creditMinuteAvailable && (
+                      <button
+                        type="button"
+                        onClick={takeCredit}
+                        className="w-full max-w-sm rounded bg-rose-800 px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-rose-700"
+                      >
+                        Минута в кредит
+                      </button>
+                    )}
+                  </div>
+                )}
                 {!isSuperblitz && respondentSelector}
                 <div className="flex gap-2">
                 <button

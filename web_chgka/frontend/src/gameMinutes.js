@@ -44,14 +44,14 @@ export function creditRecoveryValue(credit) {
 
 export function canUseEarnedMinute(gameState, localNowMs = Date.now()) {
   const round = gameState?.round || {};
-  const timer = gameState?.timer;
   if (
-    gameState?.phase !== 'DISCUSSION'
-    || !['base', 'earned'].includes(timer?.segment)
-    || !timerHasElapsed(timer, localNowMs)
+    gameState?.phase !== 'TEAM_ANSWER'
+    || !['base', 'earned'].includes(round.answer_timer_segment)
     || (gameState?.team?.earned_minutes ?? 0) <= 0
     || round.credit_used
     || round.credit_repayment
+    || round.early_answer
+    || round.strategy_request
   ) return false;
   if (!['blitz', 'superblitz'].includes(round.kind)) return true;
   return round.extra_part_index === undefined || round.extra_part_index === round.part_index;
@@ -60,15 +60,42 @@ export function canUseEarnedMinute(gameState, localNowMs = Date.now()) {
 export function canTakeCreditMinute(gameState, localNowMs = Date.now()) {
   const score = gameState?.score || {};
   const round = gameState?.round || {};
-  return gameState?.phase === 'DISCUSSION'
-    && ['base', 'earned'].includes(gameState?.timer?.segment)
-    && timerHasElapsed(gameState?.timer, localNowMs)
+  return gameState?.phase === 'TEAM_ANSWER'
+    && ['base', 'earned'].includes(round.answer_timer_segment)
     && score.tv === 5
     && Number.isInteger(score.znatoki)
     && score.znatoki >= 0
     && score.znatoki <= 4
     && !gameState?.team?.credit?.used
-    && !round.credit_repayment;
+    && !round.credit_repayment
+    && !round.early_answer
+    && !round.strategy_request;
+}
+
+export function canCaptainRequestEarlyAnswer(gameState, localNowMs = Date.now()) {
+  const round = gameState?.round || {};
+  if (
+    round.kind !== 'normal'
+    || round.credit_repayment
+    || round.strategy_request
+  ) return false;
+  if (gameState?.phase === 'QUESTION_READING') return true;
+  if (gameState?.phase !== 'DISCUSSION' || gameState?.timer?.segment !== 'base') return false;
+  return captainEarlySeconds(gameState.timer, localNowMs) > 0
+    && !timerHasElapsed(gameState.timer, localNowMs);
+}
+
+export function canHostDeclareEarlyAnswer(gameState, localNowMs = Date.now()) {
+  const round = gameState?.round || {};
+  if (
+    round.kind !== 'normal'
+    || round.credit_repayment
+    || round.strategy_request
+  ) return false;
+  if (gameState?.phase === 'QUESTION_READING') return true;
+  return gameState?.phase === 'DISCUSSION'
+    && gameState?.timer?.segment === 'base'
+    && !timerHasElapsed(gameState.timer, localNowMs);
 }
 
 export function canScheduleRepayment(gameState) {

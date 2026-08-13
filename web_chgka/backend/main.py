@@ -75,6 +75,9 @@ from transitions import (
     transition_early_answer,
     transition_reset,
     transition_repayment_answer,
+    transition_request_credit_minute,
+    transition_request_early_answer,
+    transition_resolve_strategy_request,
     transition_schedule_credit_repayment,
     transition_select_captain,
     transition_select_respondent,
@@ -606,8 +609,13 @@ def _journal_payload(event: GameEvent) -> dict[str, object]:
         "question_opened",
         "respondent_selected",
         "early_answer_declared",
+        "early_answer_requested",
+        "early_answer_request_rejected",
+        "strategy_request_approved",
         "earned_minute_awarded",
         "earned_minute_spent",
+        "credit_minute_requested",
+        "credit_minute_request_rejected",
         "credit_minute_taken",
         "credit_debt_created",
         "credit_round_lost",
@@ -1905,7 +1913,7 @@ async def captain_early_answer(sid, data=None):
     payload = data if isinstance(data, dict) else {}
     return await _apply_strategy_action(
         sid,
-        lambda: transition_early_answer(
+        lambda: transition_request_early_answer(
             app_state,
             now_ms=_now_ms(),
             actor=actor,
@@ -1969,11 +1977,35 @@ async def admin_take_credit_minute(sid, data=None):
 
 @sio.event
 async def captain_take_credit_minute(sid, data=None):
-    return await _strategic_minute_action(
+    actor = await _captain_actor_for_sid(sid)
+    if actor is None:
+        error = TransitionError("not_captain", "Действие доступно только капитану")
+        await _emit_transition_error(sid, error)
+        return {"ok": False, "error": error.code, "message": error.message}
+    payload = data if isinstance(data, dict) else {}
+    return await _apply_strategy_action(
         sid,
-        data,
-        action=transition_take_credit_minute,
-        admin=False,
+        lambda: transition_request_credit_minute(
+            app_state,
+            now_ms=_now_ms(),
+            actor=actor,
+            expected_generation=payload.get("timer_generation"),
+        ),
+    )
+
+
+@sio.event
+async def admin_resolve_strategy_request(sid, data=None):
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+    payload = data if isinstance(data, dict) else {}
+    return await _apply_strategy_action(
+        sid,
+        lambda: transition_resolve_strategy_request(
+            app_state,
+            approve=payload.get("approve"),
+            now_ms=_now_ms(),
+        ),
     )
 
 
