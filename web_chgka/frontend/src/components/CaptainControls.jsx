@@ -32,7 +32,7 @@ export function CaptainControls({ gameState, myGroupId, isConnected, addNotifica
   const showEarned = canUseEarnedMinute(gameState, localNowMs);
   const showCredit = canTakeCreditMinute(gameState, localNowMs);
   const showRepayment = canScheduleRepayment(gameState);
-  const pendingRequest = round.strategy_request;
+  const pendingRequest = round.strategy_request || gameState?.team?.credit?.repayment_request;
   const ownRequestPending = pendingRequest?.group_id === myGroupId;
 
   if (!showEarlyAnswer && !showEarned && !showCredit && !showRepayment && !ownRequestPending) {
@@ -100,11 +100,7 @@ export function CaptainControls({ gameState, myGroupId, isConnected, addNotifica
           <button
             type="button"
             disabled={!isConnected || pendingAction !== null}
-            onClick={() => {
-              if (confirm('Следующий раунд пройдёт без обсуждения. Вернуть минуту в кредит?')) {
-                emitAction('captain_schedule_credit_repayment');
-              }
-            }}
+            onClick={() => emitAction('captain_schedule_credit_repayment')}
             className="w-full max-w-sm rounded-lg bg-rose-800 px-4 py-3 font-bold text-white hover:bg-rose-700 disabled:opacity-40"
           >
             Вернуть кредит в следующем раунде

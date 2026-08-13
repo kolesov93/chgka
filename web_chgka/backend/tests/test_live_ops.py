@@ -271,6 +271,36 @@ def test_force_superblitz_past_reading_requires_selected_participant():
     assert state["game"]["phase"] == PHASE_QUESTION_READING
 
 
+def test_force_phase_clears_pending_credit_repayment_request():
+    state = _state(phase=PHASE_POST_ROUND)
+    state["game"]["round"] = {"kind": "normal", "sector": 6}
+    state["game"]["team"]["credit"].update(
+        {
+            "used": True,
+            "debt": True,
+            "repayment_request": {
+                "type": "repayment",
+                "participant_id": "participant-1",
+                "group_id": "group-1",
+                "name": "Иван",
+                "requested_phase": PHASE_POST_ROUND,
+                "requested_at_ms": 1_000,
+            },
+        }
+    )
+
+    live_ops_force_phase(
+        state,
+        phase=PHASE_PRE_ROUND,
+        now_ms=2_000,
+        normal_discussion_seconds=60,
+        blitz_discussion_seconds=20,
+    )
+
+    assert "repayment_request" not in state["game"]["team"]["credit"]
+    assert state["game"]["team"]["credit"]["debt"] is True
+
+
 def test_reset_to_intro_clears_progress_and_restarts_timeline():
     state = _state(phase=PHASE_POST_ROUND)
     state["game"]["score"] = {"znatoki": 4, "tv": 3}

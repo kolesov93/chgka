@@ -40,7 +40,7 @@ QuestionTypeValue = QuestionKind
 SharedMediaType = Literal["image", "audio", "video"]
 MediaPlaybackState = Literal["stopped", "playing", "paused"]
 TimerSegment = Literal["base", "earned", "credit"]
-StrategyRequestType = Literal["early_answer", "credit"]
+StrategyRequestType = Literal["early_answer", "credit", "repayment"]
 
 
 class ScoreState(TypedDict):
@@ -58,23 +58,6 @@ class RespondentState(TypedDict):
     name: str
 
 
-class CreditState(TypedDict):
-    """One-use credit lifecycle for the current game."""
-
-    used: bool
-    debt: bool
-    repayment_scheduled: bool
-    forced: bool
-
-
-class TeamState(TypedDict):
-    """Public strategic resources owned by the experts team."""
-
-    captain: Optional[RespondentState]
-    earned_minutes: int
-    credit: CreditState
-
-
 class StrategyRequestState(TypedDict, total=False):
     """Reconnect-safe captain request awaiting an explicit host decision."""
 
@@ -85,6 +68,29 @@ class StrategyRequestState(TypedDict, total=False):
     requested_phase: GamePhase
     requested_at_ms: int
     timer_generation: int
+
+
+class _RequiredCreditState(TypedDict):
+    """Persistent one-use credit lifecycle fields."""
+
+    used: bool
+    debt: bool
+    repayment_scheduled: bool
+    forced: bool
+
+
+class CreditState(_RequiredCreditState, total=False):
+    """Credit lifecycle plus an optional reconnect-safe repayment request."""
+
+    repayment_request: StrategyRequestState
+
+
+class TeamState(TypedDict):
+    """Public strategic resources owned by the experts team."""
+
+    captain: Optional[RespondentState]
+    earned_minutes: int
+    credit: CreditState
 
 
 class RoundState(TypedDict, total=False):

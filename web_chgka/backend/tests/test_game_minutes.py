@@ -15,6 +15,7 @@ from transitions import (
     transition_end_round,
     transition_repayment_answer,
     transition_request_credit_minute,
+    transition_request_credit_repayment,
     transition_request_early_answer,
     transition_resolve_strategy_request,
     transition_schedule_credit_repayment,
@@ -23,6 +24,7 @@ from transitions import (
     transition_select_respondent,
     transition_spend_earned_minute,
     transition_start_discussion,
+    transition_start_spin,
     transition_take_credit_minute,
     transition_team_answer,
 )
@@ -316,13 +318,47 @@ def test_credit_at_four_to_five_forces_next_repayment():
     assert "credit_repayment_scheduled" in [event.event_type for event in effects.events]
 
 
-def test_credit_debt_can_be_scheduled_only_before_the_next_spin():
+def test_captain_repayment_request_needs_host_decision_before_the_next_spin():
     state = create_initial_app_state(phase=PHASE_PRE_ROUND)
     state["game"]["team"]["credit"].update({"used": True, "debt": True})
 
-    effects = transition_schedule_credit_repayment(state, actor=CAPTAIN)
+    requested = transition_request_credit_repayment(
+        state,
+        now_ms=10_000,
+        actor=CAPTAIN,
+    )
+    request = state["game"]["team"]["credit"]["repayment_request"]
+    assert request["type"] == "repayment"
+    assert request["requested_phase"] == PHASE_PRE_ROUND
+    assert requested.events[0].event_type == "credit_repayment_requested"
+    assert state["game"]["team"]["credit"]["repayment_scheduled"] is False
+
+    with pytest.raises(TransitionError) as error:
+        transition_start_spin(
+            state,
+            raw_angle=10.0,
+            raw_sector=3,
+            duration=1.0,
+        )
+    assert error.value.code == "strategy_request_pending"
+
+    with pytest.raises(TransitionError) as error:
+        transition_schedule_credit_repayment(state, actor=HOST)
+    assert error.value.code == "strategy_request_pending"
+
+    rejected = transition_resolve_strategy_request(state, approve=False, now_ms=11_000)
+    assert rejected.events[0].event_type == "credit_repayment_request_rejected"
+    assert "repayment_request" not in state["game"]["team"]["credit"]
+    assert state["game"]["team"]["credit"]["repayment_scheduled"] is False
+
+    transition_request_credit_repayment(state, now_ms=12_000, actor=CAPTAIN)
+    effects = transition_resolve_strategy_request(state, approve=True, now_ms=13_000)
     assert state["game"]["team"]["credit"]["repayment_scheduled"] is True
-    assert effects.events[0].payload["actor_role"] == "captain"
+    assert [event.event_type for event in effects.events] == [
+        "strategy_request_approved",
+        "credit_repayment_scheduled",
+    ]
+    assert effects.events[1].payload["actor_role"] == "captain"
 
     with pytest.raises(TransitionError) as error:
         transition_schedule_credit_repayment(state, actor=HOST)
@@ -333,6 +369,23 @@ def test_credit_debt_can_be_scheduled_only_before_the_next_spin():
     with pytest.raises(TransitionError) as error:
         transition_schedule_credit_repayment(late, actor=HOST)
     assert error.value.code == "repayment_too_late"
+
+
+def test_post_round_repayment_request_blocks_round_end_and_stale_resolution():
+    state = _question_state()
+    state["game"]["phase"] = PHASE_POST_ROUND
+    state["game"]["team"]["credit"].update({"used": True, "debt": True})
+
+    transition_request_credit_repayment(state, now_ms=20_000, actor=CAPTAIN)
+    with pytest.raises(TransitionError) as error:
+        transition_end_round(state, gong_sound="gong1")
+    assert error.value.code == "strategy_request_pending"
+
+    state["game"]["phase"] = PHASE_PRE_ROUND
+    with pytest.raises(TransitionError) as error:
+        transition_resolve_strategy_request(state, approve=True, now_ms=21_000)
+    assert error.value.code == "stale_strategy_request"
+    assert state["game"]["team"]["credit"]["repayment_request"]["type"] == "repayment"
 
 
 def test_normal_repayment_enters_answer_without_timer_and_clears_debt():

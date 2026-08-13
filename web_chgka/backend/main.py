@@ -76,6 +76,7 @@ from transitions import (
     transition_reset,
     transition_repayment_answer,
     transition_request_credit_minute,
+    transition_request_credit_repayment,
     transition_request_early_answer,
     transition_resolve_strategy_request,
     transition_schedule_credit_repayment,
@@ -623,7 +624,13 @@ def _journal_payload(event: GameEvent) -> dict[str, object]:
         "credit_repayment_completed",
         "credit_repayment_terminated",
     }
-    if event.event_type not in question_context_events:
+    if (
+        event.event_type not in question_context_events
+        or (
+            event.event_type == "strategy_request_approved"
+            and payload.get("request_type") == "repayment"
+        )
+    ):
         return payload
     if loaded_pack is None:
         raise JournalError("Question pack is unavailable for question event")
@@ -2020,9 +2027,18 @@ async def _schedule_repayment_action(sid, *, admin: bool) -> dict:
             error = TransitionError("not_captain", "Действие доступно только капитану")
             await _emit_transition_error(sid, error)
             return {"ok": False, "error": error.code, "message": error.message}
+    if admin:
+        return await _apply_strategy_action(
+            sid,
+            lambda: transition_schedule_credit_repayment(app_state, actor=actor),
+        )
     return await _apply_strategy_action(
         sid,
-        lambda: transition_schedule_credit_repayment(app_state, actor=actor),
+        lambda: transition_request_credit_repayment(
+            app_state,
+            now_ms=_now_ms(),
+            actor=actor,
+        ),
     )
 
 

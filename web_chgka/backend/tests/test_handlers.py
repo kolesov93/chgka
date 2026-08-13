@@ -941,6 +941,69 @@ def test_captain_credit_request_waits_for_host_and_can_be_rejected(monkeypatch):
     assert request_event["payload"]["question_id"] == pack.get_by_sector(1).id
 
 
+def test_captain_repayment_request_waits_for_host_and_is_journaled(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_PRE_ROUND)
+    state["game"]["team"]["captain"] = _respondent()
+    state["game"]["team"]["credit"].update({"used": True, "debt": True})
+    group = {
+        "sid": "captain-browser",
+        "name": "Иван",
+        "role": "player",
+        "token": "player-token",
+        "group_id": "group-1",
+        "participants": [{"id": "participant-1", "name": "Иван"}],
+        "online": True,
+        "pending": False,
+    }
+    fake_sio.sessions["captain-browser"] = {
+        "role": "player",
+        "player_group_id": "group-1",
+    }
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", None)
+    monkeypatch.setattr(main, "players_list", [group])
+    monkeypatch.setattr(main, "_now_ms", lambda: 20_000)
+
+    async def run():
+        requested = await main.captain_schedule_credit_repayment("captain-browser")
+        approved = await main.admin_resolve_strategy_request(
+            "admin",
+            {"approve": True},
+        )
+        return requested, approved
+
+    requested, approved = asyncio.run(run())
+
+    assert requested == {"ok": True}
+    assert approved == {"ok": True}
+    assert state["game"]["team"]["credit"]["repayment_scheduled"] is True
+    assert "repayment_request" not in state["game"]["team"]["credit"]
+    events = main.game_journal.get_session(
+        main.game_journal.list_sessions()[0]["id"]
+    )["events"]
+    assert [
+        event["event_type"]
+        for event in events
+        if event["event_type"] in {
+            "credit_repayment_requested",
+            "strategy_request_approved",
+            "credit_repayment_scheduled",
+        }
+    ] == [
+        "credit_repayment_requested",
+        "strategy_request_approved",
+        "credit_repayment_scheduled",
+    ]
+    approval = next(
+        event for event in events if event["event_type"] == "strategy_request_approved"
+    )
+    assert approval["payload"]["request_type"] == "repayment"
+    assert approval["payload"]["requested_by_group_id"] == "group-1"
+
+
 def test_admin_login_replaces_previous_token_and_session(monkeypatch):
     now = [100.0]
     tokens = iter(("old-admin-token", "new-admin-token"))

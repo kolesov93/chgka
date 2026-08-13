@@ -298,6 +298,7 @@ def live_ops_open_round(
         }
         part_label = ""
 
+    state["game"]["team"]["credit"].pop("repayment_request", None)
     _invalidate_spin(state)
     state["wheel"]["current_sector"] = sector_id
     state["wheel"]["playing_sector"] = sector_id
@@ -361,6 +362,7 @@ def live_ops_force_phase(
             "credit_repayment_no_discussion",
             "Возврат кредита идёт без обсуждения",
         )
+    state["game"]["team"]["credit"].pop("repayment_request", None)
     was_spinning = _invalidate_spin(state)
     had_blackbox = clear_blackbox_presentation(state)
 

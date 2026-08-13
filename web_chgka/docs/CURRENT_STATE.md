@@ -16,8 +16,9 @@
 - Task 0023 implementation commit: `4034ef4` (`Implement earned minutes and credit mechanics`).
 - Smoke-feedback follow-up commit: `079339d` (`Refine captain requests and player layout`).
 - The implementation adds public captain/team/credit state, generation-guarded base/earned/credit timer segments, host/captain Socket.IO actions, normal and blitz/superblitz repayment rules, roster/player/Live Ops controls, reconnect-aware countdowns, and question-context journal events.
-- Smoke feedback changed the interaction point without changing the game resources: early answer is available during reading and through the asymmetric base window; captain early/credit actions are now reconnect-safe requests resolved by a host modal; earned/credit minutes start from `TEAM_ANSWER`, so the host timer is directional rather than an eligibility gate. The desktop player stage now uses a height-constrained table plus right information rail, with a one-column mobile fallback.
-- Local verification passes: 231 backend tests with warnings treated as errors, all 13 frontend tests, the production build, sample-pack validation, and native Compose configuration validation.
+- Smoke feedback changed the interaction point without changing the game resources: early answer is available during reading and through the asymmetric base window; captain early/credit/repayment actions are reconnect-safe requests resolved by a host modal; earned/credit minutes start from `TEAM_ANSWER`, so the host timer is directional rather than an eligibility gate. The desktop player stage now uses a height-constrained table plus right information rail, with a one-column mobile fallback.
+- A captain's voluntary repayment request no longer opens a browser confirm. It is stored in the public credit lifecycle, blocks normal round-end/spin progress until the reconnect-safe host modal accepts or rejects it, and is normalized away by relevant Live Ops recovery actions.
+- Local verification passes: 234 backend tests with warnings treated as errors, all 13 frontend tests, the production build, sample-pack validation, and native Compose configuration validation.
 - Next continuation point: pass the exact 13-step smoke in the task file, publish the task branch for CI if desired, then close and merge task 0023 into `web`.
 
 - Task 0022 starts from local `web` commit `0438766`.

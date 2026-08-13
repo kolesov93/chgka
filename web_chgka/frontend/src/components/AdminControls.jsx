@@ -61,7 +61,9 @@ export function AdminControls({
   const earnedMinuteAvailable = canUseEarnedMinute(gameState);
   const creditMinuteAvailable = canTakeCreditMinute(gameState);
   const repaymentCanBeScheduled = canScheduleRepayment(gameState);
-  const strategyRequest = round?.strategy_request || null;
+  const strategyRequest = round?.strategy_request
+    || team.credit?.repayment_request
+    || null;
 
   const spinForced = (sectorId) => {
     if (confirm(`Крутим на сектор ${sectorId}?`)) {
@@ -208,9 +210,11 @@ export function AdminControls({
               Запрос капитана
             </div>
             <h2 id="strategy-request-title" className="text-xl font-black text-white">
-              {strategyRequest.type === 'early_answer'
-                ? 'Принять досрочный ответ?'
-                : 'Дать минуту в кредит?'}
+              {{
+                early_answer: 'Принять досрочный ответ?',
+                credit: 'Дать минуту в кредит?',
+                repayment: 'Вернуть минуту в кредит в следующем раунде?',
+              }[strategyRequest.type] || 'Обработать запрос капитана?'}
             </h2>
             <p className="mt-2 text-sm text-slate-400">
               Капитан: {strategyRequest.name}
@@ -221,14 +225,22 @@ export function AdminControls({
                 onClick={() => resolveStrategyRequest(false)}
                 className="rounded-lg bg-slate-700 px-4 py-3 font-bold text-slate-100 hover:bg-slate-600"
               >
-                {strategyRequest.type === 'early_answer' ? 'Не принимать' : 'Не давать'}
+                {{
+                  early_answer: 'Не принимать',
+                  credit: 'Не давать',
+                  repayment: 'Не возвращать',
+                }[strategyRequest.type] || 'Отклонить'}
               </button>
               <button
                 type="button"
                 onClick={() => resolveStrategyRequest(true)}
                 className="rounded-lg bg-amber-600 px-4 py-3 font-black text-slate-950 hover:bg-amber-500"
               >
-                {strategyRequest.type === 'early_answer' ? 'Принять' : 'Дать минуту'}
+                {{
+                  early_answer: 'Принять',
+                  credit: 'Дать минуту',
+                  repayment: 'Назначить возврат',
+                }[strategyRequest.type] || 'Принять'}
               </button>
             </div>
           </div>

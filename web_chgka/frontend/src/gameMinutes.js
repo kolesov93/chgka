@@ -103,6 +103,7 @@ export function canScheduleRepayment(gameState) {
   return Boolean(
     gameState?.team?.credit?.debt
     && !gameState?.team?.credit?.repayment_scheduled
+    && !gameState?.team?.credit?.repayment_request
     && (phase === 'PRE_ROUND' || phase === 'POST_ROUND')
     && !gameState?.is_spinning
     && !(phase === 'POST_ROUND' && gameState?.round?.advance_next_part),

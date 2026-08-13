@@ -128,6 +128,13 @@ test('repayment scheduling and display values follow credit state', () => {
     team: { earned_minutes: 0, credit: debt },
     round: { kind: 'blitz', advance_next_part: true },
   })), false);
+  assert.equal(canScheduleRepayment(gameState({
+    phase: 'PRE_ROUND',
+    team: {
+      earned_minutes: 0,
+      credit: { ...debt, repayment_request: { type: 'repayment' } },
+    },
+  })), false);
   assert.equal(creditRecoveryValue(debt), 'debt');
   assert.equal(creditRecoveryValue({ ...debt, repayment_scheduled: true }), 'scheduled');
   assert.equal(creditRecoveryValue({ ...debt, debt: false }), 'used');
