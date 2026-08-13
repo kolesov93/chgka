@@ -1,12 +1,19 @@
 # CHGKA Web Current State
 
-- Snapshot date: 2026-08-11
+- Snapshot date: 2026-08-13
 - Latest completed task: `docs/tasks/0022-participant-groups-respondents.md`
-- Active task: none
-- Branch: `web`
-- Status: task 0022 is accepted and merged locally; publication of `web` is pending.
+- Active task: `docs/tasks/0023-earned-minutes-credit.md`
+- Branch: `task/earned-minutes-credit`
+- Status: task 0023 is fully specified; implementation has not started.
 
 ## Repository checkpoint
+
+- `web` and `origin/web` are synchronized at `8dd4aa2`; task 0022 is published and its smoke/CI gates are complete.
+- Task 0023 starts from `8dd4aa2` on `task/earned-minutes-credit`.
+- Accepted product choices: captain-driven strategic actions with host fallbacks; captain early-answer window of 5 seconds versus the full base minute for the host; sequential spending of multiple earned minutes; exact `X:5` single-use credit; voluntary future repayment forced at `5:5`; television-style blitz/superblitz restrictions.
+- The captain is one physical participant selected by the host. A shared player login necessarily shares captain controls with the whole participant group on that browser.
+- Detailed state transitions, timer segmentation, race/reconnect/Live Ops handling, typed journal events, automated coverage and the 12-step acceptance smoke are recorded in `docs/tasks/0023-earned-minutes-credit.md`.
+- Next continuation point: implement task 0023 from the synchronous backend state/transitions outward, then run the full automated suites and reproduce the exact smoke checklist in the handoff.
 
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.
