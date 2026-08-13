@@ -2,13 +2,13 @@
 
 - Snapshot date: 2026-08-13
 - Latest completed task: `docs/tasks/0024-skip-intro.md`
-- Active task: none; next requested mini-task is host-driven game completion at any score.
+- Active task: none.
 - Branch: `web`
-- Status: task 0024 is implemented, locally verified, browser-accepted and merged into local `web`.
+- Status: task 0024 is implemented, locally verified, browser-accepted and merged into local `web`; the later host-end-game prototype was deliberately discarded before merge.
 
 ## Repository checkpoint
 
-- `web` and `origin/web` are synchronized at `a1a185a`; GitHub Web CI run 41 passed for this exact commit.
+- Local `web` is at `96cdb9c` and contains task 0024; `origin/web` remains at `a1a185a`, whose GitHub Web CI run 41 passed.
 - Task 0023 starts from `8dd4aa2` on `task/earned-minutes-credit`.
 - Accepted product choices: captain-driven strategic actions with host fallbacks; captain early-answer window of 5 seconds versus the full base minute for the host; sequential spending of multiple earned minutes; exact `X:5` single-use credit; voluntary future repayment forced at `5:5`; television-style blitz/superblitz restrictions.
 - The captain is one physical participant selected by the host. A shared player login necessarily shares captain controls with the whole participant group on that browser.
@@ -33,7 +33,10 @@
 - Browser acceptance: the exact five-step skip-intro smoke passed on 2026-08-13.
 - Task 0024 closure commit: `82dacc6` (`Close skip intro task`).
 - Task 0024 merge commit: `152e53d` (`Merge skip intro task`).
-- Next continuation point: create a separate task for host-driven completion at any score; local `web` must later be pushed to publish task 0024.
+- Task 0024 merge handoff commit: `96cdb9c` (`Record skip intro merge handoff`).
+- The unmerged `task/host-end-game` prototype was discarded at the user's request: existing Live Ops `Сбросить до интро` already solves the immediate new-game need and remains unchanged.
+- Roadmap item 24 records a separate future `Завершить встречу` flow that must invalidate every host/player session and return all clients to their route-specific login forms.
+- Next continuation point: push local `web` to publish task 0024, then choose the next roadmap item; the full-logout task requires its open UX/history decisions before implementation.
 
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.
