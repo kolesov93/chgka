@@ -12,7 +12,7 @@ services:
       - CHGKA_ENV=development
       - QUESTIONS_PACK_PATH=/fixtures/sample_questions
       - ADMIN_PASSWORD=admin123
-      - ALLOWED_ORIGINS=http://localhost:5173
+      - ALLOWED_ORIGINS=http://localhost:5173,http://localhost:4173
       - ADMIN_TOKEN_TTL_SECONDS=${ADMIN_TOKEN_TTL_SECONDS:-43200}
       - CHGKA_DB_PATH=/data/chgka.sqlite3
 

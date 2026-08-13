@@ -1,12 +1,25 @@
 import io from 'socket.io-client';
+import {
+  DEVELOPMENT_BACKEND_ORIGIN,
+  backendHttpUrl,
+  backendSocketPath,
+} from './backendUrls.js';
 
-const backendOrigin = import.meta.env.DEV ? 'http://localhost:8000' : '';
+const isDevelopment = import.meta.env.DEV;
+const backendOrigin = isDevelopment ? DEVELOPMENT_BACKEND_ORIGIN : '';
 
-export const mediaUrl = (mediaId) => `${backendOrigin}/media/${encodeURIComponent(mediaId)}`;
+export const mediaUrl = (mediaId) => backendHttpUrl(
+  `media/${encodeURIComponent(mediaId)}`,
+  { isDevelopment },
+);
 export const introAuthorPhotoUrl = (sector, slot) => (
-  `${backendOrigin}/intro/author-photo/${encodeURIComponent(sector)}/${encodeURIComponent(slot)}`
+  backendHttpUrl(
+    `intro/author-photo/${encodeURIComponent(sector)}/${encodeURIComponent(slot)}`,
+    { isDevelopment },
+  )
 );
 
 export const socket = io(backendOrigin || '/', {
+  path: backendSocketPath({ isDevelopment }),
   transports: ['websocket'],
 });

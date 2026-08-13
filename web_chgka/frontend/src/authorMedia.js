@@ -1,5 +1,7 @@
-export const AUTHOR_FALLBACK_SOURCE = '/images/intro/author-fallback.png';
-export const SECTOR_THIRTEEN_SOURCE = '/images/intro/13.png';
+import { currentAppPath } from './appPaths.js';
+
+export const AUTHOR_FALLBACK_SOURCE = currentAppPath('images/intro/author-fallback.png');
+export const SECTOR_THIRTEEN_SOURCE = currentAppPath('images/intro/13.png');
 
 
 export function isAuthorMedia(media) {

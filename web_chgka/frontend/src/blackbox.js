@@ -1,5 +1,7 @@
-export const BLACKBOX_IMAGE_SOURCE = '/images/blackbox.png';
-export const BLACKBOX_SOUND_SOURCE = '/sounds/yashik.mp3';
+import { currentAppPath } from './appPaths.js';
+
+export const BLACKBOX_IMAGE_SOURCE = currentAppPath('images/blackbox.png');
+export const BLACKBOX_SOUND_SOURCE = currentAppPath('sounds/yashik.mp3');
 // ffprobe reports 31.488313 seconds for the committed static track.
 export const BLACKBOX_DURATION_MS = 31_488;
 

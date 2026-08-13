@@ -27,7 +27,7 @@ docker compose up --build
 Что уже настроено в `docker-compose.yml`:
 
 - backend получает `QUESTIONS_PACK_PATH=/fixtures/sample_questions`
-- backend явно работает с `CHGKA_ENV=development`, паролем `admin123` и разрешённым frontend-origin `http://localhost:5173`
+- backend явно работает с `CHGKA_ENV=development`, паролем `admin123` и разрешёнными frontend-origin `http://localhost:5173` и `http://localhost:4173`; второй нужен только для локального smoke production-like сборки
 - папка `./fixtures` примонтирована в контейнер как `/fixtures`
 - SQLite-журнал хранится на хосте в `./runtime-data/chgka.sqlite3` и переживает пересоздание backend-контейнера
 - исходники примонтированы в контейнеры, backend работает с `--reload`, frontend запускает Vite dev server
@@ -91,6 +91,23 @@ npm run build
 - корневой `http://localhost:5173/` перенаправляет на player-entrypoint
 - backend: `http://localhost:8000`
 
+### Локальная проверка сборки под URL-префиксом
+
+Обычная development-сборка работает от `/`. Чтобы проверить будущую публикацию на
+`https://example.com/chgka/`, при уже запущенном backend из `frontend/` выполнить:
+
+```bash
+VITE_BASE_PATH=/chgka/ npm run build
+VITE_BASE_PATH=/chgka/ npm run preview -- --host 0.0.0.0
+```
+
+После этого доступны `http://localhost:4173/chgka/play`,
+`http://localhost:4173/chgka/admin` и
+`http://localhost:4173/chgka/admin/history`. Preview проксирует
+`/chgka/socket.io`, `/chgka/media` и `/chgka/intro` в локальный backend на
+порту `8000`, снимая только внешний префикс `/chgka`. Это средство smoke,
+а не production-сервер.
+
 ## Примечания
 
 - Backend требует явные `CHGKA_ENV`, `QUESTIONS_PACK_PATH`, `ADMIN_PASSWORD`, `ALLOWED_ORIGINS` и `CHGKA_DB_PATH`; встроенных значений пароля, origins или пути базы нет.
@@ -99,7 +116,7 @@ npm run build
 - В production `CHGKA_DB_PATH` должен быть абсолютным путём на durable volume. SQLite хранит историю, но не восстанавливает текущий `AppState`, игроков или токены после рестарта.
 - `ADMIN_TOKEN_TTL_SECONDS` необязателен: по умолчанию admin-сессия действует 12 часов без продления при reconnect; допустимый диапазон — от 60 секунд до 24 часов.
 - `/play` восстанавливает только player token, а `/admin` и `/admin/history` — только admin token. История не отображается на экранах запуска/ведения игры и доступна отдельной страницей после той же авторизации ведущего. Разделение форм улучшает UX, но не является границей безопасности: backend по-прежнему проверяет пароль, роль и токен для каждой привилегированной операции.
-- Прямое открытие и refresh `/play`, `/admin` и `/admin/history` работают в Vite development/preview. Будущий production frontend server/reverse proxy должен отдавать `index.html` для всех трёх SPA-путей.
+- Прямое открытие и refresh `/play`, `/admin` и `/admin/history` работают в Vite development/preview. При `VITE_BASE_PATH=/chgka/` те же entrypoints находятся под `/chgka`; production frontend server/reverse proxy должен использовать SPA fallback внутри выбранного base path.
 
 ## Диагностика CORS локально
 
