@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { timerRemainingSeconds } from '../gameMinutes';
 
-export function useDiscussionTimer({ isAdmin, isDiscussion, deadlineMs, addNotification, playSound }) {
+export function useDiscussionTimer({ isAdmin, isDiscussion, timer, addNotification, playSound }) {
   const [remaining, setRemaining] = useState(null);
   const tenSecNotifiedRef = useRef(false);
   const lastRemainingRef = useRef(null);
@@ -29,13 +30,12 @@ export function useDiscussionTimer({ isAdmin, isDiscussion, deadlineMs, addNotif
     lastRemainingRef.current = null;
 
     const tick = () => {
-      if (!deadlineMs) {
+      if (!timer?.discussion_deadline_ms) {
         setRemaining(null);
         return;
       }
 
-      const raw = (deadlineMs - Date.now()) / 1000;
-      const nextRemaining = raw >= 0 ? Math.ceil(raw) : Math.floor(raw);
+      const nextRemaining = timerRemainingSeconds(timer);
       setRemaining(nextRemaining);
 
       const previousRemaining = lastRemainingRef.current;
@@ -56,7 +56,7 @@ export function useDiscussionTimer({ isAdmin, isDiscussion, deadlineMs, addNotif
     tick();
     const interval = setInterval(tick, 250);
     return () => clearInterval(interval);
-  }, [deadlineMs, isAdmin, isDiscussion]);
+  }, [isAdmin, isDiscussion, timer]);
 
   return { discussionRemaining: remaining, markTenSecondsNotified };
 }

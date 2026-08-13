@@ -1,12 +1,28 @@
 # CHGKA Web Current State
 
-- Snapshot date: 2026-08-11
-- Latest completed task: `docs/tasks/0022-participant-groups-respondents.md`
-- Active task: none
-- Branch: `web`
-- Status: task 0022 is accepted and merged locally; publication of `web` is pending.
+- Snapshot date: 2026-08-13
+- Latest completed task: `docs/tasks/0023-earned-minutes-credit.md`
+- Active task: none; choose the next roadmap item after publishing task 0023.
+- Branch: `task/earned-minutes-credit`
+- Status: task 0023 passed local gates and the complete browser smoke; local merge into `web` is authorized, then `web` must be pushed for merged-branch CI.
 
 ## Repository checkpoint
+
+- `web` and `origin/web` are synchronized at `8dd4aa2`; task 0022 is published and its smoke/CI gates are complete.
+- Task 0023 starts from `8dd4aa2` on `task/earned-minutes-credit`.
+- Accepted product choices: captain-driven strategic actions with host fallbacks; captain early-answer window of 5 seconds versus the full base minute for the host; sequential spending of multiple earned minutes; exact `X:5` single-use credit; voluntary future repayment forced at `5:5`; television-style blitz/superblitz restrictions.
+- The captain is one physical participant selected by the host. A shared player login necessarily shares captain controls with the whole participant group on that browser.
+- Detailed state transitions, timer segmentation, race/reconnect/Live Ops handling, typed journal events, automated coverage and the 13-step acceptance smoke are recorded in `docs/tasks/0023-earned-minutes-credit.md`.
+- Task 0023 implementation commit: `4034ef4` (`Implement earned minutes and credit mechanics`).
+- Smoke-feedback follow-up commit: `079339d` (`Refine captain requests and player layout`).
+- Repayment-request follow-up commit: `b8591e6` (`Route repayment requests through host`).
+- The implementation adds public captain/team/credit state, generation-guarded base/earned/credit timer segments, host/captain Socket.IO actions, normal and blitz/superblitz repayment rules, roster/player/Live Ops controls, reconnect-aware countdowns, and question-context journal events.
+- Smoke feedback changed the interaction point without changing the game resources: early answer is available during reading and through the asymmetric base window; captain early/credit/repayment actions are reconnect-safe requests resolved by a host modal; earned/credit minutes start from `TEAM_ANSWER`, so the host timer is directional rather than an eligibility gate. The desktop player stage now uses a height-constrained table plus right information rail, with a one-column mobile fallback.
+- A captain's voluntary repayment request no longer opens a browser confirm. It is stored in the public credit lifecycle, blocks normal round-end/spin progress until the reconnect-safe host modal accepts or rejects it, and is normalized away by relevant Live Ops recovery actions.
+- Local verification passes: 234 backend tests with warnings treated as errors, all 13 frontend tests, the production build, sample-pack validation, and native Compose configuration validation.
+- Browser acceptance: the complete 13-step host/two-player smoke passed on 2026-08-13, including the repayment-request follow-up.
+- Roadmap item 23 records a separate mini-task for a host button that skips the remaining intro author photos and goes directly to `PRE_ROUND`.
+- Next continuation point: merge task 0023 into local `web`, push only `web`, verify merged-branch CI, then choose the next roadmap item.
 
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.

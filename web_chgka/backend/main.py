@@ -31,6 +31,7 @@ from live_ops import (
     live_ops_reset_to_intro,
     live_ops_set_score,
     live_ops_set_sector_used,
+    live_ops_set_team_resources,
     live_ops_set_timer,
 )
 from media import (
@@ -71,8 +72,17 @@ from transitions import (
     transition_complete_spin,
     transition_advance_intro,
     transition_end_round,
+    transition_early_answer,
     transition_reset,
+    transition_repayment_answer,
+    transition_request_credit_minute,
+    transition_request_credit_repayment,
+    transition_request_early_answer,
+    transition_resolve_strategy_request,
+    transition_schedule_credit_repayment,
+    transition_select_captain,
     transition_select_respondent,
+    transition_clear_captain,
     transition_end_blackbox,
     transition_score,
     transition_start_discussion,
@@ -80,6 +90,8 @@ from transitions import (
     transition_start_game,
     transition_start_intro_music,
     transition_start_spin,
+    transition_spend_earned_minute,
+    transition_take_credit_minute,
     transition_team_answer,
     transition_ten_seconds,
     validate_spin_start,
@@ -224,6 +236,39 @@ async def require_admin(sid):
         await _expire_admin_session(sid, token)
     logger.warning(f"Unauthorized admin action attempt from {sid} (role: {role})")
     return False
+
+
+async def _captain_actor_for_sid(sid: str) -> Optional[dict[str, str]]:
+    """Return the current captain actor only for their active admitted group socket."""
+
+    try:
+        session = await sio.get_session(sid)
+    except Exception:
+        return None
+    group_id = session.get("player_group_id")
+    captain = app_state["game"]["team"].get("captain")
+    if not captain or captain.get("group_id") != group_id:
+        return None
+    group = next(
+        (
+            record
+            for record in players_list
+            if record.get("role") == "player"
+            and record.get("group_id") == group_id
+            and not record.get("pending", False)
+            and record.get("online", False)
+            and record.get("sid") == sid
+        ),
+        None,
+    )
+    if group is None:
+        return None
+    return {
+        "role": "captain",
+        "participant_id": captain["participant_id"],
+        "group_id": captain["group_id"],
+        "name": captain["name"],
+    }
 
 global_settings = {
     "volume": 1.0,
@@ -561,7 +606,31 @@ async def _emit_current_game_mode_to_admins() -> None:
 def _journal_payload(event: GameEvent) -> dict[str, object]:
     """Enrich question and respondent events with immutable pack metadata."""
     payload = dict(event.payload)
-    if event.event_type not in ("question_opened", "respondent_selected"):
+    question_context_events = {
+        "question_opened",
+        "respondent_selected",
+        "early_answer_declared",
+        "early_answer_requested",
+        "early_answer_request_rejected",
+        "strategy_request_approved",
+        "earned_minute_awarded",
+        "earned_minute_spent",
+        "credit_minute_requested",
+        "credit_minute_request_rejected",
+        "credit_minute_taken",
+        "credit_debt_created",
+        "credit_round_lost",
+        "credit_repayment_answered",
+        "credit_repayment_completed",
+        "credit_repayment_terminated",
+    }
+    if (
+        event.event_type not in question_context_events
+        or (
+            event.event_type == "strategy_request_approved"
+            and payload.get("request_type") == "repayment"
+        )
+    ):
         return payload
     if loaded_pack is None:
         raise JournalError("Question pack is unavailable for question event")
@@ -675,6 +744,19 @@ async def _apply_live_ops_action(
 ) -> dict:
     if not await require_admin(sid):
         return {"ok": False, "error": "not_admin"}
+    try:
+        effects = action()
+    except TransitionError as error:
+        await _emit_transition_error(sid, error)
+        return {"ok": False, "error": error.code, "message": error.message}
+    await _apply_transition_effects(effects)
+    return {"ok": True}
+
+
+async def _apply_strategy_action(
+    sid: str,
+    action: Callable[[], TransitionEffects],
+) -> dict:
     try:
         effects = action()
     except TransitionError as error:
@@ -1180,6 +1262,7 @@ async def leave_game(sid):
 
     player = next((p for p in players_list if p['sid'] == sid), None)
     if player:
+        captain_effects = TransitionEffects()
         player_name = player['name']
         player_role = player['role']
         
@@ -1200,10 +1283,18 @@ async def leave_game(sid):
                     ],
                 },
             )
+            captain_effects = transition_clear_captain(
+                app_state,
+                expected_group_id=player.get("group_id"),
+                reason="player_left",
+            )
         
         logger.info(f"Player {player_name} left the game (explicit logout)")
         await broadcast_players()
-        await emit_state_update()
+        if captain_effects.events:
+            await _apply_transition_effects(captain_effects)
+        else:
+            await emit_state_update()
     revoke_admin_token(session_admin_token)
     try:
         await sio.save_session(sid, {"role": "player"})
@@ -1293,6 +1384,19 @@ async def admin_set_score(sid, data):
             app_state,
             znatoki=data.get("znatoki"),
             tv=data.get("tv"),
+        ),
+    )
+
+
+@sio.event
+async def admin_set_team_resources(sid, data):
+    data = data if isinstance(data, dict) else {}
+    return await _apply_live_ops_action(
+        sid,
+        lambda: live_ops_set_team_resources(
+            app_state,
+            earned_minutes=data.get("earned_minutes"),
+            credit_state=data.get("credit_state"),
         ),
     )
 
@@ -1776,13 +1880,186 @@ async def admin_start_discussion(sid, data=None):
     round_ctx = app_state["game"]["round"] or {}
     kind = round_ctx.get("kind", "normal")
     seconds = BLITZ_DISCUSSION_SECONDS if kind in ("blitz", "superblitz") else NORMAL_DISCUSSION_SECONDS
-    deadline_ms = int(time.time() * 1000) + seconds * 1000
+    started_at_ms = _now_ms()
+    deadline_ms = started_at_ms + seconds * 1000
     try:
-        effects = transition_start_discussion(app_state, deadline_ms=deadline_ms)
+        effects = transition_start_discussion(
+            app_state,
+            started_at_ms=started_at_ms,
+            deadline_ms=deadline_ms,
+        )
     except TransitionError as error:
         await _emit_transition_error(sid, error)
         return
     await _apply_transition_effects(effects)
+
+
+@sio.event
+async def admin_early_answer(sid, data=None):
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+    payload = data if isinstance(data, dict) else {}
+    return await _apply_strategy_action(
+        sid,
+        lambda: transition_early_answer(
+            app_state,
+            now_ms=_now_ms(),
+            actor={"role": "host"},
+            expected_generation=payload.get("timer_generation"),
+        ),
+    )
+
+
+@sio.event
+async def captain_early_answer(sid, data=None):
+    actor = await _captain_actor_for_sid(sid)
+    if actor is None:
+        error = TransitionError("not_captain", "Действие доступно только капитану")
+        await _emit_transition_error(sid, error)
+        return {"ok": False, "error": error.code, "message": error.message}
+    payload = data if isinstance(data, dict) else {}
+    return await _apply_strategy_action(
+        sid,
+        lambda: transition_request_early_answer(
+            app_state,
+            now_ms=_now_ms(),
+            actor=actor,
+            expected_generation=payload.get("timer_generation"),
+        ),
+    )
+
+
+async def _strategic_minute_action(sid, data, *, action, admin: bool) -> dict:
+    if admin:
+        if not await require_admin(sid):
+            return {"ok": False, "error": "not_admin"}
+        actor = {"role": "host"}
+    else:
+        actor = await _captain_actor_for_sid(sid)
+        if actor is None:
+            error = TransitionError("not_captain", "Действие доступно только капитану")
+            await _emit_transition_error(sid, error)
+            return {"ok": False, "error": error.code, "message": error.message}
+    payload = data if isinstance(data, dict) else {}
+    return await _apply_strategy_action(
+        sid,
+        lambda: action(
+            app_state,
+            now_ms=_now_ms(),
+            actor=actor,
+            expected_generation=payload.get("timer_generation"),
+        ),
+    )
+
+
+@sio.event
+async def admin_spend_earned_minute(sid, data=None):
+    return await _strategic_minute_action(
+        sid,
+        data,
+        action=transition_spend_earned_minute,
+        admin=True,
+    )
+
+
+@sio.event
+async def captain_spend_earned_minute(sid, data=None):
+    return await _strategic_minute_action(
+        sid,
+        data,
+        action=transition_spend_earned_minute,
+        admin=False,
+    )
+
+
+@sio.event
+async def admin_take_credit_minute(sid, data=None):
+    return await _strategic_minute_action(
+        sid,
+        data,
+        action=transition_take_credit_minute,
+        admin=True,
+    )
+
+
+@sio.event
+async def captain_take_credit_minute(sid, data=None):
+    actor = await _captain_actor_for_sid(sid)
+    if actor is None:
+        error = TransitionError("not_captain", "Действие доступно только капитану")
+        await _emit_transition_error(sid, error)
+        return {"ok": False, "error": error.code, "message": error.message}
+    payload = data if isinstance(data, dict) else {}
+    return await _apply_strategy_action(
+        sid,
+        lambda: transition_request_credit_minute(
+            app_state,
+            now_ms=_now_ms(),
+            actor=actor,
+            expected_generation=payload.get("timer_generation"),
+        ),
+    )
+
+
+@sio.event
+async def admin_resolve_strategy_request(sid, data=None):
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+    payload = data if isinstance(data, dict) else {}
+    return await _apply_strategy_action(
+        sid,
+        lambda: transition_resolve_strategy_request(
+            app_state,
+            approve=payload.get("approve"),
+            now_ms=_now_ms(),
+        ),
+    )
+
+
+async def _schedule_repayment_action(sid, *, admin: bool) -> dict:
+    if admin:
+        if not await require_admin(sid):
+            return {"ok": False, "error": "not_admin"}
+        actor = {"role": "host"}
+    else:
+        actor = await _captain_actor_for_sid(sid)
+        if actor is None:
+            error = TransitionError("not_captain", "Действие доступно только капитану")
+            await _emit_transition_error(sid, error)
+            return {"ok": False, "error": error.code, "message": error.message}
+    if admin:
+        return await _apply_strategy_action(
+            sid,
+            lambda: transition_schedule_credit_repayment(app_state, actor=actor),
+        )
+    return await _apply_strategy_action(
+        sid,
+        lambda: transition_request_credit_repayment(
+            app_state,
+            now_ms=_now_ms(),
+            actor=actor,
+        ),
+    )
+
+
+@sio.event
+async def admin_schedule_credit_repayment(sid, data=None):
+    return await _schedule_repayment_action(sid, admin=True)
+
+
+@sio.event
+async def captain_schedule_credit_repayment(sid, data=None):
+    return await _schedule_repayment_action(sid, admin=False)
+
+
+@sio.event
+async def admin_repayment_answer(sid, data=None):
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+    return await _apply_strategy_action(
+        sid,
+        lambda: transition_repayment_answer(app_state),
+    )
 
 
 @sio.event
@@ -1796,6 +2073,41 @@ async def admin_team_answer(sid, data=None):
         await _emit_transition_error(sid, error)
         return
     await _apply_transition_effects(effects)
+
+
+@sio.event
+async def admin_select_captain(sid, data):
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+    payload = data if isinstance(data, dict) else {}
+    found = _find_approved_participant(payload.get("participant_id"))
+    if found is None:
+        error = TransitionError(
+            "participant_unavailable",
+            "Участник не найден или ещё не допущен в игру",
+        )
+        await _emit_transition_error(sid, error)
+        return {"ok": False, "error": error.code, "message": error.message}
+    group, participant = found
+    return await _apply_strategy_action(
+        sid,
+        lambda: transition_select_captain(
+            app_state,
+            participant_id=participant["id"],
+            group_id=group["group_id"],
+            name=participant["name"],
+        ),
+    )
+
+
+@sio.event
+async def admin_clear_captain(sid, data=None):
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+    return await _apply_strategy_action(
+        sid,
+        lambda: transition_clear_captain(app_state, reason="live_ops"),
+    )
 
 
 @sio.event
@@ -1975,12 +2287,19 @@ async def admin_kick(sid, data):
         },
     )
     logger.info("Participant group %s kicked by admin", group_id)
+    captain_effects = transition_clear_captain(
+        app_state,
+        expected_group_id=group_id,
+        reason="player_kicked",
+    )
     
     # Отправляем игроку событие что его кикнули
     # Не отключаем сокет программно — пусть клиент сам переподключится
     await sio.emit('kicked', {'message': 'Вы были отключены ведущим'}, to=player_sid)
     
     await broadcast_players()
+    if captain_effects.events:
+        await _apply_transition_effects(captain_effects)
 
 @sio.event
 async def admin_log(sid, data):

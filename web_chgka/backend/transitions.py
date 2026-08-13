@@ -6,13 +6,14 @@ phase checks and mutations atomic within the asyncio event loop.
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Mapping, Optional
 
 from game_events import GameEvent, game_event
 from state import (
     AppState,
     GamePhase,
     RespondentState,
+    TimerSegment,
     PHASE_DISCUSSION,
     PHASE_GAME_OVER,
     PHASE_INTRO,
@@ -31,6 +32,8 @@ BLITZ_PARTS = 3
 WINNING_SCORE = 6
 INTRO_LAST_SLIDE = 13
 INTRO_DURATION_MS = 87_757
+EARNED_MINUTE_MS = 60_000
+CAPTAIN_EARLY_ANSWER_WINDOW_MS = 5_000
 
 
 class TransitionError(ValueError):
@@ -70,6 +73,74 @@ def _require_phase(state: AppState, expected: GamePhase) -> None:
             f"Действие недоступно в фазе «{phase_label(phase)}»; "
             f"ожидается «{phase_label(expected)}»",
         )
+
+
+def _valid_timestamp(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _clear_timer(state: AppState) -> None:
+    timer = state["timer"]
+    timer["discussion_deadline_ms"] = None
+    timer["segment"] = None
+    timer["started_at_ms"] = None
+    timer["generation"] = timer.get("generation", 0) + 1
+
+
+def _start_timer(
+    state: AppState,
+    *,
+    segment: TimerSegment,
+    started_at_ms: int,
+    deadline_ms: int,
+) -> None:
+    if not _valid_timestamp(started_at_ms) or not _valid_timestamp(deadline_ms):
+        raise TransitionError("invalid_time", "Некорректное время таймера")
+    if deadline_ms <= started_at_ms:
+        raise TransitionError("invalid_time", "Таймер должен завершаться после запуска")
+    timer = state["timer"]
+    timer["segment"] = segment
+    timer["started_at_ms"] = started_at_ms
+    timer["discussion_deadline_ms"] = deadline_ms
+    timer["generation"] = timer.get("generation", 0) + 1
+
+
+def _require_timer_generation(state: AppState, expected_generation: object) -> None:
+    if expected_generation is None:
+        return
+    if (
+        not isinstance(expected_generation, int)
+        or isinstance(expected_generation, bool)
+        or expected_generation != state["timer"].get("generation", 0)
+    ):
+        raise TransitionError("stale_timer", "Состояние таймера уже изменилось")
+
+
+def _round_event_context(round_ctx: Mapping[str, object]) -> dict[str, object]:
+    kind = round_ctx.get("kind", "normal")
+    return {
+        "sector": round_ctx.get("sector"),
+        "kind": kind,
+        "part_index": (
+            int(round_ctx.get("part_index", 0))
+            if kind in ("blitz", "superblitz")
+            else None
+        ),
+    }
+
+
+def _actor_payload(actor: Mapping[str, object]) -> dict[str, object]:
+    role = actor.get("role")
+    if role == "host":
+        return {"actor_role": "host"}
+    if role == "captain":
+        return {
+            "actor_role": "captain",
+            "actor_participant_id": actor.get("participant_id"),
+            "actor_group_id": actor.get("group_id"),
+            "actor_name": actor.get("name"),
+        }
+    raise TransitionError("invalid_actor", "Некорректный инициатор действия")
 
 
 def _game_winner(state: AppState) -> Optional[str]:
@@ -245,8 +316,75 @@ def transition_end_blackbox(
     )
 
 
+def transition_select_captain(
+    state: AppState,
+    *,
+    participant_id: str,
+    group_id: str,
+    name: str,
+) -> TransitionEffects:
+    """Select one approved physical participant as captain for this game."""
+
+    if state["game"]["phase"] == PHASE_GAME_OVER:
+        raise TransitionError("game_finished", "В завершённой игре нельзя менять капитана")
+    if not all(
+        isinstance(value, str) and value
+        for value in (participant_id, group_id, name)
+    ):
+        raise TransitionError("invalid_captain", "Некорректный участник")
+
+    previous = state["game"]["team"].get("captain")
+    if previous and previous.get("participant_id") == participant_id:
+        raise TransitionError("captain_unchanged", f"{name} уже выбран капитаном")
+    captain: RespondentState = {
+        "participant_id": participant_id,
+        "group_id": group_id,
+        "name": name,
+    }
+    state["game"]["team"]["captain"] = captain
+    return TransitionEffects(
+        events=(
+            game_event(
+                "captain_selected",
+                f"Капитан: {name}",
+                **captain,
+                previous_captain=dict(previous) if previous else None,
+            ),
+        ),
+    )
+
+
+def transition_clear_captain(
+    state: AppState,
+    *,
+    expected_group_id: Optional[str] = None,
+    reason: str = "cleared",
+) -> TransitionEffects:
+    captain = state["game"]["team"].get("captain")
+    if captain is None:
+        return TransitionEffects()
+    if expected_group_id is not None and captain.get("group_id") != expected_group_id:
+        return TransitionEffects()
+    state["game"]["team"]["captain"] = None
+    return TransitionEffects(
+        events=(
+            game_event(
+                "captain_cleared",
+                f"Капитан больше не выбран: {captain['name']}",
+                **captain,
+                reason=reason,
+            ),
+        ),
+    )
+
+
 def validate_spin_start(state: AppState) -> None:
     _require_phase(state, PHASE_PRE_ROUND)
+    if state["game"]["team"]["credit"].get("repayment_request"):
+        raise TransitionError(
+            "strategy_request_pending",
+            "Сначала ответьте на запрос капитана",
+        )
     if state["wheel"]["is_spinning"]:
         raise TransitionError("spinning", "Волчок уже вращается")
     if (
@@ -352,16 +490,22 @@ def transition_complete_spin(state: AppState, *, spin_id: int) -> TransitionEffe
         if len(question_types) >= playing_sector
         else "normal"
     )
+    repayment = state["game"]["team"]["credit"].get("repayment_scheduled", False)
     if question_type in ("blitz", "superblitz"):
         state["game"]["round"] = {
             "kind": question_type,
             "sector": playing_sector,
             "part_index": 0,
+            **({"credit_repayment": True} if repayment else {}),
         }
     else:
-        state["game"]["round"] = {"kind": "normal", "sector": playing_sector}
+        state["game"]["round"] = {
+            "kind": "normal",
+            "sector": playing_sector,
+            **({"credit_repayment": True} if repayment else {}),
+        }
 
-    state["timer"]["discussion_deadline_ms"] = None
+    _clear_timer(state)
     state["game"]["phase"] = PHASE_QUESTION_READING
     sounds = ("sector13",) if playing_sector == SECTORS_COUNT else ()
     return TransitionEffects(
@@ -381,9 +525,19 @@ def transition_complete_spin(state: AppState, *, spin_id: int) -> TransitionEffe
     )
 
 
-def transition_start_discussion(state: AppState, *, deadline_ms: int) -> TransitionEffects:
+def transition_start_discussion(
+    state: AppState,
+    *,
+    deadline_ms: int,
+    started_at_ms: Optional[int] = None,
+) -> TransitionEffects:
     _require_phase(state, PHASE_QUESTION_READING)
     round_ctx = state["game"].get("round") or {}
+    if round_ctx.get("strategy_request"):
+        raise TransitionError(
+            "strategy_request_pending",
+            "Сначала ответьте на запрос капитана",
+        )
     if round_ctx.get("kind") == "superblitz" and not round_ctx.get("respondent"):
         raise TransitionError(
             "respondent_required",
@@ -394,8 +548,22 @@ def transition_start_discussion(state: AppState, *, deadline_ms: int) -> Transit
             "blackbox_active",
             "Сначала дождитесь окончания чёрного ящика или остановите его",
         )
+    if round_ctx.get("credit_repayment"):
+        raise TransitionError(
+            "credit_repayment",
+            "Этот вопрос играется без обсуждения в счёт возврата кредита",
+        )
+    if started_at_ms is None:
+        kind = round_ctx.get("kind", "normal")
+        duration_ms = 20_000 if kind in ("blitz", "superblitz") else 60_000
+        started_at_ms = deadline_ms - duration_ms
     state["game"]["phase"] = PHASE_DISCUSSION
-    state["timer"]["discussion_deadline_ms"] = deadline_ms
+    _start_timer(
+        state,
+        segment="base",
+        started_at_ms=started_at_ms,
+        deadline_ms=deadline_ms,
+    )
     return TransitionEffects(
         events=(
             game_event("phase_changed", "Фаза: обсуждение", phase=PHASE_DISCUSSION),
@@ -405,7 +573,16 @@ def transition_start_discussion(state: AppState, *, deadline_ms: int) -> Transit
 
 def transition_team_answer(state: AppState) -> TransitionEffects:
     _require_phase(state, PHASE_DISCUSSION)
-    state["timer"]["discussion_deadline_ms"] = None
+    round_ctx = state["game"].get("round") or {}
+    if round_ctx.get("strategy_request"):
+        raise TransitionError(
+            "strategy_request_pending",
+            "Сначала ответьте на запрос капитана",
+        )
+    segment = state["timer"].get("segment")
+    if segment is not None:
+        round_ctx["answer_timer_segment"] = segment
+    _clear_timer(state)
     state["game"]["phase"] = PHASE_TEAM_ANSWER
     return TransitionEffects(
         events=(
@@ -417,6 +594,561 @@ def transition_team_answer(state: AppState) -> TransitionEffects:
         ),
         sounds=("sig1",),
     )
+
+
+def transition_early_answer(
+    state: AppState,
+    *,
+    now_ms: int,
+    actor: Mapping[str, object],
+    expected_generation: object = None,
+) -> TransitionEffects:
+    phase = state["game"]["phase"]
+    if phase not in (PHASE_QUESTION_READING, PHASE_DISCUSSION):
+        raise TransitionError(
+            "bad_phase",
+            "Досрочный ответ доступен во время чтения или основной минуты",
+        )
+    if not _valid_timestamp(now_ms):
+        raise TransitionError("invalid_time", "Некорректное время ответа")
+    round_ctx = state["game"].get("round") or {}
+    if round_ctx.get("kind", "normal") != "normal" or round_ctx.get("credit_repayment"):
+        raise TransitionError("early_answer_unavailable", "Досрочный ответ здесь недоступен")
+    if round_ctx.get("strategy_request"):
+        raise TransitionError("strategy_request_pending", "Запрос капитана уже ожидает решения")
+    actor_info = _actor_payload(actor)
+    if phase == PHASE_DISCUSSION:
+        _require_timer_generation(state, expected_generation)
+        timer = state["timer"]
+        started_at_ms = timer.get("started_at_ms")
+        deadline_ms = timer.get("discussion_deadline_ms")
+        if timer.get("segment") != "base" or started_at_ms is None or deadline_ms is None:
+            raise TransitionError("early_answer_unavailable", "Сейчас не идёт основная минута")
+        if now_ms >= deadline_ms:
+            raise TransitionError("timer_finished", "Основная минута уже закончилась")
+        if (
+            actor_info["actor_role"] == "captain"
+            and now_ms >= started_at_ms + CAPTAIN_EARLY_ANSWER_WINDOW_MS
+        ):
+            raise TransitionError(
+                "captain_window_closed",
+                "Пятисекундное окно капитана уже закончилось; решение остаётся за ведущим",
+            )
+
+    round_ctx["early_answer"] = True
+    round_ctx["early_answer_actor"] = dict(actor_info)
+    if phase == PHASE_DISCUSSION:
+        round_ctx["answer_timer_segment"] = "base"
+    context = _round_event_context(round_ctx)
+    _clear_timer(state)
+    state["game"]["phase"] = PHASE_TEAM_ANSWER
+    return TransitionEffects(
+        events=(
+            game_event(
+                "early_answer_declared",
+                "Заявлен досрочный ответ",
+                **context,
+                **actor_info,
+                declared_phase=phase,
+            ),
+            game_event(
+                "phase_changed",
+                "Фаза: ответ команды",
+                phase=PHASE_TEAM_ANSWER,
+            ),
+        ),
+        sounds=("sig1",),
+    )
+
+
+def transition_request_early_answer(
+    state: AppState,
+    *,
+    now_ms: int,
+    actor: Mapping[str, object],
+    expected_generation: object = None,
+) -> TransitionEffects:
+    phase = state["game"]["phase"]
+    if phase not in (PHASE_QUESTION_READING, PHASE_DISCUSSION):
+        raise TransitionError(
+            "bad_phase",
+            "Досрочный ответ доступен во время чтения или основной минуты",
+        )
+    if not _valid_timestamp(now_ms):
+        raise TransitionError("invalid_time", "Некорректное время запроса")
+    round_ctx = state["game"].get("round") or {}
+    if round_ctx.get("kind", "normal") != "normal" or round_ctx.get("credit_repayment"):
+        raise TransitionError("early_answer_unavailable", "Досрочный ответ здесь недоступен")
+    if round_ctx.get("strategy_request"):
+        raise TransitionError("strategy_request_pending", "Запрос капитана уже ожидает решения")
+    actor_info = _actor_payload(actor)
+    if actor_info["actor_role"] != "captain":
+        raise TransitionError("invalid_actor", "Запрос может отправить только капитан")
+    if phase == PHASE_DISCUSSION:
+        _require_timer_generation(state, expected_generation)
+        timer = state["timer"]
+        started_at_ms = timer.get("started_at_ms")
+        deadline_ms = timer.get("discussion_deadline_ms")
+        if timer.get("segment") != "base" or started_at_ms is None or deadline_ms is None:
+            raise TransitionError("early_answer_unavailable", "Сейчас не идёт основная минута")
+        if now_ms >= deadline_ms:
+            raise TransitionError("timer_finished", "Основная минута уже закончилась")
+        if now_ms >= started_at_ms + CAPTAIN_EARLY_ANSWER_WINDOW_MS:
+            raise TransitionError("captain_window_closed", "Пятисекундное окно капитана закончилось")
+
+    request = {
+        "type": "early_answer",
+        "participant_id": actor.get("participant_id"),
+        "group_id": actor.get("group_id"),
+        "name": actor.get("name"),
+        "requested_phase": phase,
+        "requested_at_ms": now_ms,
+        "timer_generation": state["timer"].get("generation", 0),
+    }
+    round_ctx["strategy_request"] = request
+    return TransitionEffects(
+        events=(
+            game_event(
+                "early_answer_requested",
+                f"Капитан {request['name']} просит принять досрочный ответ",
+                **_round_event_context(round_ctx),
+                **actor_info,
+                requested_phase=phase,
+                requested_at_ms=now_ms,
+            ),
+        ),
+    )
+
+
+def _require_team_answer_extension(
+    state: AppState,
+    *,
+    expected_generation: object,
+) -> tuple[dict, TimerSegment]:
+    _require_phase(state, PHASE_TEAM_ANSWER)
+    _require_timer_generation(state, expected_generation)
+    round_ctx = state["game"].get("round") or {}
+    if round_ctx.get("strategy_request"):
+        raise TransitionError("strategy_request_pending", "Запрос капитана уже ожидает решения")
+    if round_ctx.get("credit_repayment"):
+        raise TransitionError("credit_repayment", "Возврат кредита идёт без таймера")
+    if round_ctx.get("early_answer"):
+        raise TransitionError("early_answer_locked", "После досрочного ответа игровые минуты недоступны")
+    previous_segment = round_ctx.get("answer_timer_segment")
+    if previous_segment not in ("base", "earned"):
+        raise TransitionError("timer_unavailable", "Игровую минуту можно взять после команды ведущего")
+    return round_ctx, previous_segment
+
+
+def transition_spend_earned_minute(
+    state: AppState,
+    *,
+    now_ms: int,
+    actor: Mapping[str, object],
+    expected_generation: object = None,
+) -> TransitionEffects:
+    round_ctx, previous_segment = _require_team_answer_extension(
+        state,
+        expected_generation=expected_generation,
+    )
+    if not _valid_timestamp(now_ms):
+        raise TransitionError("invalid_time", "Некорректное время запуска минуты")
+    actor_info = _actor_payload(actor)
+    team = state["game"]["team"]
+    before = team["earned_minutes"]
+    if before <= 0:
+        raise TransitionError("no_earned_minutes", "Нет заработанных дополнительных минут")
+    if round_ctx.get("credit_used"):
+        raise TransitionError(
+            "credit_already_started",
+            "После кредитной минуты дополнительные минуты недоступны",
+        )
+    kind = round_ctx.get("kind", "normal")
+    part_index = int(round_ctx.get("part_index", 0)) if kind in ("blitz", "superblitz") else None
+    selected_part = round_ctx.get("extra_part_index")
+    if selected_part is not None and selected_part != part_index:
+        raise TransitionError(
+            "earned_part_locked",
+            "Дополнительные минуты уже использовались на другой части этого блица",
+        )
+    if part_index is not None and selected_part is None:
+        round_ctx["extra_part_index"] = part_index
+
+    team["earned_minutes"] = before - 1
+    round_ctx["extra_minutes_spent"] = int(round_ctx.get("extra_minutes_spent", 0)) + 1
+    round_ctx.pop("answer_timer_segment", None)
+    if kind != "superblitz":
+        round_ctx.pop("respondent", None)
+    state["game"]["phase"] = PHASE_DISCUSSION
+    _start_timer(
+        state,
+        segment="earned",
+        started_at_ms=now_ms,
+        deadline_ms=now_ms + EARNED_MINUTE_MS,
+    )
+    return TransitionEffects(
+        events=(
+            game_event(
+                "earned_minute_spent",
+                f"Использована дополнительная минута. Осталось: {before - 1}",
+                **_round_event_context(round_ctx),
+                **actor_info,
+                previous_segment=previous_segment,
+                balance_before=before,
+                balance_after=before - 1,
+                timer_generation=state["timer"]["generation"],
+            ),
+            game_event("phase_changed", "Фаза: дополнительная минута", phase=PHASE_DISCUSSION),
+        ),
+    )
+
+
+def transition_take_credit_minute(
+    state: AppState,
+    *,
+    now_ms: int,
+    actor: Mapping[str, object],
+    expected_generation: object = None,
+) -> TransitionEffects:
+    round_ctx, previous_segment = _require_team_answer_extension(
+        state,
+        expected_generation=expected_generation,
+    )
+    if not _valid_timestamp(now_ms):
+        raise TransitionError("invalid_time", "Некорректное время запуска кредита")
+    actor_info = _actor_payload(actor)
+    score = state["game"]["score"]
+    if score["tv"] != 5 or not 0 <= score["znatoki"] <= 4:
+        raise TransitionError("credit_score", "Минута в кредит доступна только при счёте X:5")
+    credit = state["game"]["team"]["credit"]
+    if credit["used"]:
+        raise TransitionError("credit_used", "Минута в кредит уже использована в этой игре")
+
+    credit["used"] = True
+    round_ctx["credit_used"] = True
+    kind = round_ctx.get("kind", "normal")
+    if kind in ("blitz", "superblitz"):
+        round_ctx["credit_part_index"] = int(round_ctx.get("part_index", 0))
+    round_ctx.pop("answer_timer_segment", None)
+    if kind != "superblitz":
+        round_ctx.pop("respondent", None)
+    state["game"]["phase"] = PHASE_DISCUSSION
+    _start_timer(
+        state,
+        segment="credit",
+        started_at_ms=now_ms,
+        deadline_ms=now_ms + EARNED_MINUTE_MS,
+    )
+    return TransitionEffects(
+        events=(
+            game_event(
+                "credit_minute_taken",
+                "Команда взяла минуту в кредит",
+                **_round_event_context(round_ctx),
+                **actor_info,
+                previous_segment=previous_segment,
+                score=dict(score),
+                timer_generation=state["timer"]["generation"],
+            ),
+            game_event("phase_changed", "Фаза: минута в кредит", phase=PHASE_DISCUSSION),
+        ),
+    )
+
+
+def transition_request_credit_minute(
+    state: AppState,
+    *,
+    now_ms: int,
+    actor: Mapping[str, object],
+    expected_generation: object = None,
+) -> TransitionEffects:
+    round_ctx, previous_segment = _require_team_answer_extension(
+        state,
+        expected_generation=expected_generation,
+    )
+    if not _valid_timestamp(now_ms):
+        raise TransitionError("invalid_time", "Некорректное время запроса")
+    actor_info = _actor_payload(actor)
+    if actor_info["actor_role"] != "captain":
+        raise TransitionError("invalid_actor", "Запрос может отправить только капитан")
+    score = state["game"]["score"]
+    if score["tv"] != 5 or not 0 <= score["znatoki"] <= 4:
+        raise TransitionError("credit_score", "Минута в кредит доступна только при счёте X:5")
+    if state["game"]["team"]["credit"]["used"]:
+        raise TransitionError("credit_used", "Минута в кредит уже использована в этой игре")
+
+    request = {
+        "type": "credit",
+        "participant_id": actor.get("participant_id"),
+        "group_id": actor.get("group_id"),
+        "name": actor.get("name"),
+        "requested_phase": PHASE_TEAM_ANSWER,
+        "requested_at_ms": now_ms,
+        "timer_generation": state["timer"].get("generation", 0),
+    }
+    round_ctx["strategy_request"] = request
+    return TransitionEffects(
+        events=(
+            game_event(
+                "credit_minute_requested",
+                f"Капитан {request['name']} просит минуту в кредит",
+                **_round_event_context(round_ctx),
+                **actor_info,
+                previous_segment=previous_segment,
+                requested_at_ms=now_ms,
+            ),
+        ),
+    )
+
+
+def transition_resolve_strategy_request(
+    state: AppState,
+    *,
+    approve: object,
+    now_ms: int,
+) -> TransitionEffects:
+    if not isinstance(approve, bool):
+        raise TransitionError("invalid_decision", "Некорректное решение ведущего")
+    if not _valid_timestamp(now_ms):
+        raise TransitionError("invalid_time", "Некорректное время решения")
+    round_ctx = state["game"].get("round") or {}
+    credit = state["game"]["team"]["credit"]
+    request_owner = round_ctx
+    request_key = "strategy_request"
+    request = round_ctx.get(request_key)
+    if not request:
+        request_owner = credit
+        request_key = "repayment_request"
+        request = credit.get(request_key)
+    if not request:
+        raise TransitionError("no_strategy_request", "Нет ожидающего запроса капитана")
+    if state["game"]["phase"] != request.get("requested_phase"):
+        raise TransitionError("stale_strategy_request", "Состояние игры после запроса изменилось")
+
+    request_type = request.get("type")
+    if request_type not in ("early_answer", "credit", "repayment"):
+        raise TransitionError("invalid_strategy_request", "Неизвестный запрос капитана")
+    captain = {
+        "role": "captain",
+        "participant_id": request.get("participant_id"),
+        "group_id": request.get("group_id"),
+        "name": request.get("name"),
+    }
+    request_owner.pop(request_key, None)
+    if approve:
+        try:
+            if request_type == "early_answer":
+                effects = transition_early_answer(
+                    state,
+                    now_ms=request.get("requested_at_ms"),
+                    actor=captain,
+                    expected_generation=request.get("timer_generation"),
+                )
+            elif request_type == "credit":
+                effects = transition_take_credit_minute(
+                    state,
+                    now_ms=now_ms,
+                    actor=captain,
+                    expected_generation=request.get("timer_generation"),
+                )
+            else:
+                effects = transition_schedule_credit_repayment(
+                    state,
+                    actor=captain,
+                )
+        except TransitionError:
+            request_owner[request_key] = request
+            raise
+        context = (
+            _round_event_context(round_ctx)
+            if request_type in ("early_answer", "credit")
+            else {}
+        )
+        approved_event = game_event(
+            "strategy_request_approved",
+            "Ведущий одобрил запрос капитана",
+            **context,
+            request_type=request_type,
+            actor_role="host",
+            requested_by_participant_id=request.get("participant_id"),
+            requested_by_group_id=request.get("group_id"),
+            requested_by_name=request.get("name"),
+        )
+        return TransitionEffects(
+            events=(approved_event, *effects.events),
+            sounds=effects.sounds,
+            clear_media_tokens=effects.clear_media_tokens,
+            refresh_admin_question=effects.refresh_admin_question,
+            clear_admin_question=effects.clear_admin_question,
+            stop_sounds=effects.stop_sounds,
+            start_sound_output=effects.start_sound_output,
+            spin_id=effects.spin_id,
+            playing_sector=effects.playing_sector,
+        )
+
+    event_type = {
+        "early_answer": "early_answer_request_rejected",
+        "credit": "credit_minute_request_rejected",
+        "repayment": "credit_repayment_request_rejected",
+    }[request_type]
+    context = (
+        _round_event_context(round_ctx)
+        if request_type in ("early_answer", "credit")
+        else {}
+    )
+    return TransitionEffects(
+        events=(
+            game_event(
+                event_type,
+                "Ведущий отклонил запрос капитана",
+                **context,
+                request_type=request_type,
+                actor_role="host",
+                requested_by_participant_id=request.get("participant_id"),
+                requested_by_group_id=request.get("group_id"),
+                requested_by_name=request.get("name"),
+            ),
+        ),
+    )
+
+
+def _require_credit_repayment_schedulable(state: AppState) -> dict:
+    phase = state["game"]["phase"]
+    if phase not in (PHASE_PRE_ROUND, PHASE_POST_ROUND):
+        raise TransitionError(
+            "repayment_too_late",
+            "Возврат кредита нужно назначить до вращения волчка",
+        )
+    if state["wheel"]["is_spinning"]:
+        raise TransitionError("repayment_too_late", "Волчок уже запущен")
+    round_ctx = state["game"].get("round") or {}
+    if phase == PHASE_POST_ROUND and round_ctx.get("advance_next_part"):
+        raise TransitionError(
+            "blitz_in_progress",
+            "Возврат можно назначить после завершения всего блица",
+        )
+    credit = state["game"]["team"]["credit"]
+    if not credit["debt"]:
+        raise TransitionError("no_credit_debt", "У команды нет долга по кредиту")
+    if credit["repayment_scheduled"]:
+        raise TransitionError("repayment_scheduled", "Возврат уже назначен")
+    return credit
+
+
+def transition_request_credit_repayment(
+    state: AppState,
+    *,
+    now_ms: int,
+    actor: Mapping[str, object],
+) -> TransitionEffects:
+    if not _valid_timestamp(now_ms):
+        raise TransitionError("invalid_time", "Некорректное время запроса")
+    actor_info = _actor_payload(actor)
+    if actor_info["actor_role"] != "captain":
+        raise TransitionError("invalid_actor", "Запрос может отправить только капитан")
+    credit = _require_credit_repayment_schedulable(state)
+    if credit.get("repayment_request"):
+        raise TransitionError("strategy_request_pending", "Запрос капитана уже ожидает решения")
+
+    request = {
+        "type": "repayment",
+        "participant_id": actor.get("participant_id"),
+        "group_id": actor.get("group_id"),
+        "name": actor.get("name"),
+        "requested_phase": state["game"]["phase"],
+        "requested_at_ms": now_ms,
+    }
+    credit["repayment_request"] = request
+    return TransitionEffects(
+        events=(
+            game_event(
+                "credit_repayment_requested",
+                f"Капитан {request['name']} просит вернуть минуту в кредит",
+                **actor_info,
+                requested_phase=state["game"]["phase"],
+                requested_at_ms=now_ms,
+                score=dict(state["game"]["score"]),
+            ),
+        ),
+    )
+
+
+def transition_schedule_credit_repayment(
+    state: AppState,
+    *,
+    actor: Mapping[str, object],
+    forced: bool = False,
+) -> TransitionEffects:
+    credit = _require_credit_repayment_schedulable(state)
+    if credit.get("repayment_request"):
+        raise TransitionError(
+            "strategy_request_pending",
+            "Сначала ответьте на запрос капитана",
+        )
+    actor_info = _actor_payload(actor)
+    credit["repayment_scheduled"] = True
+    credit["forced"] = forced
+    message = (
+        "При счёте 5:5 возврат кредита назначен автоматически"
+        if forced
+        else "Возврат кредита назначен на следующий раунд"
+    )
+    return TransitionEffects(
+        events=(
+            game_event(
+                "credit_repayment_scheduled",
+                message,
+                **actor_info,
+                forced=forced,
+                score=dict(state["game"]["score"]),
+            ),
+        ),
+    )
+
+
+def _complete_credit_repayment(state: AppState, round_ctx: dict) -> Optional[GameEvent]:
+    credit = state["game"]["team"]["credit"]
+    if not round_ctx.get("credit_repayment") or not credit["debt"]:
+        return None
+    kind = round_ctx.get("kind", "normal")
+    part_index = int(round_ctx.get("part_index", 0)) if kind in ("blitz", "superblitz") else None
+    if part_index is not None and part_index < BLITZ_PARTS - 1:
+        return None
+    credit["debt"] = False
+    credit["repayment_scheduled"] = False
+    credit["forced"] = False
+    return game_event(
+        "credit_repayment_completed",
+        "Минута в кредит возвращена ответом без обсуждения",
+        **_round_event_context(round_ctx),
+    )
+
+
+def transition_repayment_answer(state: AppState) -> TransitionEffects:
+    _require_phase(state, PHASE_QUESTION_READING)
+    round_ctx = state["game"].get("round") or {}
+    if not round_ctx.get("credit_repayment"):
+        raise TransitionError("no_credit_repayment", "Текущий раунд не возвращает кредит")
+    if round_ctx.get("kind") == "superblitz" and not round_ctx.get("respondent"):
+        raise TransitionError("respondent_required", "Сначала выберите участника суперблица")
+    _clear_timer(state)
+    state["game"]["phase"] = PHASE_TEAM_ANSWER
+    events = [
+        game_event(
+            "credit_repayment_answered",
+            "Ответ без обсуждения принят",
+            **_round_event_context(round_ctx),
+        ),
+        game_event(
+            "phase_changed",
+            "Фаза: ответ команды",
+            phase=PHASE_TEAM_ANSWER,
+        ),
+    ]
+    completed = _complete_credit_repayment(state, round_ctx)
+    if completed is not None:
+        events.append(completed)
+    return TransitionEffects(events=tuple(events), sounds=("sig1",))
 
 
 def transition_select_respondent(
@@ -431,6 +1163,11 @@ def transition_select_respondent(
     round_ctx = state["game"].get("round")
     if not round_ctx:
         raise TransitionError("no_round", "Нет активного вопроса")
+    if round_ctx.get("strategy_request"):
+        raise TransitionError(
+            "strategy_request_pending",
+            "Сначала ответьте на запрос капитана",
+        )
     kind = round_ctx.get("kind", "normal")
     phase = state["game"]["phase"]
     if kind == "superblitz":
@@ -488,7 +1225,10 @@ def transition_select_respondent(
 
 def transition_ten_seconds(state: AppState, *, deadline_ms: int) -> TransitionEffects:
     _require_phase(state, PHASE_DISCUSSION)
+    if not _valid_timestamp(deadline_ms):
+        raise TransitionError("invalid_time", "Некорректное время таймера")
     state["timer"]["discussion_deadline_ms"] = deadline_ms
+    state["timer"]["generation"] = state["timer"].get("generation", 0) + 1
     return TransitionEffects(
         events=(
             game_event(
@@ -517,12 +1257,18 @@ def transition_score(
     round_ctx = state["game"]["round"]
     if not round_ctx:
         raise TransitionError("no_round", "Нет активного раунда")
+    if round_ctx.get("strategy_request"):
+        raise TransitionError(
+            "strategy_request_pending",
+            "Сначала ответьте на запрос капитана",
+        )
     if not round_ctx.get("respondent"):
         raise TransitionError(
             "respondent_required",
             "Сначала выберите отвечавшего",
         )
     kind = round_ctx.get("kind", "normal")
+    resource_events: list[GameEvent] = []
 
     if kind in ("blitz", "superblitz"):
         part_index = int(round_ctx.get("part_index", 0))
@@ -611,10 +1357,90 @@ def transition_score(
     else:
         raise TransitionError("invalid_round", "Неизвестный тип активного раунда")
 
-    state["timer"]["discussion_deadline_ms"] = None
+    round_won = (
+        winner == "znatoki"
+        and (
+            kind == "normal"
+            or (
+                kind in ("blitz", "superblitz")
+                and int(round_ctx.get("part_index", 0)) == BLITZ_PARTS - 1
+            )
+        )
+    )
+    round_lost = winner == "tv"
+    team = state["game"]["team"]
+    if kind == "normal" and round_ctx.get("early_answer") and round_won:
+        before = team["earned_minutes"]
+        team["earned_minutes"] = before + 1
+        resource_events.append(
+            game_event(
+                "earned_minute_awarded",
+                f"Заработана дополнительная минута. В банке: {before + 1}",
+                **_round_event_context(round_ctx),
+                balance_before=before,
+                balance_after=before + 1,
+            )
+        )
+
+    credit = team["credit"]
+    if round_ctx.get("credit_used") and round_won:
+        credit["debt"] = True
+        resource_events.append(
+            game_event(
+                "credit_debt_created",
+                "Кредитная минута помогла выиграть раунд: минуту нужно вернуть",
+                **_round_event_context(round_ctx),
+                score=dict(state["game"]["score"]),
+            )
+        )
+    elif round_ctx.get("credit_used") and round_lost:
+        resource_events.append(
+            game_event(
+                "credit_round_lost",
+                "Раунд с кредитной минутой проигран; долг не возник",
+                **_round_event_context(round_ctx),
+                score=dict(state["game"]["score"]),
+            )
+        )
+
+    if (
+        credit["debt"]
+        and not credit["repayment_scheduled"]
+        and state["game"]["score"] == {"znatoki": 5, "tv": 5}
+    ):
+        credit["repayment_scheduled"] = True
+        credit["forced"] = True
+        resource_events.append(
+            game_event(
+                "credit_repayment_scheduled",
+                "При счёте 5:5 возврат кредита назначен автоматически",
+                actor_role="system",
+                forced=True,
+                score=dict(state["game"]["score"]),
+            )
+        )
+
+    if (
+        round_ctx.get("credit_repayment")
+        and round_lost
+        and state["game"]["score"]["tv"] >= WINNING_SCORE
+        and credit["debt"]
+    ):
+        credit["debt"] = False
+        credit["repayment_scheduled"] = False
+        credit["forced"] = False
+        resource_events.append(
+            game_event(
+                "credit_repayment_terminated",
+                "Игра завершилась во время возврата кредита",
+                **_round_event_context(round_ctx),
+            )
+        )
+
+    _clear_timer(state)
     state["game"]["phase"] = PHASE_POST_ROUND
     return TransitionEffects(
-        events=events,
+        events=tuple((*events, *resource_events)),
         sounds=sounds,
         refresh_admin_question=True,
     )
@@ -622,6 +1448,11 @@ def transition_score(
 
 def transition_end_round(state: AppState, *, gong_sound: str) -> TransitionEffects:
     _require_phase(state, PHASE_POST_ROUND)
+    if state["game"]["team"]["credit"].get("repayment_request"):
+        raise TransitionError(
+            "strategy_request_pending",
+            "Сначала ответьте на запрос капитана",
+        )
     round_ctx = state["game"]["round"] or {}
     kind = round_ctx.get("kind", "normal")
     winner = _game_winner(state)
@@ -631,7 +1462,7 @@ def transition_end_round(state: AppState, *, gong_sound: str) -> TransitionEffec
         state["game"]["round"] = None
         state["game"]["phase"] = PHASE_GAME_OVER
         state["presentation"]["shared_media"] = None
-        state["timer"]["discussion_deadline_ms"] = None
+        _clear_timer(state)
         state["wheel"]["target_angle"] = None
         state["wheel"]["playing_sector"] = None
         state["wheel"]["spin_duration"] = 0
@@ -666,11 +1497,12 @@ def transition_end_round(state: AppState, *, gong_sound: str) -> TransitionEffec
         )
 
     state["presentation"]["shared_media"] = None
-    state["timer"]["discussion_deadline_ms"] = None
+    _clear_timer(state)
 
     if advances_blitz:
         round_ctx["part_index"] = next_part_index
         round_ctx.pop("advance_next_part", None)
+        round_ctx.pop("answer_timer_segment", None)
         if kind == "blitz":
             round_ctx.pop("respondent", None)
         state["game"]["round"] = round_ctx

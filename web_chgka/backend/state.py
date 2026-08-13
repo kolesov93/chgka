@@ -39,6 +39,8 @@ QuestionKind = Literal["normal", "blitz", "superblitz"]
 QuestionTypeValue = QuestionKind
 SharedMediaType = Literal["image", "audio", "video"]
 MediaPlaybackState = Literal["stopped", "playing", "paused"]
+TimerSegment = Literal["base", "earned", "credit"]
+StrategyRequestType = Literal["early_answer", "credit", "repayment"]
 
 
 class ScoreState(TypedDict):
@@ -56,6 +58,41 @@ class RespondentState(TypedDict):
     name: str
 
 
+class StrategyRequestState(TypedDict, total=False):
+    """Reconnect-safe captain request awaiting an explicit host decision."""
+
+    type: StrategyRequestType
+    participant_id: str
+    group_id: str
+    name: str
+    requested_phase: GamePhase
+    requested_at_ms: int
+    timer_generation: int
+
+
+class _RequiredCreditState(TypedDict):
+    """Persistent one-use credit lifecycle fields."""
+
+    used: bool
+    debt: bool
+    repayment_scheduled: bool
+    forced: bool
+
+
+class CreditState(_RequiredCreditState, total=False):
+    """Credit lifecycle plus an optional reconnect-safe repayment request."""
+
+    repayment_request: StrategyRequestState
+
+
+class TeamState(TypedDict):
+    """Public strategic resources owned by the experts team."""
+
+    captain: Optional[RespondentState]
+    earned_minutes: int
+    credit: CreditState
+
+
 class RoundState(TypedDict, total=False):
     """Current round context.
 
@@ -69,6 +106,15 @@ class RoundState(TypedDict, total=False):
     part_index: int
     advance_next_part: bool
     respondent: RespondentState
+    early_answer: bool
+    early_answer_actor: dict
+    answer_timer_segment: TimerSegment
+    extra_minutes_spent: int
+    extra_part_index: int
+    credit_used: bool
+    credit_part_index: int
+    credit_repayment: bool
+    strategy_request: StrategyRequestState
 
 
 class SharedMediaState(TypedDict):
@@ -116,6 +162,9 @@ class GameProgressState(TypedDict):
     # question content is sent separately via `admin_question`.
     round: Optional[RoundState]
 
+    # Captain, earned minutes and the distinct credit lifecycle.
+    team: TeamState
+
 
 class WheelState(TypedDict):
     """Wheel/table animation and sector-selection state."""
@@ -149,6 +198,15 @@ class TimerState(TypedDict):
     # Unix timestamp in milliseconds for the end of discussion. Only the admin
     # UI currently renders the countdown.
     discussion_deadline_ms: Optional[int]
+    segment: Optional[TimerSegment]
+    started_at_ms: Optional[int]
+    generation: int
+
+
+class PublicTimerState(TimerState):
+    """Timer timeline plus serialization time for reconnect-aware clients."""
+
+    server_now_ms: int
 
 
 class IntroState(TypedDict):
@@ -228,6 +286,8 @@ class PublicGameState(TypedDict):
     logs: list[str]
     question_types: Optional[list[QuestionTypeValue]]
     discussion_deadline_ms: Optional[int]
+    timer: PublicTimerState
+    team: TeamState
     round: Optional[RoundState]
     intro: Optional[PublicIntroState]
     shared_media: Optional[PublicSharedMediaState]
@@ -259,6 +319,16 @@ def create_initial_app_state(
             "score": {"znatoki": 0, "tv": 0},
             "used_questions": [],
             "round": None,
+            "team": {
+                "captain": None,
+                "earned_minutes": 0,
+                "credit": {
+                    "used": False,
+                    "debt": False,
+                    "repayment_scheduled": False,
+                    "forced": False,
+                },
+            },
         },
         "wheel": {
             "current_sector": 1,
@@ -270,6 +340,9 @@ def create_initial_app_state(
         },
         "timer": {
             "discussion_deadline_ms": None,
+            "segment": None,
+            "started_at_ms": None,
+            "generation": 0,
         },
         "presentation": {
             "intro": None,
@@ -304,6 +377,7 @@ def reset_app_state(
     next_blackbox_generation = (
         state["presentation"].get("blackbox_generation", 0) + 1
     )
+    next_timer_generation = state["timer"].get("generation", 0) + 1
     state.clear()
     state.update(
         create_initial_app_state(
@@ -316,6 +390,7 @@ def reset_app_state(
     # field is internal and intentionally absent from PublicGameState.
     state["wheel"]["spin_id"] = next_spin_id
     state["presentation"]["blackbox_generation"] = next_blackbox_generation
+    state["timer"]["generation"] = next_timer_generation
 
 
 def public_game_state(
@@ -380,6 +455,14 @@ def public_game_state(
             "logs": state["logs"],
             "question_types": state["pack"]["question_types"],
             "discussion_deadline_ms": state["timer"]["discussion_deadline_ms"],
+            "timer": {
+                "discussion_deadline_ms": state["timer"]["discussion_deadline_ms"],
+                "segment": state["timer"].get("segment"),
+                "started_at_ms": state["timer"].get("started_at_ms"),
+                "generation": int(state["timer"].get("generation", 0)),
+                "server_now_ms": timestamp_ms,
+            },
+            "team": state["game"]["team"],
             "round": state["game"]["round"],
             "intro": intro,
             "shared_media": shared_media,

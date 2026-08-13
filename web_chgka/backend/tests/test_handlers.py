@@ -759,6 +759,251 @@ def test_select_respondent_broadcasts_and_enriches_question_history(monkeypatch)
     }
 
 
+def test_captain_action_is_bound_to_current_group_socket_and_journal_context(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    pack = parse_question_pack(SAMPLE_PACK)
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "normal", "sector": 1}
+    state["game"]["team"]["captain"] = _respondent()
+    main.transition_start_discussion(
+        state,
+        started_at_ms=10_000,
+        deadline_ms=70_000,
+    )
+    group = {
+        "sid": "captain-browser",
+        "name": "Иван, Мария",
+        "role": "player",
+        "token": "player-token",
+        "group_id": "group-1",
+        "participants": [
+            {"id": "participant-1", "name": "Иван"},
+            {"id": "participant-2", "name": "Мария"},
+        ],
+        "online": True,
+        "pending": False,
+    }
+    fake_sio.sessions.update(
+        {
+            "captain-browser": {"role": "player", "player_group_id": "group-1"},
+            "stale-browser": {"role": "player", "player_group_id": "group-1"},
+            "other-browser": {"role": "player", "player_group_id": "group-2"},
+        }
+    )
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", pack)
+    monkeypatch.setattr(main, "players_list", [group])
+    monkeypatch.setattr(main, "_now_ms", lambda: 12_000)
+
+    async def run():
+        stale = await main.captain_early_answer(
+            "stale-browser",
+            {"timer_generation": state["timer"]["generation"]},
+        )
+        other = await main.captain_early_answer(
+            "other-browser",
+            {"timer_generation": state["timer"]["generation"]},
+        )
+        accepted = await main.captain_early_answer(
+            "captain-browser",
+            {"timer_generation": state["timer"]["generation"]},
+        )
+        approved = await main.admin_resolve_strategy_request(
+            "admin",
+            {"approve": True},
+        )
+        return stale, other, accepted, approved
+
+    stale, other, accepted, approved = asyncio.run(run())
+
+    assert stale["error"] == "not_captain"
+    assert other["error"] == "not_captain"
+    assert accepted == {"ok": True}
+    assert approved == {"ok": True}
+    assert state["game"]["phase"] == PHASE_TEAM_ANSWER
+    request_event = next(
+        event
+        for event in main.game_journal.get_session(
+            main.game_journal.list_sessions()[0]["id"]
+        )["events"]
+        if event["event_type"] == "early_answer_requested"
+    )
+    early_event = next(
+        event
+        for event in main.game_journal.get_session(
+            main.game_journal.list_sessions()[0]["id"]
+        )["events"]
+        if event["event_type"] == "early_answer_declared"
+    )
+    assert request_event["payload"]["question_id"] == pack.get_by_sector(1).id
+    assert early_event["payload"]["question_id"] == pack.get_by_sector(1).id
+    assert early_event["payload"]["actor_group_id"] == "group-1"
+
+
+def test_host_selects_captain_and_kick_clears_public_role(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_PRE_ROUND)
+    group = {
+        "sid": "group-browser",
+        "name": "Иван",
+        "role": "player",
+        "token": "player-token",
+        "group_id": "group-1",
+        "participants": [{"id": "participant-1", "name": "Иван"}],
+        "online": True,
+        "pending": False,
+    }
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "players_list", [group])
+
+    async def run():
+        selected = await main.admin_select_captain(
+            "admin",
+            {"participant_id": "participant-1"},
+        )
+        assert selected == {"ok": True}
+        assert state["game"]["team"]["captain"]["name"] == "Иван"
+        cleared = await main.admin_clear_captain("admin")
+        assert cleared == {"ok": True}
+        assert state["game"]["team"]["captain"] is None
+        selected = await main.admin_select_captain(
+            "admin",
+            {"participant_id": "participant-1"},
+        )
+        assert selected == {"ok": True}
+        await main.admin_kick("admin", {"group_id": "group-1"})
+
+    asyncio.run(run())
+
+    assert state["game"]["team"]["captain"] is None
+    assert any("Капитан больше не выбран" in entry for entry in state["logs"])
+    assert any(event == "state_update" for event, _data, _kwargs in fake_sio.events)
+
+
+def test_captain_credit_request_waits_for_host_and_can_be_rejected(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    pack = parse_question_pack(SAMPLE_PACK)
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["game"]["score"] = {"znatoki": 2, "tv": 5}
+    state["game"]["round"] = {"kind": "normal", "sector": 1}
+    state["game"]["team"]["captain"] = _respondent()
+    main.transition_start_discussion(state, started_at_ms=10_000, deadline_ms=70_000)
+    main.transition_team_answer(state)
+    group = {
+        "sid": "captain-browser",
+        "name": "Иван",
+        "role": "player",
+        "token": "player-token",
+        "group_id": "group-1",
+        "participants": [{"id": "participant-1", "name": "Иван"}],
+        "online": True,
+        "pending": False,
+    }
+    fake_sio.sessions["captain-browser"] = {
+        "role": "player",
+        "player_group_id": "group-1",
+    }
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", pack)
+    monkeypatch.setattr(main, "players_list", [group])
+    monkeypatch.setattr(main, "_now_ms", lambda: 20_000)
+
+    async def run():
+        requested = await main.captain_take_credit_minute(
+            "captain-browser",
+            {"timer_generation": state["timer"]["generation"]},
+        )
+        rejected = await main.admin_resolve_strategy_request(
+            "admin",
+            {"approve": False},
+        )
+        return requested, rejected
+
+    requested, rejected = asyncio.run(run())
+
+    assert requested == {"ok": True}
+    assert rejected == {"ok": True}
+    assert state["game"]["phase"] == PHASE_TEAM_ANSWER
+    assert state["game"]["team"]["credit"]["used"] is False
+    assert "strategy_request" not in state["game"]["round"]
+    events = main.game_journal.get_session(
+        main.game_journal.list_sessions()[0]["id"]
+    )["events"]
+    request_event = next(
+        event for event in events if event["event_type"] == "credit_minute_requested"
+    )
+    assert request_event["payload"]["question_id"] == pack.get_by_sector(1).id
+
+
+def test_captain_repayment_request_waits_for_host_and_is_journaled(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_PRE_ROUND)
+    state["game"]["team"]["captain"] = _respondent()
+    state["game"]["team"]["credit"].update({"used": True, "debt": True})
+    group = {
+        "sid": "captain-browser",
+        "name": "Иван",
+        "role": "player",
+        "token": "player-token",
+        "group_id": "group-1",
+        "participants": [{"id": "participant-1", "name": "Иван"}],
+        "online": True,
+        "pending": False,
+    }
+    fake_sio.sessions["captain-browser"] = {
+        "role": "player",
+        "player_group_id": "group-1",
+    }
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", None)
+    monkeypatch.setattr(main, "players_list", [group])
+    monkeypatch.setattr(main, "_now_ms", lambda: 20_000)
+
+    async def run():
+        requested = await main.captain_schedule_credit_repayment("captain-browser")
+        approved = await main.admin_resolve_strategy_request(
+            "admin",
+            {"approve": True},
+        )
+        return requested, approved
+
+    requested, approved = asyncio.run(run())
+
+    assert requested == {"ok": True}
+    assert approved == {"ok": True}
+    assert state["game"]["team"]["credit"]["repayment_scheduled"] is True
+    assert "repayment_request" not in state["game"]["team"]["credit"]
+    events = main.game_journal.get_session(
+        main.game_journal.list_sessions()[0]["id"]
+    )["events"]
+    assert [
+        event["event_type"]
+        for event in events
+        if event["event_type"] in {
+            "credit_repayment_requested",
+            "strategy_request_approved",
+            "credit_repayment_scheduled",
+        }
+    ] == [
+        "credit_repayment_requested",
+        "strategy_request_approved",
+        "credit_repayment_scheduled",
+    ]
+    approval = next(
+        event for event in events if event["event_type"] == "strategy_request_approved"
+    )
+    assert approval["payload"]["request_type"] == "repayment"
+    assert approval["payload"]["requested_by_group_id"] == "group-1"
+
+
 def test_admin_login_replaces_previous_token_and_session(monkeypatch):
     now = [100.0]
     tokens = iter(("old-admin-token", "new-admin-token"))
