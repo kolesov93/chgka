@@ -1,3 +1,4 @@
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
@@ -12,9 +13,10 @@ NOW = datetime(2026, 8, 13, 12, 34, 56, tzinfo=timezone.utc)
 
 
 def _create_database(path: Path) -> None:
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection:
         connection.execute("CREATE TABLE events (id INTEGER PRIMARY KEY, message TEXT)")
         connection.execute("INSERT INTO events (message) VALUES ('played')")
+        connection.commit()
 
 
 def test_create_backup_copies_and_verifies_live_database(tmp_path):
@@ -25,9 +27,30 @@ def test_create_backup_copies_and_verifies_live_database(tmp_path):
     backup = create_backup(source, tmp_path / "backups", now=NOW)
 
     assert backup.name == "chgka-20260813T123456Z.sqlite3"
-    with sqlite3.connect(backup) as connection:
+    with closing(sqlite3.connect(backup)) as connection:
         assert connection.execute("SELECT message FROM events").fetchall() == [("played",)]
         assert connection.execute("PRAGMA quick_check").fetchone() == ("ok",)
+
+
+def test_create_backup_closes_every_opened_connection(tmp_path, monkeypatch):
+    source = tmp_path / "chgka.sqlite3"
+    _create_database(source)
+    opened_connections = []
+    original_connect = sqlite3.connect
+
+    def tracked_connect(*args, **kwargs):
+        connection = original_connect(*args, **kwargs)
+        opened_connections.append(connection)
+        return connection
+
+    monkeypatch.setattr("backup_database.sqlite3.connect", tracked_connect)
+
+    create_backup(source, tmp_path / "backups", now=NOW)
+
+    assert len(opened_connections) == 3
+    for connection in opened_connections:
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            connection.execute("SELECT 1")
 
 
 def test_create_backup_refuses_missing_source_and_duplicate_name(tmp_path):
