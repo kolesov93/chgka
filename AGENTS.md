@@ -59,6 +59,10 @@ Development startup is documented in `README.md`. The backend requires `QUESTION
 ## Security and deployment
 
 - Never commit passwords, tokens, real question packs, or environment files.
+- Treat the VPS strictly as a release and deployment target. Do not upload
+  uncommitted development code, run development servers, or use it for test
+  workloads; development and pre-release verification belong on the local
+  machine and in CI.
 - The default admin password and wildcard CORS are development behavior, not acceptable production defaults.
 - Raw Markdown HTML is not safe for untrusted packs. Public deployment requires an explicit sanitization decision.
 - Production is deployed under `/chgka/` with same-origin HTTPS/WSS, an exact origin allowlist and external secret injection. Keep root-path localhost behavior for development unless a task explicitly changes deployment routing.
