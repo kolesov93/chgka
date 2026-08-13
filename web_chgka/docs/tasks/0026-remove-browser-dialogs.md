@@ -31,6 +31,7 @@ Branch: `task/remove-browser-dialogs`.
 
 ## Реализация и локальная проверка
 
+- Implementation commit: `9b92cd2` (`Remove browser-native dialogs`).
 - Удалены все 19 runtime-вызовов `confirm` и единственный runtime-вызов `alert`; `prompt` и `beforeunload` в приложении отсутствовали.
 - Прямые действия продолжают отправлять прежние Socket.IO events с прежними payloads. Backend и игровые transitions не менялись.
 - Для раннего показа media из ответа добавлен локальный pending guard по точному `media_id`: предупреждение находится в той же медиаплашке, отмена не отправляет событие, а смена preview, вопроса или фазы удаляет устаревшее подтверждение.

@@ -48,9 +48,10 @@
 - Roadmap item 25 records the next proposed task: remove browser-native dialogs, retaining the answer-media safety check as an in-app confirmation and the kicked-player explanation as an in-app notice.
 - Task 0026 starts from local `web` commit `f2e9659` on `task/remove-browser-dialogs`. It removes every runtime browser-native dialog, keeps answer-media disclosure behind an in-app confirmation, and routes the kicked-player explanation through the existing login notice.
 - Task 0026 planning commit: `ef3f07b` (`Plan browser dialog removal task`).
+- Task 0026 implementation commit: `9b92cd2` (`Remove browser-native dialogs`).
 - The implementation removes all 20 native-dialog call sites without changing Socket.IO contracts, adds a token-bound inline answer-media guard, routes kicked-player copy through `sessionNotice`, and adds a structural regression test against browser-native dialogs.
 - Local verification passes: all 15 frontend test files, production build, `git diff --check`, runtime source audit, and focused in-app browser checks for direct actions, answer-media cancel/stale/accept flows, kicked notice and player logout.
-- Next continuation point: commit task 0026 implementation and let the user run the exact smoke in `docs/tasks/0026-remove-browser-dialogs.md`.
+- Next continuation point: let the user run the exact smoke in `docs/tasks/0026-remove-browser-dialogs.md`; after acceptance, close the roadmap item and merge locally into `web`.
 
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.
