@@ -72,6 +72,7 @@ services:
       - /tmp:size=32m,mode=1777
     networks:
       - app
+      - edge
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
       interval: 15s
@@ -87,3 +88,4 @@ services:
 networks:
   app:
     internal: true
+  edge:

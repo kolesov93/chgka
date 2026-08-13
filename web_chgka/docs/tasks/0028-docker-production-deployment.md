@@ -30,11 +30,11 @@ Branch: `codex/docker-production-deployment`.
       -> backend:8000 in the private Compose network
   ```
 
-- Host публикует только frontend container и только на `127.0.0.1`; backend не имеет host `ports`.
+- Host публикует только frontend container и только на `127.0.0.1`; backend не имеет host `ports`. Backend и frontend соединены закрытой `internal`-сетью `app`, а отдельная `edge`-сеть frontend нужна для работающей loopback-публикации Docker.
 - Frontend собирается с `VITE_BASE_PATH=/chgka/`. Container Nginx делает SPA fallback внутри `/chgka/`, снимает prefix только для `/socket.io`, `/media` и `/intro`, и проксирует их в backend.
 - Backend запускает один Uvicorn process без `--reload` и без нескольких workers: live `AppState`, players и tokens остаются process-local.
 - `CHGKA_ENV=production`, exact origin `https://example.com`, путь пака и SQLite задаются production env-файлом вне Git. Пароль ведущего пользователь создаёт сам и не передаёт агенту.
-- Постоянная host-структура — `~/apps/chgka/{release,questions,data,backups}` плюс mode-`0600` env-файл. Question pack монтируется read-only, data/backups — read-write.
+- Постоянная host-структура — `~/apps/chgka/{releases,questions,data,backups}`, symlink `current` плюс mode-`0600` env-файл. Question pack монтируется read-only, data/backups — read-write.
 - Первый технический запуск использует repository sample pack. Реальный pack загружается отдельным rsync после успешного infrastructure smoke и parser validation.
 - Compose использует health checks, restart policy и ограниченную ротацию логов. Изменение/replacement контейнера не меняет host SQLite или question pack.
 - Host Nginx получает изолированный CHGKA include/location. Перед reload сохраняется backup текущего site config, выполняется `nginx -t`, а rollback не требует изменения остальных location.
