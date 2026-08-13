@@ -13,6 +13,11 @@ export function IntroHostControls({ intro }) {
   }, [intro?.started_at_ms]);
 
   const control = introHostControlView(intro, nowMs);
+  const skipIntro = () => {
+    if (confirm('Пропустить оставшуюся часть вступления и перейти к игре?')) {
+      socket.emit('admin_skip_intro', { expected_slide: control.slideIndex });
+    }
+  };
 
   return (
     <div className="flex min-h-56 flex-col gap-3 rounded border border-blue-800/60 bg-blue-950/20 p-3">
@@ -55,6 +60,18 @@ export function IntroHostControls({ intro }) {
           className="w-full rounded-lg bg-blue-700 py-3 text-xs font-bold uppercase tracking-wider text-white shadow transition-all hover:bg-blue-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {control.nextStepLabel}
+        </button>
+        <button
+          type="button"
+          onClick={skipIntro}
+          disabled={!control.canSkip}
+          aria-hidden={!control.canSkip}
+          tabIndex={control.canSkip ? 0 : -1}
+          className={`w-full rounded-lg border border-slate-600 bg-slate-800 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-200 shadow transition-all hover:border-slate-500 hover:bg-slate-700 active:scale-[0.98] ${
+            control.canSkip ? '' : 'invisible'
+          }`}
+        >
+          Перейти к игре
         </button>
       </div>
     </div>

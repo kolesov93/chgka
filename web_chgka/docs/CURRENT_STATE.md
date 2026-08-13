@@ -4,7 +4,7 @@
 - Latest completed task: `docs/tasks/0023-earned-minutes-credit.md`
 - Active task: `docs/tasks/0024-skip-intro.md`.
 - Branch: `task/skip-intro`
-- Status: task 0024 UX and implementation boundaries are agreed; implementation is next.
+- Status: task 0024 is implemented and locally verified; it awaits the exact five-step manual smoke plus CI.
 
 ## Repository checkpoint
 
@@ -25,7 +25,10 @@
 - Browser acceptance: the complete 13-step host/two-player smoke passed on 2026-08-13, including the repayment-request follow-up.
 - Roadmap item 23 records a separate mini-task for a host button that skips the remaining intro author photos and goes directly to `PRE_ROUND`.
 - Task 0024 starts from `a1a185a` on `task/skip-intro`. It adds one confirmed host-only skip action in the stable intro panel, backed by an atomic expected-slide transition; exact scope and smoke are in `docs/tasks/0024-skip-intro.md`.
-- Next continuation point: implement task 0024, run its automated gates, then pass the exact five-step smoke from the task file.
+- The implementation adds `admin_skip_intro`, a synchronous expected-slide transition, `intro_skipped` journal event, immediate synchronized sound stop, and a reserved secondary `Перейти к игре` slot on slides `00`–`12`; the duplicate action is hidden on slide `13`.
+- Local in-app browser verification confirms the button layout, cancel path and synchronized accepted transition for both host and player from slide `00`.
+- Local verification passes: `npm ci`, 251 backend tests with warnings treated as errors, all 13 frontend tests, the production build, sample-pack validation, native Compose configuration validation and `git diff --check`.
+- Next continuation point: pass the exact five-step smoke from the task file, publish the task branch for CI if desired, then close and merge task 0024 into `web`.
 
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.

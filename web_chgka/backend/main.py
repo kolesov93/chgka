@@ -85,6 +85,7 @@ from transitions import (
     transition_clear_captain,
     transition_end_blackbox,
     transition_score,
+    transition_skip_intro,
     transition_start_discussion,
     transition_start_blackbox,
     transition_start_game,
@@ -1248,6 +1249,25 @@ async def admin_advance_intro(sid, data):
         await _emit_transition_error(sid, error)
         return
     await _apply_transition_effects(effects)
+
+
+@sio.event
+async def admin_skip_intro(sid, data=None):
+    """Сразу завершить intro и перейти к ожиданию первого вращения."""
+    if not await require_admin(sid):
+        return {"ok": False, "error": "not_admin"}
+
+    payload = data if isinstance(data, dict) else {}
+    try:
+        effects = transition_skip_intro(
+            app_state,
+            expected_slide=payload.get("expected_slide"),
+        )
+    except TransitionError as error:
+        await _emit_transition_error(sid, error)
+        return {"ok": False, "error": error.code, "message": error.message}
+    await _apply_transition_effects(effects)
+    return {"ok": True}
 
 @sio.event
 async def leave_game(sid):

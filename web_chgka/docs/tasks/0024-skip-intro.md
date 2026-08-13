@@ -1,6 +1,6 @@
 # Task 0024: быстрый переход из интро к игре
 
-Статус: в работе.
+Статус: реализовано локально; ожидает ручного smoke и CI.
 
 Branch: `task/skip-intro`.
 
@@ -23,6 +23,14 @@ Branch: `task/skip-intro`.
 - Вернуть transport-effect `stop_sounds`, чтобы остановить intro-музыку, отменить возможное глобальное затухание и синхронизировать stopped sound-state для всех клиентов.
 - Записать отдельное событие `intro_skipped` с исходным slide index. Обычное завершение через слайд `13` остаётся `intro_completed`.
 - Wire-contract `state_update` не расширять: после перехода существующих `phase` и `intro: null` достаточно для reconnect.
+
+## Результат реализации
+
+- Добавлен host-only event `admin_skip_intro` и синхронный `transition_skip_intro` с проверкой `INTRO`, существующего timeline и точного `expected_slide`.
+- Успешный переход одной мутацией очищает intro-state, входит в `PRE_ROUND`, останавливает общий звук и пишет `intro_skipped` с исходным слайдом. Обычный путь через `13` не изменён.
+- Ведущий видит вторичную подтверждаемую кнопку в постоянном третьем слоте панели на слайдах `00`–`12`; на `13` невидимый disabled-slot сохраняет геометрию без дублирования штатной кнопки.
+- Локальная browser-проверка подтвердила desktop-раскладку, отмену confirm и синхронный переход ведущего/игрока от слайда `00` к столу `0:0`.
+- Полный локальный gate проходит: `npm ci`, 251 backend-тест с warnings-as-errors, все 13 frontend test files, production build, sample-pack validator, Compose config и `git diff --check`.
 
 ## Автоматическая проверка
 

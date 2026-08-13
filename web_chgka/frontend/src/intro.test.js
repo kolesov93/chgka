@@ -73,6 +73,7 @@ test('host intro controls keep both action slots before and after music starts',
     slideLabel: 'Стартовый слайд',
     nextStepLabel: 'Показать авторов сектора 1',
     canAdvance: true,
+    canSkip: true,
     canStartMusic: true,
     musicStatus: 'Не запущена',
     musicActionLabel: 'Запустить музыку',
@@ -90,6 +91,7 @@ test('host intro controls keep both action slots before and after music starts',
     slideLabel: 'Авторы сектора 7 из 12',
     nextStepLabel: 'Показать авторов сектора 8',
     canAdvance: true,
+    canSkip: true,
     canStartMusic: false,
     musicStatus: '1:16',
     musicActionLabel: 'Музыка запущена',
@@ -110,4 +112,6 @@ test('host intro controls preserve the disabled music slot after the track ends'
   assert.equal(finished.musicStatus, '0:00');
   assert.equal(finished.musicActionLabel, 'Музыка завершена');
   assert.equal(finished.nextStepLabel, 'Перейти к игре');
+  assert.equal(finished.canSkip, false);
+  assert.equal(introHostControlView({ slide_index: -1 }).canSkip, false);
 });

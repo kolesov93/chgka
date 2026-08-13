@@ -18,6 +18,7 @@ from transitions import (
     transition_end_round,
     transition_reset,
     transition_select_respondent,
+    transition_skip_intro,
     transition_score,
     transition_start_discussion,
     transition_start_blackbox,
@@ -102,6 +103,44 @@ def test_final_intro_step_stops_music_and_enters_pre_round():
     assert state["presentation"]["intro"] is None
     assert state["game"]["score"] == {"znatoki": 0, "tv": 0}
     assert effects.stop_sounds is True
+
+
+@pytest.mark.parametrize("slide_index", range(14))
+def test_intro_can_be_skipped_atomically_from_every_slide(slide_index):
+    state = create_initial_app_state()
+    transition_start_game(state)
+    state["presentation"]["intro"]["slide_index"] = slide_index
+    state["presentation"]["intro"]["started_at_ms"] = 10_000
+    state["game"]["score"] = {"znatoki": 2, "tv": 1}
+
+    effects = transition_skip_intro(state, expected_slide=slide_index)
+
+    assert state["game"]["phase"] == PHASE_PRE_ROUND
+    assert state["presentation"]["intro"] is None
+    assert state["game"]["score"] == {"znatoki": 2, "tv": 1}
+    assert effects.stop_sounds is True
+    assert effects.events[0].event_type == "intro_skipped"
+    assert effects.events[0].payload["slide_index"] == slide_index
+
+
+def test_intro_skip_rejects_stale_invalid_and_repeated_actions():
+    state = create_initial_app_state()
+    transition_start_game(state)
+    state["presentation"]["intro"]["slide_index"] = 4
+
+    with pytest.raises(TransitionError) as exc_info:
+        transition_skip_intro(state, expected_slide=3)
+    assert exc_info.value.code == "stale_intro"
+    assert state["game"]["phase"] == PHASE_INTRO
+
+    with pytest.raises(TransitionError) as exc_info:
+        transition_skip_intro(state, expected_slide=True)
+    assert exc_info.value.code == "invalid_intro_slide"
+
+    transition_skip_intro(state, expected_slide=4)
+    with pytest.raises(TransitionError) as exc_info:
+        transition_skip_intro(state, expected_slide=4)
+    assert exc_info.value.code == "bad_phase"
 
 
 def test_blackbox_start_replaces_media_and_natural_end_returns_table():
