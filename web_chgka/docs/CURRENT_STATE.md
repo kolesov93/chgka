@@ -1,10 +1,10 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-13
-- Latest completed task: `docs/tasks/0025-author-media-presentation.md`
-- Active task: `docs/tasks/0026-remove-browser-dialogs.md`.
+- Latest completed task: `docs/tasks/0026-remove-browser-dialogs.md`
+- Active task: none.
 - Branch: `task/remove-browser-dialogs`
-- Status: task 0025 is accepted and merged locally; task 0026 implementation is locally green and awaits the user's focused smoke.
+- Status: task 0026 is locally green and its focused smoke was accepted; close and merge it locally into `web`, then let the user push `web`.
 
 ## Repository checkpoint
 
@@ -51,7 +51,8 @@
 - Task 0026 implementation commit: `9b92cd2` (`Remove browser-native dialogs`).
 - The implementation removes all 20 native-dialog call sites without changing Socket.IO contracts, adds a token-bound inline answer-media guard, routes kicked-player copy through `sessionNotice`, and adds a structural regression test against browser-native dialogs.
 - Local verification passes: all 15 frontend test files, production build, `git diff --check`, runtime source audit, and focused in-app browser checks for direct actions, answer-media cancel/stale/accept flows, kicked notice and player logout.
-- Next continuation point: let the user run the exact smoke in `docs/tasks/0026-remove-browser-dialogs.md`; after acceptance, close the roadmap item and merge locally into `web`.
+- Browser acceptance: the exact six-step native-dialog smoke passed on 2026-08-13.
+- Next continuation point: close task 0026, merge locally into `web`, and let the user push `web`.
 
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.
