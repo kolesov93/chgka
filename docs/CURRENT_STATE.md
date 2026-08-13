@@ -1,12 +1,16 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-13
-- Latest completed task: `docs/tasks/0028-docker-production-deployment.md`
-- Active task: `docs/tasks/0029-promote-web-to-root.md`.
+- Latest completed task: `docs/tasks/0029-promote-web-to-root.md`
+- Active task: none.
 - Branch: `task/promote-web-to-root`
-- Status: repository promotion is in progress. The final legacy tree is preserved by annotated tag `legacy-pyglet-final`; tracked web sources have moved from `web_chgka/` to the repository root and local verification is green.
+- Status: task 0029 is complete and ready to merge into `web`, then `main`. The final legacy tree is preserved by annotated tag `legacy-pyglet-final`; the web application is the only tracked root product and all local verification is green.
 
 ## Repository checkpoint
+
+- Task 0029 implementation commit is `ff4305c`. The repository root now contains the web application; CI, documentation and release archives use root paths. The legacy Pyglet/VLC tree remains reachable through annotated tag `legacy-pyglet-final` at `970ebc9`.
+- Untracked legacy data was moved without deletion to `/home/kolesov93/Programming/chgka2-legacy-local-files-20260813/`. A checksum-verified copy of the Docker-owned local SQLite is stored there as `web-runtime-data`; its original remains under the active workspace mount until the user removes it with `sudo` after this task.
+- Task 0029 verification passes: 264 backend tests with warnings-as-errors, sample-pack validation, 72 frontend tests, root and `/chgka/` builds, npm audit with zero vulnerabilities, YAML parsing, real development/production Compose validation on the VPS, tracked-tree assertions and release-archive assertions. `nanoid` was compatibly updated from `3.3.17` to `3.3.18` in the lockfile after a new advisory appeared.
 
 - Task 0028 planning commit is `4c66426`, production stack commit is `f14d24a`, VPS-discovered edge-network fix is `3c09e41`, closure commit is `c4ba3d9`, and merge commit into `web` is `cf204df`.
 - Docker Engine/Compose are installed on the VPS. Release `3c09e41d3df3` remains installed, but the user intentionally stopped and removed the CHGKA containers; do not start them merely to verify repository-only work. When running, only `127.0.0.1:18080` is published and backend has no host port.

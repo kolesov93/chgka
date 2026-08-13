@@ -1,6 +1,6 @@
 # Task 0029: promote web application to repository root
 
-Статус: в работе.
+Статус: завершена 2026-08-13; ручной smoke не требуется.
 
 Branch: `task/promote-web-to-root`.
 
@@ -35,6 +35,15 @@ Branch: `task/promote-web-to-root`.
 ## Найдено проверками
 
 После clean install npm registry сообщил новый advisory для транзитивного `nanoid@3.3.17`, который приходит через `postcss`. Совместимое обновление lockfile до `nanoid@3.3.18` устраняет advisory без изменения прямых зависимостей или frontend API.
+
+## Результат проверки
+
+- 264 backend tests проходят с warnings-as-errors; repository sample pack валиден.
+- Все 72 frontend tests, root build и `/chgka/` build проходят; `npm audit` сообщает 0 vulnerabilities.
+- GitHub Actions YAML корректен. Development и production Compose проходят настоящий `docker compose config --quiet` на установленном VPS Compose.
+- Новый tracked tree и создаваемый `git archive` содержат корневое web-приложение без `web_chgka/`, desktop entrypoints и legacy resource directories.
+- Тег `legacy-pyglet-final` аннотирован и указывает на исходный `main` commit `970ebc9`.
+- Production release не обновлялся и по решению пользователя остаётся остановленным.
 
 ## Out of scope
 
