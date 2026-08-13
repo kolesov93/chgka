@@ -1,10 +1,10 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-13
-- Latest completed task: `docs/tasks/0022-participant-groups-respondents.md`
-- Active task: `docs/tasks/0023-earned-minutes-credit.md`
+- Latest completed task: `docs/tasks/0023-earned-minutes-credit.md`
+- Active task: none; choose the next roadmap item after publishing task 0023.
 - Branch: `task/earned-minutes-credit`
-- Status: task 0023 is implemented locally and awaits focused browser smoke plus CI.
+- Status: task 0023 passed local gates and the complete browser smoke; local merge into `web` is authorized, then `web` must be pushed for merged-branch CI.
 
 ## Repository checkpoint
 
@@ -20,7 +20,9 @@
 - Smoke feedback changed the interaction point without changing the game resources: early answer is available during reading and through the asymmetric base window; captain early/credit/repayment actions are reconnect-safe requests resolved by a host modal; earned/credit minutes start from `TEAM_ANSWER`, so the host timer is directional rather than an eligibility gate. The desktop player stage now uses a height-constrained table plus right information rail, with a one-column mobile fallback.
 - A captain's voluntary repayment request no longer opens a browser confirm. It is stored in the public credit lifecycle, blocks normal round-end/spin progress until the reconnect-safe host modal accepts or rejects it, and is normalized away by relevant Live Ops recovery actions.
 - Local verification passes: 234 backend tests with warnings treated as errors, all 13 frontend tests, the production build, sample-pack validation, and native Compose configuration validation.
-- Next continuation point: pass the exact 13-step smoke in the task file, publish the task branch for CI if desired, then close and merge task 0023 into `web`.
+- Browser acceptance: the complete 13-step host/two-player smoke passed on 2026-08-13, including the repayment-request follow-up.
+- Roadmap item 23 records a separate mini-task for a host button that skips the remaining intro author photos and goes directly to `PRE_ROUND`.
+- Next continuation point: merge task 0023 into local `web`, push only `web`, verify merged-branch CI, then choose the next roadmap item.
 
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.
