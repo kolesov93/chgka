@@ -20,6 +20,7 @@ test('question kinds and media metadata have Russian display labels', () => {
   assert.equal(questionKindLabel('superblitz'), 'суперблиц');
   assert.equal(questionKindLabel('unknown'), 'неизвестный тип вопроса');
   assert.equal(mediaSectionLabel('answer'), 'ответ');
+  assert.equal(mediaSectionLabel('author'), 'автор вопроса');
   assert.equal(mediaSectionLabel('unknown'), 'неизвестная секция');
   assert.equal(mediaTypeLabel('image'), 'изображение');
   assert.equal(mediaTypeLabel('unknown'), 'медиа');

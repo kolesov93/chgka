@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { BLACKBOX_IMAGE_SOURCE } from '../blackbox';
+import { authorMediaCaption, authorMediaSource, isAuthorMedia } from '../authorMedia';
 import { inlineImagePreviews } from '../inlineMedia';
 import { mediaUrl, socket } from '../socket';
 import {
@@ -33,6 +34,11 @@ function previewFromResponse(response, fallbackSection) {
     section: response.section || fallbackSection,
     name: response.name,
     media_ref: response.media_ref,
+    presentation_kind: response.presentation_kind,
+    author_name: response.author_name,
+    author_city: response.author_city,
+    author_asset: response.author_asset,
+    has_photo: response.has_photo,
   };
 }
 
@@ -46,9 +52,16 @@ function previewFromSharedMedia(media) {
     media_id: media.media_id,
     type: media.type,
     url: mediaUrl(media.media_id),
-    section: 'current',
-    name: fallbackNames[media.type] || 'Текущее медиа',
+    section: isAuthorMedia(media) ? 'author' : 'current',
+    name: isAuthorMedia(media)
+      ? media.author_name || 'Автор вопроса'
+      : fallbackNames[media.type] || 'Текущее медиа',
     media_ref: null,
+    presentation_kind: media.presentation_kind,
+    author_name: media.author_name,
+    author_city: media.author_city,
+    author_asset: media.author_asset,
+    has_photo: media.has_photo,
   };
 }
 
@@ -64,17 +77,18 @@ export function AdminQuestionPanel({
   const [resolvedImages, setResolvedImages] = useState({});
   const resolutionGenerationRef = useRef(0);
   const sharedMediaIdRef = useRef(sharedMedia?.media_id);
-  const previousSharedMediaIdRef = useRef(sharedMedia?.media_id);
+  const previousSharedMediaRef = useRef(sharedMedia || null);
   sharedMediaIdRef.current = sharedMedia?.media_id;
 
   useEffect(() => {
-    const previousId = previousSharedMediaIdRef.current;
+    const previous = previousSharedMediaRef.current;
+    const previousId = previous?.media_id;
     const currentId = sharedMedia?.media_id;
-    previousSharedMediaIdRef.current = currentId;
+    previousSharedMediaRef.current = sharedMedia || null;
     if (!previousId || previousId === currentId) return;
 
     setMediaPreview((current) => (
-      current?.media_id === previousId ? null : current
+      current?.media_id === previousId && !isAuthorMedia(current) ? null : current
     ));
     setResolvedImages((current) => Object.fromEntries(
       Object.entries(current).filter(([, resolved]) => (
@@ -136,6 +150,23 @@ export function AdminQuestionPanel({
       }
     };
   }, [adminQuestion]);
+
+  const authorPreview = adminQuestion?.author_media?.media_id
+    ? previewFromResponse(adminQuestion.author_media, 'author')
+    : null;
+  const authorContextKey = [
+    adminQuestion?.sector,
+    adminQuestion?.kind,
+    adminQuestion?.part_index ?? 0,
+  ].join(':');
+
+  useEffect(() => {
+    if (phase === 'QUESTION_READING' && authorPreview) {
+      setMediaPreview(authorPreview);
+      return;
+    }
+    setMediaPreview((current) => (isAuthorMedia(current) ? null : current));
+  }, [authorContextKey, adminQuestion?.author_media?.media_id, phase]);
 
   if (!adminQuestion) return null;
 
@@ -388,8 +419,23 @@ export function AdminQuestionPanel({
       <div className="mt-4 rounded-lg border border-slate-700 bg-slate-950/30 p-3">
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="text-xs text-slate-400 uppercase font-bold tracking-widest">Медиа</div>
-          <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">
-            Показывается игрокам: {sharedMedia ? 'да' : 'нет'}
+          <div className="flex items-center gap-2">
+            {phase === 'QUESTION_READING' && authorPreview && (
+              <button
+                type="button"
+                onClick={() => setMediaPreview(authorPreview)}
+                className={`rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${
+                  isAuthorMedia(mediaPreview)
+                    ? 'bg-violet-700 text-white'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                Автор
+              </button>
+            )}
+            <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">
+              Показывается игрокам: {sharedMedia ? 'да' : 'нет'}
+            </div>
           </div>
         </div>
 
@@ -402,13 +448,20 @@ export function AdminQuestionPanel({
               <span className="text-slate-200">{mediaSectionLabel(mediaPreview.section)}</span>
             </div>
             {mediaPreview.type === 'image' && (
-              <div className="rounded border border-slate-700 bg-slate-900/40 p-2 flex justify-center">
+              <figure className="rounded border border-slate-700 bg-slate-900/40 p-2 text-center">
                 <img
-                  src={mediaPreview.url}
+                  src={isAuthorMedia(mediaPreview)
+                    ? authorMediaSource(mediaPreview, mediaPreview.url)
+                    : mediaPreview.url}
                   alt={mediaPreview.name}
-                  className="max-h-[320px] w-auto object-contain"
+                  className="mx-auto max-h-[320px] w-auto object-contain"
                 />
-              </div>
+                {authorMediaCaption(mediaPreview) && (
+                  <figcaption className="mt-2 rounded bg-slate-800 px-2 py-2 text-base font-bold text-white">
+                    {authorMediaCaption(mediaPreview)}
+                  </figcaption>
+                )}
+              </figure>
             )}
             {(mediaPreview.type === 'audio' || mediaPreview.type === 'video') && (
               <div className="rounded border border-slate-700 bg-slate-900/40 p-3">
@@ -443,10 +496,10 @@ export function AdminQuestionPanel({
                 className="flex-1 bg-blue-700 hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40 text-white py-2 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
               >
                 {previewIsShared
-                  ? 'Показано игрокам'
+                  ? isAuthorMedia(mediaPreview) ? 'Автор показан' : 'Показано игрокам'
                   : blackboxActive
                     ? 'Сначала завершите чёрный ящик'
-                    : 'Показать игрокам'}
+                    : isAuthorMedia(mediaPreview) ? 'Показать автора' : 'Показать игрокам'}
               </button>
               {(mediaPreview.type === 'audio' || mediaPreview.type === 'video') && previewIsShared && (
                 <>
@@ -478,12 +531,14 @@ export function AdminQuestionPanel({
                   Следующее медиа
                 </button>
               )}
-              <button
-                onClick={() => socket.emit('admin_hide_media')}
-                className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 py-2 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
-              >
-                Скрыть
-              </button>
+              {sharedMedia && (
+                <button
+                  onClick={() => socket.emit('admin_hide_media')}
+                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 py-2 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
+                >
+                  Скрыть
+                </button>
+              )}
               <button
                 onClick={() => setMediaPreview(null)}
                 className="bg-slate-800 hover:bg-slate-700 text-slate-400 py-2 px-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"

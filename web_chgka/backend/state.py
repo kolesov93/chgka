@@ -117,7 +117,7 @@ class RoundState(TypedDict, total=False):
     strategy_request: StrategyRequestState
 
 
-class SharedMediaState(TypedDict):
+class _RequiredSharedMediaState(TypedDict):
     """Media currently shown to all clients instead of the game table."""
 
     type: SharedMediaType
@@ -132,7 +132,17 @@ class SharedMediaState(TypedDict):
     has_next: bool
 
 
-class PublicSharedMediaState(TypedDict):
+class SharedMediaState(_RequiredSharedMediaState, total=False):
+    """Shared media plus optional author-card presentation metadata."""
+
+    presentation_kind: Literal["author"]
+    author_name: str
+    author_city: Optional[str]
+    author_asset: Literal["photo", "fallback", "sector13"]
+    has_photo: bool
+
+
+class _RequiredPublicSharedMediaState(TypedDict):
     """Public shared media without admin-only identity context."""
 
     type: SharedMediaType
@@ -143,6 +153,16 @@ class PublicSharedMediaState(TypedDict):
     server_now_ms: int
     playback_generation: int
     has_next: bool
+
+
+class PublicSharedMediaState(_RequiredPublicSharedMediaState, total=False):
+    """Public shared media plus safe optional author-card metadata."""
+
+    presentation_kind: Literal["author"]
+    author_name: str
+    author_city: Optional[str]
+    author_asset: Literal["photo", "fallback", "sector13"]
+    has_photo: bool
 
 
 class GameProgressState(TypedDict):
@@ -434,6 +454,16 @@ def public_game_state(
             "playback_generation": int(internal_media.get("playback_generation", 0)),
             "has_next": bool(internal_media.get("has_next", False)),
         }
+        if internal_media.get("presentation_kind") == "author":
+            shared_media.update(
+                {
+                    "presentation_kind": "author",
+                    "author_name": internal_media.get("author_name"),
+                    "author_city": internal_media.get("author_city"),
+                    "author_asset": internal_media.get("author_asset"),
+                    "has_photo": bool(internal_media.get("has_photo")),
+                }
+            )
     internal_blackbox = state["presentation"].get("blackbox")
     blackbox: Optional[PublicBlackboxState] = None
     if internal_blackbox is not None:

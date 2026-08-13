@@ -5,8 +5,10 @@ import pytest
 from media import (
     MediaPlaybackError,
     complete_shared_media,
+    create_author_media_token_info,
     create_media_token_info,
     create_shared_media,
+    current_author_media,
     current_media_catalog,
     media_token_is_current,
     next_media_in_section,
@@ -65,6 +67,90 @@ def test_sample_question_03_exposes_one_question_audio_descriptor():
     assert descriptor.scope == "round"
     assert descriptor.order == 0
     assert descriptor.name == "melody.mp3"
+
+
+def test_normal_author_descriptor_uses_pack_photo_and_optional_city():
+    pack = parse_question_pack(SAMPLE_PACK)
+    state = _active_state(sector=3)
+
+    author = current_author_media(pack, state)
+
+    assert author is not None
+    assert author.media_ref == f"author:{pack.get_by_sector(3).id}"
+    assert author.path == pack.get_by_sector(3).author_photo
+    assert author.scope == "round"
+    assert author.name == "Андрей Козлов"
+    assert author.city == "Казань"
+    assert author.asset == "photo"
+    assert author.media_ref not in current_media_catalog(pack, state)
+    assert author.public_descriptor() == {
+        "media_ref": f"author:{pack.get_by_sector(3).id}",
+        "type": "image",
+        "section": "author",
+        "name": "Андрей Козлов",
+        "presentation_kind": "author",
+        "author_name": "Андрей Козлов",
+        "author_city": "Казань",
+        "author_asset": "photo",
+        "has_photo": True,
+    }
+
+
+def test_blitz_author_is_bound_to_exact_part_and_missing_photo_uses_fallback():
+    pack = parse_question_pack(SAMPLE_PACK)
+    state = _active_state(sector=4, kind="blitz", part_index=0, spin_id=8)
+
+    first = current_author_media(pack, state)
+    token = create_author_media_token_info(first, state, expires_at=200.0)
+
+    assert first is not None
+    assert first.scope == "part"
+    assert first.asset == "photo"
+    assert media_token_is_current(token, pack, state, now_ts=100.0)
+
+    state["game"]["round"]["part_index"] = 1
+    second = current_author_media(pack, state)
+
+    assert second is not None
+    assert second.media_ref != first.media_ref
+    assert second.scope == "part"
+    assert second.name == "Ольга Петрова"
+    assert second.path is None
+    assert second.asset == "fallback"
+    assert not media_token_is_current(token, pack, state, now_ts=100.0)
+
+
+def test_author_token_rejects_expiry_and_new_spin():
+    pack = parse_question_pack(SAMPLE_PACK)
+    state = _active_state(sector=3, spin_id=4)
+    author = current_author_media(pack, state)
+    token = create_author_media_token_info(author, state, expires_at=200.0)
+
+    assert media_token_is_current(token, pack, state, now_ts=199.0)
+    assert not media_token_is_current(token, pack, state, now_ts=200.0)
+    assert media_token_is_current(
+        token,
+        pack,
+        state,
+        now_ts=200.0,
+        allow_expired=True,
+    )
+
+    state["wheel"]["spin_id"] = 5
+    assert not media_token_is_current(token, pack, state, now_ts=100.0)
+
+
+def test_sector_thirteen_uses_static_special_asset():
+    pack = parse_question_pack(SAMPLE_PACK)
+    state = _active_state(sector=13)
+
+    author = current_author_media(pack, state)
+
+    assert author is not None
+    assert author.path is None
+    assert author.name == "13-й сектор"
+    assert author.city is None
+    assert author.asset == "sector13"
 
 
 def test_blitz_catalog_contains_intro_and_current_part_only(tmp_path):
@@ -130,6 +216,30 @@ def test_token_rejects_expiry_and_reused_round_after_new_spin():
 
     state["wheel"]["spin_id"] = 5
     assert not media_token_is_current(token, pack, state, now_ts=100.0)
+
+
+def test_shared_author_keeps_only_presentation_metadata_and_has_no_next_item():
+    shared = create_shared_media(
+        "author-token",
+        {
+            "media_ref": "author:question-id",
+            "type": "image",
+            "section": "author",
+            "name": "Елена Орлова",
+            "presentation_kind": "author",
+            "author_name": "Елена Орлова",
+            "author_city": "Минск",
+            "author_asset": "photo",
+            "has_photo": True,
+        },
+    )
+
+    assert shared["presentation_kind"] == "author"
+    assert shared["author_name"] == "Елена Орлова"
+    assert shared["author_city"] == "Минск"
+    assert shared["author_asset"] == "photo"
+    assert shared["has_photo"] is True
+    assert shared["has_next"] is False
 
 
 def test_audio_play_pause_resume_and_stop_use_server_time():

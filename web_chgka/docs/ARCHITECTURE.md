@@ -156,6 +156,10 @@ The parser recognizes images, audio, and video. Each Markdown occurrence receive
 
 Author photos are deliberately separate from managed question media. The flat intro snapshot exposes only the current sector's ordered author cards with sector, slot, name, city, and `has_photo`; filesystem paths remain in `QuestionPack`. `GET /intro/author-photo/{sector}/{slot}` serves only a card of sectors 1–12 while that exact sector slide is current and disables caching. Normal questions have slot 1; blitz variants map slots 1–3 to their nested parts. Missing/failed photos independently use the static generated fallback. The special sector 13 never requests an author photo.
 
+Question-reading author cards reuse the managed presentation boundary without entering the ordinary attachment catalog. On every admin-only `admin_question` emitted in `QUESTION_READING`, the backend pre-resolves one special `presentation_kind: author` token for the exact normal question or current blitz/superblitz part. The token is bound to the round key, spin generation, question UUID, scope, author metadata, optional pack photo and expiry. It is absent outside reading, cannot be selected through `admin_resolve_media`, and is never reachable through `Следующее медиа`.
+
+The host UI privately preselects that token in the existing media panel. `admin_share_media` may publish it only during reading; the public `shared_media` projection carries the opaque token plus safe author name/city/asset flags, never a filesystem path, internal media reference or filename. This makes the card reconnect-safe for players and host. Missing photos render the static fallback, while sector 13 renders the existing static special image without an author caption. Hiding preserves the private token for a same-question re-show, but discussion, early answer, credit-repayment answer, black-box replacement, part/round change and spin invalidation remove or reject public presentation. Ordinary shared question media retains its previous lifecycle.
+
 The managed image/audio/video flow is:
 
 1. `admin_question` sends the admin the current round/part HTML and admin-only media descriptors.

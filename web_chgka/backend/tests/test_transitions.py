@@ -52,6 +52,21 @@ def _shared_image():
     }
 
 
+def _shared_author():
+    return {
+        **_shared_image(),
+        "media_id": "author-token",
+        "media_ref": "author:question-id",
+        "section": "author",
+        "name": "Елена Орлова",
+        "presentation_kind": "author",
+        "author_name": "Елена Орлова",
+        "author_city": None,
+        "author_asset": "photo",
+        "has_photo": True,
+    }
+
+
 def test_start_game_enters_silent_intro_and_music_starts_once_on_command():
     state = create_initial_app_state()
 
@@ -297,6 +312,28 @@ def test_discussion_to_team_answer_flow_sets_timer_and_sound():
     assert state["game"]["phase"] == PHASE_TEAM_ANSWER
     assert state["timer"]["discussion_deadline_ms"] is None
     assert effects.sounds == ("sig1",)
+
+
+def test_start_discussion_hides_author_card_but_preserves_ordinary_media():
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "normal", "sector": 2}
+    state["presentation"]["shared_media"] = _shared_author()
+
+    effects = transition_start_discussion(state, deadline_ms=60_000)
+
+    assert state["presentation"]["shared_media"] is None
+    assert [event.event_type for event in effects.events] == [
+        "author_hidden",
+        "phase_changed",
+    ]
+
+    ordinary = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    ordinary["game"]["round"] = {"kind": "normal", "sector": 2}
+    ordinary["presentation"]["shared_media"] = _shared_image()
+
+    transition_start_discussion(ordinary, deadline_ms=60_000)
+
+    assert ordinary["presentation"]["shared_media"] == _shared_image()
 
 
 def test_normal_respondent_is_selected_only_after_team_answer_and_required_for_score():

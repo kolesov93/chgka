@@ -22,6 +22,26 @@ def _shared_image():
     }
 
 
+def _shared_author():
+    return {
+        "type": "image",
+        "media_id": "author-token",
+        "media_ref": "author:question-id",
+        "section": "author",
+        "name": "Елена Орлова",
+        "playback_state": "stopped",
+        "position_ms": 0,
+        "started_at_ms": None,
+        "playback_generation": 0,
+        "has_next": False,
+        "presentation_kind": "author",
+        "author_name": "Елена Орлова",
+        "author_city": "Минск",
+        "author_asset": "photo",
+        "has_photo": True,
+    }
+
+
 def _intro_authors():
     groups = []
     for sector in range(1, 13):
@@ -239,6 +259,32 @@ def test_public_game_state_flattens_app_state_for_current_frontend():
     assert state["game"]["used_questions"] == [3]
     assert state["game"]["round"]["sector"] == 3
     assert state["game"]["round"]["respondent"]["name"] == "Иван"
+
+
+def test_public_game_state_exposes_safe_author_card_metadata_for_reconnect():
+    state = create_initial_app_state()
+    state["presentation"]["shared_media"] = _shared_author()
+
+    payload = public_game_state(state, now_ms=123_000)
+
+    assert payload["shared_media"] == {
+        "type": "image",
+        "media_id": "author-token",
+        "playback_state": "stopped",
+        "position_ms": 0,
+        "started_at_ms": None,
+        "server_now_ms": 123_000,
+        "playback_generation": 0,
+        "has_next": False,
+        "presentation_kind": "author",
+        "author_name": "Елена Орлова",
+        "author_city": "Минск",
+        "author_asset": "photo",
+        "has_photo": True,
+    }
+    assert "media_ref" not in payload["shared_media"]
+    assert "section" not in payload["shared_media"]
+    assert "name" not in payload["shared_media"]
 
 
 def test_public_game_state_serializes_intro_timing_for_reconnect():

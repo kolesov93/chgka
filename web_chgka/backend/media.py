@@ -36,6 +36,31 @@ class CurrentMedia:
         }
 
 
+@dataclass(frozen=True)
+class CurrentAuthorMedia:
+    """The author card for the exact current question or blitz part."""
+
+    media_ref: str
+    path: Optional[Path]
+    scope: MediaScope
+    name: str
+    city: Optional[str]
+    asset: Literal["photo", "fallback", "sector13"]
+
+    def public_descriptor(self) -> dict:
+        return {
+            "media_ref": self.media_ref,
+            "type": "image",
+            "section": "author",
+            "name": self.name,
+            "presentation_kind": "author",
+            "author_name": self.name,
+            "author_city": self.city,
+            "author_asset": self.asset,
+            "has_photo": self.asset == "photo",
+        }
+
+
 class MediaPlaybackError(Exception):
     """A shared media item cannot perform the requested playback action."""
 
@@ -116,6 +141,50 @@ def current_media_catalog(
     return catalog
 
 
+def current_author_media(
+    pack: Optional[QuestionPack],
+    state: dict,
+) -> Optional[CurrentAuthorMedia]:
+    """Return the author card for the exact active normal question or part."""
+    key = current_round_key(state)
+    if pack is None or key is None:
+        return None
+
+    sector, kind, part_index = key
+    try:
+        question = pack.get_by_sector(sector)
+    except (IndexError, ValueError):
+        return None
+
+    scope: MediaScope = "round"
+    authored_question = question
+    if kind in ("blitz", "superblitz"):
+        if not 0 <= part_index < len(question.parts):
+            return None
+        authored_question = question.parts[part_index]
+        scope = "part"
+
+    if sector == 13:
+        return CurrentAuthorMedia(
+            media_ref=f"author:{authored_question.id}",
+            path=None,
+            scope=scope,
+            name="13-й сектор",
+            city=None,
+            asset="sector13",
+        )
+
+    photo = authored_question.author_photo
+    return CurrentAuthorMedia(
+        media_ref=f"author:{authored_question.id}",
+        path=photo,
+        scope=scope,
+        name=authored_question.author or "Автор вопроса",
+        city=authored_question.city,
+        asset="photo" if photo is not None else "fallback",
+    )
+
+
 def next_media_in_section(
     catalog: dict[str, CurrentMedia],
     current_ref: str,
@@ -156,6 +225,32 @@ def create_media_token_info(
     }
 
 
+def create_author_media_token_info(
+    author: CurrentAuthorMedia,
+    state: dict,
+    *,
+    expires_at: float,
+) -> dict:
+    """Create a round/part-bound token for a private author preview."""
+    return {
+        "path": str(author.path) if author.path is not None else None,
+        "type": "image",
+        "round_key": current_round_key(state),
+        "spin_id": state["wheel"].get("spin_id", 0),
+        "scope": author.scope,
+        "section": "author",
+        "source_section": "author",
+        "media_ref": author.media_ref,
+        "name": author.name,
+        "presentation_kind": "author",
+        "author_name": author.name,
+        "author_city": author.city,
+        "author_asset": author.asset,
+        "has_photo": author.asset == "photo",
+        "expires_at": expires_at,
+    }
+
+
 def media_token_is_current(
     info: dict,
     pack: Optional[QuestionPack],
@@ -171,6 +266,28 @@ def media_token_is_current(
         return False
     if info.get("spin_id") != state["wheel"].get("spin_id", 0):
         return False
+
+    if info.get("presentation_kind") == "author":
+        author = current_author_media(pack, state)
+        if author is None:
+            return False
+        return all(
+            (
+                info.get("path") == (
+                    str(author.path) if author.path is not None else None
+                ),
+                info.get("type") == "image",
+                info.get("scope") == author.scope,
+                info.get("section") == "author",
+                info.get("source_section") == "author",
+                info.get("media_ref") == author.media_ref,
+                info.get("name") == author.name,
+                info.get("author_name") == author.name,
+                info.get("author_city") == author.city,
+                info.get("author_asset") == author.asset,
+                info.get("has_photo") == (author.asset == "photo"),
+            )
+        )
 
     media_ref = info.get("media_ref")
     media = current_media_catalog(pack, state).get(media_ref)
@@ -190,7 +307,7 @@ def media_token_is_current(
 
 
 def create_shared_media(media_id: str, info: dict, *, has_next: bool = False) -> dict:
-    return {
+    shared = {
         "media_id": media_id,
         "media_ref": info["media_ref"],
         "type": info["type"],
@@ -202,6 +319,17 @@ def create_shared_media(media_id: str, info: dict, *, has_next: bool = False) ->
         "playback_generation": 0,
         "has_next": has_next,
     }
+    if info.get("presentation_kind") == "author":
+        shared.update(
+            {
+                "presentation_kind": "author",
+                "author_name": info.get("author_name"),
+                "author_city": info.get("author_city"),
+                "author_asset": info.get("author_asset"),
+                "has_photo": bool(info.get("has_photo")),
+            }
+        )
+    return shared
 
 
 def _require_playable(shared_media: Optional[dict]) -> dict:

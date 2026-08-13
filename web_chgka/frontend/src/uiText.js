@@ -16,6 +16,7 @@ const QUESTION_KIND_LABELS = {
 };
 
 const MEDIA_SECTION_LABELS = {
+  author: 'автор вопроса',
   intro: 'вступление',
   question: 'вопрос',
   answer: 'ответ',

@@ -37,8 +37,10 @@ from live_ops import (
 from media import (
     MediaPlaybackError,
     complete_shared_media,
+    create_author_media_token_info,
     create_media_token_info,
     create_shared_media,
+    current_author_media,
     current_media_catalog as build_current_media_catalog,
     media_token_is_current,
     next_media_in_section,
@@ -583,6 +585,8 @@ async def _emit_current_question_to_admins() -> None:
         media.public_descriptor()
         for media in _get_current_media_catalog().values()
     ]
+    if app_state["game"]["phase"] == PHASE_QUESTION_READING:
+        payload["author_media"] = _store_current_author_media_token()
 
     for p in players_list:
         if _admin_record_is_authorized(p):
@@ -1588,9 +1592,40 @@ def _store_current_media_token(media) -> tuple[str, dict]:
     return media_id, info
 
 
+def _store_current_author_media_token() -> Optional[dict]:
+    author = current_author_media(loaded_pack, app_state)
+    if author is None:
+        return None
+
+    _cleanup_expired_media_tokens()
+    for media_id, info in media_tokens.items():
+        if (
+            info.get("presentation_kind") == "author"
+            and _media_token_is_current(info)
+        ):
+            return {
+                "media_id": media_id,
+                **author.public_descriptor(),
+            }
+
+    media_id = secrets.token_urlsafe(16)
+    info = create_author_media_token_info(
+        author,
+        app_state,
+        expires_at=time.time() + MEDIA_TOKEN_TTL_SECONDS,
+    )
+    media_tokens[media_id] = info
+    return {
+        "media_id": media_id,
+        **author.public_descriptor(),
+    }
+
+
 def _create_current_shared_media(media_id: str, info: dict) -> dict:
-    catalog = _get_current_media_catalog()
-    has_next = next_media_in_section(catalog, info["media_ref"]) is not None
+    has_next = False
+    if info.get("presentation_kind") != "author":
+        catalog = _get_current_media_catalog()
+        has_next = next_media_in_section(catalog, info["media_ref"]) is not None
     return create_shared_media(media_id, info, has_next=has_next)
 
 
@@ -1671,19 +1706,43 @@ async def admin_share_media(sid, data):
         )
         return {"ok": False, "error": "media_not_current"}
 
+    is_author = info.get("presentation_kind") == "author"
+    if is_author and phase != PHASE_QUESTION_READING:
+        return {
+            "ok": False,
+            "error": "author_bad_phase",
+            "message": "Автора можно показывать только во время чтения вопроса",
+        }
+
     previous = app_state["presentation"].get("shared_media")
     previous_id = previous.get("media_id") if previous else None
     app_state["presentation"]["shared_media"] = _create_current_shared_media(media_id, info)
     if previous_id and previous_id != media_id:
-        media_tokens.pop(previous_id, None)
+        previous_info = media_tokens.get(previous_id)
+        if previous_info is None or previous_info.get("presentation_kind") != "author":
+            media_tokens.pop(previous_id, None)
+    display_name = media_display_name(info)
     add_log(
-        f"Медиа показано игрокам: {media_display_name(info)}",
-        event_type="media_shared",
+        (
+            f"Автор показан игрокам: {display_name}"
+            if is_author
+            else f"Медиа показано игрокам: {display_name}"
+        ),
+        event_type="author_shown" if is_author else "media_shared",
         payload={
             "media_ref": info.get("media_ref"),
             "media_type": info.get("type"),
             "name": info.get("name"),
             "section": info.get("section"),
+            **(
+                {
+                    "author": info.get("author_name"),
+                    "city": info.get("author_city"),
+                    "asset": info.get("author_asset"),
+                }
+                if is_author
+                else {}
+            ),
         },
     )
     await emit_state_update()
@@ -1885,9 +1944,15 @@ async def admin_hide_media(sid, data=None):
         return {"ok": False, "error": "not_admin"}
     shared_media = app_state["presentation"].get("shared_media")
     app_state["presentation"]["shared_media"] = None
-    if shared_media:
+    is_author = bool(
+        shared_media and shared_media.get("presentation_kind") == "author"
+    )
+    if shared_media and not is_author:
         media_tokens.pop(shared_media.get("media_id"), None)
-    add_log("Медиа скрыто", event_type="media_hidden")
+    add_log(
+        "Автор скрыт" if is_author else "Медиа скрыто",
+        event_type="author_hidden" if is_author else "media_hidden",
+    )
     await emit_state_update()
     return {"ok": True}
 
