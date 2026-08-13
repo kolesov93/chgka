@@ -14,6 +14,7 @@
 - The captain is one physical participant selected by the host. A shared player login necessarily shares captain controls with the whole participant group on that browser.
 - Detailed state transitions, timer segmentation, race/reconnect/Live Ops handling, typed journal events, automated coverage and the 13-step acceptance smoke are recorded in `docs/tasks/0023-earned-minutes-credit.md`.
 - Task 0023 implementation commit: `4034ef4` (`Implement earned minutes and credit mechanics`).
+- Smoke-feedback follow-up commit: `079339d` (`Refine captain requests and player layout`).
 - The implementation adds public captain/team/credit state, generation-guarded base/earned/credit timer segments, host/captain Socket.IO actions, normal and blitz/superblitz repayment rules, roster/player/Live Ops controls, reconnect-aware countdowns, and question-context journal events.
 - Smoke feedback changed the interaction point without changing the game resources: early answer is available during reading and through the asymmetric base window; captain early/credit actions are now reconnect-safe requests resolved by a host modal; earned/credit minutes start from `TEAM_ANSWER`, so the host timer is directional rather than an eligibility gate. The desktop player stage now uses a height-constrained table plus right information rail, with a one-column mobile fallback.
 - Local verification passes: 231 backend tests with warnings treated as errors, all 13 frontend tests, the production build, sample-pack validation, and native Compose configuration validation.
