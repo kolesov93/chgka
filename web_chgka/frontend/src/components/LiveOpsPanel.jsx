@@ -72,16 +72,11 @@ export function LiveOpsPanel({ gameState, addNotification }) {
       warn('Счёт должен быть целым числом от 0 до 6');
       return;
     }
-    if (!confirm(`Изменить счёт ${score.znatoki}:${score.tv} → ${nextZnatoki}:${nextTv}?`)) {
-      return;
-    }
     emitRecovery('admin_set_score', { znatoki: nextZnatoki, tv: nextTv });
   };
 
   const toggleSector = (sectorId) => {
     const isUsed = usedQuestions.includes(sectorId);
-    const action = isUsed ? 'вернуть в игру' : 'пометить сыгранным';
-    if (!confirm(`Сектор ${sectorId}: ${action}?`)) return;
     emitRecovery('admin_set_sector_used', { sector: sectorId, used: !isUsed });
   };
 
@@ -95,25 +90,18 @@ export function LiveOpsPanel({ gameState, addNotification }) {
       warn('Не удалось определить сектор или часть блица');
       return;
     }
-    const partLabel = selectedIsBlitz ? `, часть ${partNumber}/3` : '';
-    if (!confirm(`Открыть сектор ${payload.sector}${partLabel} без вращения?`)) return;
     emitRecovery('admin_open_round', payload);
   };
 
   const forcePhase = (nextPhase) => {
-    if (!confirm(`Принудительно перейти «${phaseLabel(phase)}» → «${phaseLabel(nextPhase)}»?`)) return;
     emitRecovery('admin_force_phase', { phase: nextPhase });
   };
 
   const resetToIntro = () => {
-    if (!confirm('Полностью сбросить счёт, сыгранные сектора и начать интро заново?')) {
-      return;
-    }
     emitRecovery('admin_reset_to_intro');
   };
 
   const cancelSpin = () => {
-    if (!confirm(`Остановить зависшее вращение и вернуться в фазу «${phaseLabel('PRE_ROUND')}»?`)) return;
     emitRecovery('admin_cancel_spin');
   };
 
@@ -136,7 +124,6 @@ export function LiveOpsPanel({ gameState, addNotification }) {
       warn('Банк минут должен быть неотрицательным целым числом');
       return;
     }
-    if (!confirm('Скорректировать банк дополнительных минут и состояние кредита?')) return;
     emitRecovery('admin_set_team_resources', {
       earned_minutes: earned,
       credit_state: creditState,
@@ -237,11 +224,7 @@ export function LiveOpsPanel({ gameState, addNotification }) {
               <button
                 type="button"
                 disabled={!gameState?.team?.captain}
-                onClick={() => {
-                  if (confirm('Снять текущего капитана?')) {
-                    emitRecovery('admin_clear_captain');
-                  }
-                }}
+                onClick={() => emitRecovery('admin_clear_captain')}
                 className={`${buttonClass} bg-red-800 text-white hover:bg-red-700`}
               >
                 Снять

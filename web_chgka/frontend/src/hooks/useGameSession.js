@@ -6,6 +6,7 @@ import {
   PLAYER_TOKEN_KEY,
   getAdminExpiryMs,
   getExpiredAdminSession,
+  getKickedPlayerNotice,
   getSessionRestorePayload,
   saveAdminToken,
 } from '../session';
@@ -231,8 +232,8 @@ export function useGameSession(entrypoint) {
       setMyGroupId(null);
       setHasJoined(false);
       setIsPending(false);
+      setSessionNotice(getKickedPlayerNotice(data));
 
-      alert(data.message || 'Вы были отключены');
       socket.disconnect();
       socket.connect();
     }
@@ -285,8 +286,6 @@ export function useGameSession(entrypoint) {
   }, [addNotification, entrypoint, expireAdminSession]);
 
   const logout = useCallback(() => {
-    if (!confirm('Вы действительно хотите выйти?')) return;
-
     socket.emit('leave_game');
     localStorage.removeItem(ADMIN_TOKEN_KEY);
     localStorage.removeItem(PLAYER_TOKEN_KEY);

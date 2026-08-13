@@ -1,6 +1,6 @@
 # Task 0026: отказ от браузерных диалогов
 
-Статус: в работе.
+Статус: реализация готова, ожидается ручной smoke.
 
 Branch: `task/remove-browser-dialogs`.
 
@@ -28,6 +28,16 @@ Branch: `task/remove-browser-dialogs`.
 - Универсальная дизайн-система модалок, undo/toast для каждого действия и изменение backend-правил.
 - Изменение модалки запросов капитана.
 - Новые подтверждения для прямых destructive actions.
+
+## Реализация и локальная проверка
+
+- Удалены все 19 runtime-вызовов `confirm` и единственный runtime-вызов `alert`; `prompt` и `beforeunload` в приложении отсутствовали.
+- Прямые действия продолжают отправлять прежние Socket.IO events с прежними payloads. Backend и игровые transitions не менялись.
+- Для раннего показа media из ответа добавлен локальный pending guard по точному `media_id`: предупреждение находится в той же медиаплашке, отмена не отправляет событие, а смена preview, вопроса или фазы удаляет устаревшее подтверждение.
+- Событие `kicked` теперь очищает player-сессию и записывает серверный текст в существующий `sessionNotice`; при пустом сообщении используется fallback с термином «ведущий». Успешный повторный вход очищает notice.
+- Structural frontend-test обходит runtime `.js/.jsx` и запрещает возвращать нативные `confirm`, `alert` или `prompt`; отдельные unit-тесты покрывают media guard и kicked notice.
+- Локально проходят все 15 frontend test-файлов, production build, `git diff --check` и отдельный `rg`-аудит runtime-кода.
+- В in-app browser проверены прямые start/skip/forced-sector/Live Ops/player-logout без JS-dialog, визуальный warning media из ответа, cancel/stale-preview/confirmed-share и возврат отключённого игрока на login с очищаемым notice. Тестовая игра возвращена в intro, тестовые вкладки закрыты.
 
 ## Ручной smoke
 
