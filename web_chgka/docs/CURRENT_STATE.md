@@ -1,17 +1,17 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-13
-- Latest completed task: `docs/tasks/0027-configurable-base-path.md`
-- Active task: `docs/tasks/0028-docker-production-deployment.md`.
+- Latest completed task: `docs/tasks/0028-docker-production-deployment.md`
+- Active task: none.
 - Branch: `codex/docker-production-deployment`
-- Status: production release `3c09e41d3df3` is live at `https://example.com/chgka/` with the sample pack; automated infrastructure/browser checks pass and focused authenticated manual smoke remains.
+- Status: production release `3c09e41d3df3` is live at `https://example.com/chgka/` with the sample pack; automated checks and the authenticated laptop/phone smoke pass. The accepted task is ready to merge into `web`.
 
 ## Repository checkpoint
 
 - Task 0028 planning commit is `4c66426`, production stack commit is `f14d24a`, and the VPS-discovered edge-network fix is `3c09e41`.
 - Docker Engine/Compose are installed on the VPS. The production containers are healthy behind host Nginx; only `127.0.0.1:18080` is published and backend has no host port.
 - Public HTTPS routes, WSS `101`, exact CORS, wrong-origin rejection, static assets, SPA entrypoints, container hardening, sample-pack validation, SQLite persistence/backup, daily cron backup and unchanged legacy-route status codes are verified.
-- The deployment currently uses the repository sample pack. The exact six-step production browser smoke is in task 0028; after acceptance, close the task, replace the sample pack only through the documented validator/deploy flow, merge into `web`, push and confirm CI.
+- The deployment currently uses the repository sample pack. Replace it only through the documented validator/deploy flow. The next repository step is merging task 0028 into `web`, pushing `web` and confirming merged-branch CI.
 
 - Task 0027 starts from synchronized `web` commit `a085633` on `codex/configurable-base-path`; planning commit is `cef8262`, implementation commit is `25583a7`.
 - Task 0027 closure commit is `8c5e169`; merge commit into `web` is `434ba1f`.
