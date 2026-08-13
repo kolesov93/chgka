@@ -13,6 +13,7 @@
 - Accepted product choices: captain-driven strategic actions with host fallbacks; captain early-answer window of 5 seconds versus the full base minute for the host; sequential spending of multiple earned minutes; exact `X:5` single-use credit; voluntary future repayment forced at `5:5`; television-style blitz/superblitz restrictions.
 - The captain is one physical participant selected by the host. A shared player login necessarily shares captain controls with the whole participant group on that browser.
 - Detailed state transitions, timer segmentation, race/reconnect/Live Ops handling, typed journal events, automated coverage and the 12-step acceptance smoke are recorded in `docs/tasks/0023-earned-minutes-credit.md`.
+- Task 0023 implementation commit: `4034ef4` (`Implement earned minutes and credit mechanics`).
 - The implementation adds public captain/team/credit state, generation-guarded base/earned/credit timer segments, host/captain Socket.IO actions, normal and blitz/superblitz repayment rules, roster/player/Live Ops controls, reconnect-aware countdowns, and question-context journal events.
 - Local verification passes: 228 backend tests with warnings treated as errors, all 13 frontend tests, the production build, sample-pack validation, and native Compose configuration validation.
 - Next continuation point: pass the exact 12-step smoke in the task file, publish the task branch for CI if desired, then close and merge task 0023 into `web`.
