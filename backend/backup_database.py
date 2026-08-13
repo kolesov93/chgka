@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sqlite3
@@ -28,11 +29,11 @@ def create_backup(source: Path, destination_dir: Path, *, now: datetime) -> Path
     if destination.exists():
         raise RuntimeError(f"Backup already exists: {destination}")
 
-    with sqlite3.connect(source) as source_connection:
-        with sqlite3.connect(destination) as destination_connection:
+    with closing(sqlite3.connect(source)) as source_connection:
+        with closing(sqlite3.connect(destination)) as destination_connection:
             source_connection.backup(destination_connection)
 
-    with sqlite3.connect(destination) as backup_connection:
+    with closing(sqlite3.connect(destination)) as backup_connection:
         result = backup_connection.execute("PRAGMA quick_check").fetchone()
     if result != ("ok",):
         destination.unlink(missing_ok=True)
