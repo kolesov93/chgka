@@ -38,6 +38,7 @@
 - Roadmap item 24 records a separate future `Завершить встречу` flow that must invalidate every host/player session and return all clients to their route-specific login forms.
 - Task 0025 starts from `3245804` on `task/author-media-presentation`. It reuses the managed-media panel/presentation for an independently validated author token, with private preselection, explicit host show, automatic hide on leaving reading, per-part blitz authors and static sector 13; exact scope and smoke are in `docs/tasks/0025-author-media-presentation.md`.
 - Task 0025 planning commit: `0026204` (`Plan author media presentation task`).
+- Task 0025 implementation commit: `e47b7ce` (`Implement author media presentation`).
 - The implementation adds an admin-only pre-resolved author token, exact round/part/spin/UUID validation, reconnect-safe safe public metadata, pack/fallback/sector-13 rendering, private re-selection and transition-level auto-hide without changing ordinary media sequencing.
 - Local verification passes: 260 backend tests, all 14 frontend test files, the production build, `git diff --check`, and native Compose configuration validation. In-app browser verification passed for normal photo/city, explicit share, player reload, hide/re-show, inline-media switching, discussion/early-answer cleanup, blitz fallback and sector 13.
 - Next continuation point: user runs the exact smoke in `docs/tasks/0025-author-media-presentation.md`; after acceptance, close the task, merge locally into `web`, and let the user push `web`.
