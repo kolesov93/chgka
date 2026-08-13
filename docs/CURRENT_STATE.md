@@ -3,12 +3,12 @@
 - Snapshot date: 2026-08-13
 - Latest completed task: `docs/tasks/0029-promote-web-to-root.md`
 - Active task: none.
-- Branch: `task/promote-web-to-root`
-- Status: task 0029 is complete and ready to merge into `web`, then `main`. The final legacy tree is preserved by annotated tag `legacy-pyglet-final`; the web application is the only tracked root product and all local verification is green.
+- Branch: `main`
+- Status: task 0029 is accepted and merged: task merge into `web` is `341fb48`, and replacement merge into `main` is `7b3366c`. The web application is the only tracked root product; `main` and annotated tag `legacy-pyglet-final` await the user's push and main-branch CI.
 
 ## Repository checkpoint
 
-- Task 0029 implementation commit is `ff4305c`. The repository root now contains the web application; CI, documentation and release archives use root paths. The legacy Pyglet/VLC tree remains reachable through annotated tag `legacy-pyglet-final` at `970ebc9`.
+- Task 0029 implementation commit is `ff4305c`, closure commit is `69fddde`, merge into `web` is `341fb48`, and replacement merge into `main` is `7b3366c`. The repository root now contains the web application; CI, documentation and release archives use root paths. The legacy Pyglet/VLC tree remains reachable through annotated tag `legacy-pyglet-final` at `970ebc9`.
 - Untracked legacy data was moved without deletion to `/home/kolesov93/Programming/chgka2-legacy-local-files-20260813/`. A checksum-verified copy of the Docker-owned local SQLite is stored there as `web-runtime-data`; its original remains under the active workspace mount until the user removes it with `sudo` after this task.
 - Task 0029 verification passes: 264 backend tests with warnings-as-errors, sample-pack validation, 72 frontend tests, root and `/chgka/` builds, npm audit with zero vulnerabilities, YAML parsing, real development/production Compose validation on the VPS, tracked-tree assertions and release-archive assertions. `nanoid` was compatibly updated from `3.3.17` to `3.3.18` in the lockfile after a new advisory appeared.
 
@@ -474,9 +474,9 @@ During task 0029, untracked legacy files were moved without deletion to `/home/k
 
 ## Recommended continuation
 
-1. Finish task 0029, merge it into `web`, then merge `web` into `main`.
-2. Push `main` and annotated tag `legacy-pyglet-final`; confirm CHGKA CI on `main`, then make `main` the only working/default product branch.
-3. Remove merged local/remote `web` and task branches only after the user confirms GitHub state. Production remains intentionally stopped until the user starts it.
+1. Push `main` and annotated tag `legacy-pyglet-final`; confirm CHGKA CI on `main` and that GitHub's default branch is `main`.
+2. Remove merged local/remote `web` and task branches only after the user confirms GitHub state.
+3. Production remains intentionally stopped until the user starts it.
 
 ## Resume checklist
 
