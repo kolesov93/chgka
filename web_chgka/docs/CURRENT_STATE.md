@@ -3,17 +3,18 @@
 - Snapshot date: 2026-08-13
 - Latest completed task: `docs/tasks/0027-configurable-base-path.md`
 - Active task: none.
-- Branch: `codex/configurable-base-path`
-- Status: task 0027 implementation and focused user smoke are accepted; local merge into `web` is next. Actual VPS/Nginx deployment remains a separate step.
+- Branch: `web`
+- Status: task 0027 is accepted and merged locally; `web` awaits the user's push and merged-branch GitHub CI. Actual VPS/Nginx deployment remains a separate next step.
 
 ## Repository checkpoint
 
 - Task 0027 starts from synchronized `web` commit `a085633` on `codex/configurable-base-path`; planning commit is `cef8262`, implementation commit is `25583a7`.
+- Task 0027 closure commit is `8c5e169`; merge commit into `web` is `434ba1f`.
 - Vite base is now the single frontend deployment prefix. Root development behavior is unchanged, while a `VITE_BASE_PATH=/chgka/` production build uses prefixed player/admin/history, static assets, media/intro URLs and Socket.IO transport path.
 - Vite preview provides a local prefix-stripping HTTP/WebSocket proxy to the unchanged backend, and development Compose allows its exact `http://localhost:4173` origin. Actual Nginx/TLS/VPS work is intentionally not part of this branch.
 - Local verification passes: clean npm install/audit, all 17 frontend test-files, root and `/chgka/` builds, 260 warnings-as-errors backend tests, prefixed HTTP/static/proxy/Engine.IO checks and `git diff --check`. Native Compose validation remains blocked by the known local Snap `snap-confine` capability defect and is covered by merged-branch CI.
 - Focused seven-step root/`/chgka/` browser smoke passed on 2026-08-13.
-- Next continuation point: merge the accepted branch into `web`, then audit the VPS and existing `example.com` Nginx configuration before deploying.
+- Next continuation point: push `web`, confirm merged-branch CI, then audit the VPS and existing `example.com` Nginx configuration before deploying.
 
 - Before task 0027, `web` and `origin/web` were synchronized at `a085633`.
 - Task 0023 starts from `8dd4aa2` on `task/earned-minutes-credit`.
