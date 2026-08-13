@@ -2,13 +2,13 @@
 
 - Snapshot date: 2026-08-13
 - Latest completed task: `docs/tasks/0023-earned-minutes-credit.md`
-- Active task: none; choose the next roadmap item after publishing task 0023.
-- Branch: `web`
-- Status: task 0023 is merged locally; `web` must be pushed for merged-branch CI.
+- Active task: `docs/tasks/0024-skip-intro.md`.
+- Branch: `task/skip-intro`
+- Status: task 0024 UX and implementation boundaries are agreed; implementation is next.
 
 ## Repository checkpoint
 
-- Local `web` contains task 0023 merge `0e36d43` and is ahead of `origin/web`; only `web` needs to be pushed.
+- `web` and `origin/web` are synchronized at `a1a185a`; GitHub Web CI run 41 passed for this exact commit.
 - Task 0023 starts from `8dd4aa2` on `task/earned-minutes-credit`.
 - Accepted product choices: captain-driven strategic actions with host fallbacks; captain early-answer window of 5 seconds versus the full base minute for the host; sequential spending of multiple earned minutes; exact `X:5` single-use credit; voluntary future repayment forced at `5:5`; television-style blitz/superblitz restrictions.
 - The captain is one physical participant selected by the host. A shared player login necessarily shares captain controls with the whole participant group on that browser.
@@ -24,7 +24,8 @@
 - Local verification passes: 234 backend tests with warnings treated as errors, all 13 frontend tests, the production build, sample-pack validation, and native Compose configuration validation.
 - Browser acceptance: the complete 13-step host/two-player smoke passed on 2026-08-13, including the repayment-request follow-up.
 - Roadmap item 23 records a separate mini-task for a host button that skips the remaining intro author photos and goes directly to `PRE_ROUND`.
-- Next continuation point: push only `web`, verify merged-branch CI, then choose the next roadmap item.
+- Task 0024 starts from `a1a185a` on `task/skip-intro`. It adds one confirmed host-only skip action in the stable intro panel, backed by an atomic expected-slide transition; exact scope and smoke are in `docs/tasks/0024-skip-intro.md`.
+- Next continuation point: implement task 0024, run its automated gates, then pass the exact five-step smoke from the task file.
 
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.
