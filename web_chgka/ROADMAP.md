@@ -16,6 +16,15 @@
 
 ## Приоритеты
 
+### P0: публичный запуск
+
+25. Docker deployment на `https://example.com/chgka/` — В работе (`codex/docker-production-deployment`)
+   - Добавить отдельные production images и Compose, не меняя development Compose.
+   - Оставить host Nginx единственной публичной TLS-точкой; публиковать frontend-контейнер только на loopback, backend держать только во внутренней Docker-сети.
+   - Хранить SQLite, пакет вопросов, секреты и backups вне контейнеров и вне Git.
+   - Подготовить воспроизводимые install/deploy/update/rollback процедуры, health checks и ротацию контейнерных логов.
+   - Развернуть на существующем VPS без изменения `/movieclub`, `/books`, `/podcasts` и корневого QNAP proxy; пройти production smoke с ноутбука и телефона.
+
 ### P2: закрыть заявленные режимы
 
 24. Завершение встречи с выходом всех участников
