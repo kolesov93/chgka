@@ -25,9 +25,28 @@ Branch: `codex/configurable-base-path`.
 - Production Docker images, секреты, резервное копирование SQLite, health checks и автоматический deployment workflow.
 - Изменение backend routes, Socket.IO events или игровых правил.
 
+## Реализация и локальная проверка
+
+- Planning commit: `cef8262` (`Plan configurable base path task`).
+- Implementation commit: `25583a7` (`Support configurable frontend base path`).
+- Добавлены чистые `appPaths.js` и `backendUrls.js`: Vite base определяет entrypoints, статические ресурсы, media/intro URL и Socket.IO transport path; development по-прежнему обращается напрямую к `http://localhost:8000` без префикса.
+- Все прежние абсолютные image/sound URL, включая динамическую картинку счёта, переведены на общий helper. Structural test запрещает возвращать такие абсолютные пути в runtime source.
+- Vite preview снимает внешний base path только с `/socket.io`, `/media` и `/intro`, а CI теперь собирает frontend как для `/`, так и для `/chgka/`.
+- Development Compose разрешает отдельный точный preview-origin `http://localhost:4173`; production allowlist и backend API не менялись.
+- Локально проходят `npm ci`, `npm audit` без уязвимостей, все 17 frontend test-файлов, root build, `/chgka/` build, 260 backend tests с warnings-as-errors и `git diff --check`.
+- HTTP-проверка prefixed preview получила `200 text/html` для `/chgka/`, player/admin/history, `200` для score image и intro sound, backend JSON-ответы через prefixed media/intro proxy и успешный Engine.IO handshake через `/chgka/socket.io/`.
+- Нативный `docker compose config --quiet` в текущем окружении по-прежнему не запускается из-за установленного Snap `snap-confine` без `cap_dac_override`; синтаксис Compose остаётся дополнительным GitHub CI gate.
+- Полный ручной smoke ниже ещё не пройден пользователем.
+
 ## Ручной smoke
 
-Перед smoke запустить backend на `localhost:8000` с обычной development-конфигурацией, затем собрать и запустить prefixed frontend:
+Перед smoke из корня `web_chgka` запустить обновлённый development Compose, чтобы backend получил preview-origin:
+
+```bash
+docker compose up --build
+```
+
+Затем во втором терминале собрать и запустить prefixed frontend:
 
 ```bash
 cd frontend

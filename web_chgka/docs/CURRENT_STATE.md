@@ -4,11 +4,17 @@
 - Latest completed task: `docs/tasks/0026-remove-browser-dialogs.md`
 - Active task: `docs/tasks/0027-configurable-base-path.md`.
 - Branch: `codex/configurable-base-path`
-- Status: task 0027 is implementing configurable root/`/chgka/` frontend deployment paths; actual VPS/Nginx deployment remains a separate step.
+- Status: task 0027 implementation and local verification are complete; focused user smoke and merged-branch CI remain. Actual VPS/Nginx deployment is a separate next step.
 
 ## Repository checkpoint
 
-- `web` and `origin/web` are synchronized at `3245804`; GitHub Web CI run 42 passed for this exact commit.
+- Task 0027 starts from synchronized `web` commit `a085633` on `codex/configurable-base-path`; planning commit is `cef8262`, implementation commit is `25583a7`.
+- Vite base is now the single frontend deployment prefix. Root development behavior is unchanged, while a `VITE_BASE_PATH=/chgka/` production build uses prefixed player/admin/history, static assets, media/intro URLs and Socket.IO transport path.
+- Vite preview provides a local prefix-stripping HTTP/WebSocket proxy to the unchanged backend, and development Compose allows its exact `http://localhost:4173` origin. Actual Nginx/TLS/VPS work is intentionally not part of this branch.
+- Local verification passes: clean npm install/audit, all 17 frontend test-files, root and `/chgka/` builds, 260 warnings-as-errors backend tests, prefixed HTTP/static/proxy/Engine.IO checks and `git diff --check`. Native Compose validation remains blocked by the known local Snap `snap-confine` capability defect and is covered by merged-branch CI.
+- Next continuation point: run the exact seven-step smoke in `docs/tasks/0027-configurable-base-path.md`; after acceptance, close and merge the branch, then audit the VPS and existing `example.com` Nginx configuration before deploying.
+
+- Before task 0027, `web` and `origin/web` were synchronized at `a085633`.
 - Task 0023 starts from `8dd4aa2` on `task/earned-minutes-credit`.
 - Accepted product choices: captain-driven strategic actions with host fallbacks; captain early-answer window of 5 seconds versus the full base minute for the host; sequential spending of multiple earned minutes; exact `X:5` single-use credit; voluntary future repayment forced at `5:5`; television-style blitz/superblitz restrictions.
 - The captain is one physical participant selected by the host. A shared player login necessarily shares captain controls with the whole participant group on that browser.
