@@ -1,6 +1,6 @@
 # Task 0027: настраиваемый URL-префикс
 
-Статус: в работе.
+Статус: завершена и принята.
 
 Branch: `codex/configurable-base-path`.
 
@@ -36,9 +36,11 @@ Branch: `codex/configurable-base-path`.
 - Локально проходят `npm ci`, `npm audit` без уязвимостей, все 17 frontend test-файлов, root build, `/chgka/` build, 260 backend tests с warnings-as-errors и `git diff --check`.
 - HTTP-проверка prefixed preview получила `200 text/html` для `/chgka/`, player/admin/history, `200` для score image и intro sound, backend JSON-ответы через prefixed media/intro proxy и успешный Engine.IO handshake через `/chgka/socket.io/`.
 - Нативный `docker compose config --quiet` в текущем окружении по-прежнему не запускается из-за установленного Snap `snap-confine` без `cap_dac_override`; синтаксис Compose остаётся дополнительным GitHub CI gate.
-- Полный ручной smoke ниже ещё не пройден пользователем.
+- Полный ручной smoke ниже пройден пользователем 2026-08-13.
 
 ## Ручной smoke
+
+Пройден пользователем 2026-08-13.
 
 Перед smoke из корня `web_chgka` запустить обновлённый development Compose, чтобы backend получил preview-origin:
 
