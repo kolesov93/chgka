@@ -2,13 +2,13 @@
 
 - Snapshot date: 2026-08-13
 - Latest completed task: `docs/tasks/0024-skip-intro.md`
-- Active task: none.
-- Branch: `web`
-- Status: task 0024 is implemented, locally verified, browser-accepted and merged into local `web`; the later host-end-game prototype was deliberately discarded before merge.
+- Active task: `docs/tasks/0025-author-media-presentation.md`.
+- Branch: `task/author-media-presentation`
+- Status: task 0024 is published and green; task 0025 is planned and ready for implementation.
 
 ## Repository checkpoint
 
-- Local `web` is at `96cdb9c` and contains task 0024; `origin/web` remains at `a1a185a`, whose GitHub Web CI run 41 passed.
+- `web` and `origin/web` are synchronized at `3245804`; GitHub Web CI run 42 passed for this exact commit.
 - Task 0023 starts from `8dd4aa2` on `task/earned-minutes-credit`.
 - Accepted product choices: captain-driven strategic actions with host fallbacks; captain early-answer window of 5 seconds versus the full base minute for the host; sequential spending of multiple earned minutes; exact `X:5` single-use credit; voluntary future repayment forced at `5:5`; television-style blitz/superblitz restrictions.
 - The captain is one physical participant selected by the host. A shared player login necessarily shares captain controls with the whole participant group on that browser.
@@ -36,7 +36,8 @@
 - Task 0024 merge handoff commit: `96cdb9c` (`Record skip intro merge handoff`).
 - The unmerged `task/host-end-game` prototype was discarded at the user's request: existing Live Ops `Сбросить до интро` already solves the immediate new-game need and remains unchanged.
 - Roadmap item 24 records a separate future `Завершить встречу` flow that must invalidate every host/player session and return all clients to their route-specific login forms.
-- Next continuation point: push local `web` to publish task 0024, then choose the next roadmap item; the full-logout task requires its open UX/history decisions before implementation.
+- Task 0025 starts from `3245804` on `task/author-media-presentation`. It reuses the managed-media panel/presentation for an independently validated author token, with private preselection, explicit host show, automatic hide on leaving reading, per-part blitz authors and static sector 13; exact scope and smoke are in `docs/tasks/0025-author-media-presentation.md`.
+- Next continuation point: implement task 0025 without adding authors to ordinary question-media sequencing.
 
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.
