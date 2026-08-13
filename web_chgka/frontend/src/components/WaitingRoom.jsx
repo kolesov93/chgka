@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CurrentGameModeControl } from './CurrentGameModeControl';
 import { ParticipantRoster } from './ParticipantRoster';
-import { groupDisplayName, participantCount, participantGroups } from '../participants';
+import { participantCount, participantGroups } from '../participants';
 
 export function WaitingRoom({
   socket,
@@ -14,16 +14,12 @@ export function WaitingRoom({
   const [isStarting, setIsStarting] = useState(false);
 
   const handleStartGame = () => {
-    if (confirm('Начать игру?')) {
-      setIsStarting(true);
-      socket.emit('start_game');
-    }
+    setIsStarting(true);
+    socket.emit('start_game');
   };
 
   const handleKickGroup = (group) => {
-    if (confirm(`Отключить группу «${groupDisplayName(group)}»?`)) {
-      socket.emit('admin_kick', { group_id: group.group_id });
-    }
+    socket.emit('admin_kick', { group_id: group.group_id });
   };
 
   const groups = participantGroups(players);

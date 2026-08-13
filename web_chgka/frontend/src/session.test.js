@@ -6,6 +6,7 @@ import {
   PLAYER_TOKEN_KEY,
   getAdminExpiryMs,
   getExpiredAdminSession,
+  getKickedPlayerNotice,
   getSessionRestorePayload,
   saveAdminToken,
 } from './session.js';
@@ -99,4 +100,13 @@ test('admin expiry accepts only a positive finite server timestamp', () => {
   assert.equal(getAdminExpiryMs({ expires_at_ms: '123456' }), null);
   assert.equal(getAdminExpiryMs({ expires_at_ms: Number.POSITIVE_INFINITY }), null);
   assert.equal(getAdminExpiryMs({}), null);
+});
+
+test('kicked player notice preserves a server explanation and has a host-worded fallback', () => {
+  assert.equal(
+    getKickedPlayerNotice({ message: 'Вы были отключены ведущим' }),
+    'Вы были отключены ведущим',
+  );
+  assert.equal(getKickedPlayerNotice({ message: '   ' }), 'Ведущий отключил вас от игры.');
+  assert.equal(getKickedPlayerNotice(), 'Ведущий отключил вас от игры.');
 });

@@ -60,7 +60,6 @@ export function GameHistoryPanel({ socket, addNotification, initiallyOpen = fals
 
   const togglePastMode = (session) => {
     const mode = session.mode === 'regular' ? 'debug' : 'regular';
-    if (!confirm(`Пометить эту игру как «${gameModeLabel(mode).toLowerCase()}»?`)) return;
     socket.emit(
       'admin_set_game_session_mode',
       { session_id: session.id, mode },

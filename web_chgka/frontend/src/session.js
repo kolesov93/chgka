@@ -9,6 +9,7 @@ export const PLAYER_TOKEN_KEY = 'chgka_player_token';
 
 const DEFAULT_AUTH_EXPIRED_MESSAGE =
   'Сессия ведущего истекла. Введите пароль ещё раз.';
+const DEFAULT_KICKED_PLAYER_MESSAGE = 'Ведущий отключил вас от игры.';
 
 export function getSessionRestorePayload(storage, entrypoint) {
   if (isAdminEntrypoint(entrypoint)) {
@@ -50,4 +51,10 @@ export function getExpiredAdminSession(data) {
     adminQuestion: null,
     notice: data?.message || DEFAULT_AUTH_EXPIRED_MESSAGE,
   };
+}
+
+export function getKickedPlayerNotice(data) {
+  return typeof data?.message === 'string' && data.message.trim()
+    ? data.message
+    : DEFAULT_KICKED_PLAYER_MESSAGE;
 }

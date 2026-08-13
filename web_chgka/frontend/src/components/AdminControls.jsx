@@ -6,7 +6,6 @@ import { ParticipantRoster } from './ParticipantRoster';
 import { socket } from '../socket';
 import {
   approvedParticipantOptions,
-  groupDisplayName,
   participantCount,
   participantGroups,
 } from '../participants';
@@ -66,16 +65,11 @@ export function AdminControls({
     || null;
 
   const spinForced = (sectorId) => {
-    if (confirm(`Крутим на сектор ${sectorId}?`)) {
-      socket.emit('admin_spin', { force_sector: sectorId });
-    }
+    socket.emit('admin_spin', { force_sector: sectorId });
   };
 
   const resetGame = () => {
-    const message = isGameOver
-      ? 'Начать новую игру? Счёт и сыгранные сектора будут сброшены.'
-      : 'Точно сбросить игру?';
-    if (confirm(message)) socket.emit('admin_reset');
+    socket.emit('admin_reset');
   };
 
   const signalTenSeconds = () => {
@@ -93,9 +87,7 @@ export function AdminControls({
   };
 
   const kickGroup = (group) => {
-    if (confirm(`Отключить группу «${groupDisplayName(group)}»?`)) {
-      socket.emit('admin_kick', { group_id: group.group_id });
-    }
+    socket.emit('admin_kick', { group_id: group.group_id });
   };
 
   const selectRespondent = (participantId) => {
@@ -136,9 +128,7 @@ export function AdminControls({
   const timerPayload = { timer_generation: timer?.generation };
 
   const takeCredit = () => {
-    if (confirm('Дать команде минуту в кредит?')) {
-      emitHostAction('admin_take_credit_minute', timerPayload, 'Не удалось взять кредит');
-    }
+    emitHostAction('admin_take_credit_minute', timerPayload, 'Не удалось взять кредит');
   };
 
   const resolveStrategyRequest = (approve) => {
@@ -150,13 +140,11 @@ export function AdminControls({
   };
 
   const scheduleRepayment = () => {
-    if (confirm('Следующий раунд пройдёт без обсуждения. Вернуть минуту в кредит?')) {
-      emitHostAction(
-        'admin_schedule_credit_repayment',
-        {},
-        'Не удалось назначить возврат кредита',
-      );
-    }
+    emitHostAction(
+      'admin_schedule_credit_repayment',
+      {},
+      'Не удалось назначить возврат кредита',
+    );
   };
 
   const respondentSelector = (

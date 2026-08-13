@@ -14,9 +14,7 @@ export function IntroHostControls({ intro }) {
 
   const control = introHostControlView(intro, nowMs);
   const skipIntro = () => {
-    if (confirm('Пропустить оставшуюся часть вступления и перейти к игре?')) {
-      socket.emit('admin_skip_intro', { expected_slide: control.slideIndex });
-    }
+    socket.emit('admin_skip_intro', { expected_slide: control.slideIndex });
   };
 
   return (

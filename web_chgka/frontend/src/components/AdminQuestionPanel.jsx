@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BLACKBOX_IMAGE_SOURCE } from '../blackbox';
 import { authorMediaCaption, authorMediaSource, isAuthorMedia } from '../authorMedia';
 import { inlineImagePreviews } from '../inlineMedia';
+import { requiresAnswerMediaConfirmation } from '../interactionGuards';
 import { mediaUrl, socket } from '../socket';
 import {
   mediaSectionLabel,
@@ -74,6 +75,7 @@ export function AdminQuestionPanel({
   addNotification,
 }) {
   const [mediaPreview, setMediaPreview] = useState(null);
+  const [pendingAnswerShareId, setPendingAnswerShareId] = useState(null);
   const [resolvedImages, setResolvedImages] = useState({});
   const resolutionGenerationRef = useRef(0);
   const sharedMediaIdRef = useRef(sharedMedia?.media_id);
@@ -168,6 +170,10 @@ export function AdminQuestionPanel({
     setMediaPreview((current) => (isAuthorMedia(current) ? null : current));
   }, [authorContextKey, adminQuestion?.author_media?.media_id, phase]);
 
+  useEffect(() => {
+    setPendingAnswerShareId(null);
+  }, [mediaPreview?.media_id, authorContextKey, phase]);
+
   if (!adminQuestion) return null;
 
   const mediaByRef = Object.fromEntries(
@@ -261,15 +267,21 @@ export function AdminQuestionPanel({
   };
 
   const sharePreview = () => {
-    if (
-      mediaPreview?.section === 'answer'
-      && (phase === 'QUESTION_READING' || phase === 'DISCUSSION')
-      && !confirm('Это медиа из секции "Ответ". Точно показать игрокам прямо сейчас?')
-    ) {
+    if (requiresAnswerMediaConfirmation(mediaPreview, phase)) {
+      setPendingAnswerShareId(mediaPreview.media_id);
       return;
     }
 
     socket.emit('admin_share_media', { media_id: mediaPreview.media_id });
+  };
+
+  const confirmAnswerMediaShare = () => {
+    if (!pendingAnswerShareId || pendingAnswerShareId !== mediaPreview?.media_id) {
+      setPendingAnswerShareId(null);
+      return;
+    }
+    socket.emit('admin_share_media', { media_id: pendingAnswerShareId });
+    setPendingAnswerShareId(null);
   };
 
   const shareNextMedia = () => {
@@ -489,10 +501,43 @@ export function AdminQuestionPanel({
                 )}
               </div>
             )}
+            {pendingAnswerShareId === mediaPreview.media_id && (
+              <div
+                role="alert"
+                aria-labelledby="answer-media-confirmation-title"
+                className="rounded-lg border border-amber-600/70 bg-amber-950/35 p-3"
+              >
+                <div
+                  id="answer-media-confirmation-title"
+                  className="text-xs font-black uppercase tracking-wider text-amber-300"
+                >
+                  Медиа находится в секции «Ответ»
+                </div>
+                <p className="mt-1 text-xs text-amber-100/80">
+                  Если показать его сейчас, игроки могут увидеть часть ответа раньше времени.
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPendingAnswerShareId(null)}
+                    className="rounded bg-slate-700 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-100 hover:bg-slate-600"
+                  >
+                    Не показывать
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmAnswerMediaShare}
+                    className="rounded bg-amber-600 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-950 hover:bg-amber-500"
+                  >
+                    Всё равно показать
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={sharePreview}
-                disabled={previewIsShared || blackboxActive}
+                disabled={previewIsShared || blackboxActive || pendingAnswerShareId === mediaPreview.media_id}
                 className="flex-1 bg-blue-700 hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40 text-white py-2 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-[10px]"
               >
                 {previewIsShared
