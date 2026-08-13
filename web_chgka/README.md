@@ -6,6 +6,7 @@
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — устройство приложения и runtime-контракты.
 - [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) — актуальная точка продолжения, проверки и известные проблемы.
 - [`docs/QUESTION_PACKS.md`](docs/QUESTION_PACKS.md) — формат пака вопросов, медиа и команда валидации.
+- [`deployment/README.md`](deployment/README.md) — production Docker deploy, update, rollback и backup на VPS.
 - [`ROADMAP.md`](ROADMAP.md) — приоритетный backlog и workflow задач.
 
 ## Запуск через Docker (только разработка)
@@ -32,7 +33,25 @@ docker compose up --build
 - SQLite-журнал хранится на хосте в `./runtime-data/chgka.sqlite3` и переживает пересоздание backend-контейнера
 - исходники примонтированы в контейнеры, backend работает с `--reload`, frontend запускает Vite dev server
 
-Compose и Dockerfile пока не являются production-конфигурацией: в них нет reverse proxy, TLS и production frontend server.
+Именно `docker-compose.yml` и обычные `backend/frontend/Dockerfile` остаются
+development-only. Публичный deployment использует отдельные
+`docker-compose.production.yml`, `Dockerfile.production` и инструкции из
+[`deployment/README.md`](deployment/README.md).
+
+## Публичный production
+
+Текущий deployment доступен по адресам:
+
+- игроки: `https://example.com/chgka/play`
+- ведущий: `https://example.com/chgka/admin`
+- история игр: `https://example.com/chgka/admin/history`
+
+Host Nginx завершает HTTPS и проксирует `/chgka/` на frontend-контейнер,
+опубликованный только на `127.0.0.1:18080`. Backend не имеет host-порта и
+доступен frontend-контейнеру только во внутренней Docker-сети. Пак вопросов,
+SQLite, backups и mode-`0600` production env лежат на VPS вне release и images.
+Обновление и rollback выполняются по точному runbook; production-секреты и
+реальные паки не коммитятся.
 
 ## Локальный запуск
 
@@ -93,7 +112,7 @@ npm run build
 
 ### Локальная проверка сборки под URL-префиксом
 
-Обычная development-сборка работает от `/`. Чтобы проверить будущую публикацию на
+Обычная development-сборка работает от `/`. Чтобы локально проверить публикацию на
 `https://example.com/chgka/`, при уже запущенном backend из `frontend/` выполнить:
 
 ```bash
@@ -116,7 +135,7 @@ VITE_BASE_PATH=/chgka/ npm run preview -- --host 0.0.0.0
 - В production `CHGKA_DB_PATH` должен быть абсолютным путём на durable volume. SQLite хранит историю, но не восстанавливает текущий `AppState`, игроков или токены после рестарта.
 - `ADMIN_TOKEN_TTL_SECONDS` необязателен: по умолчанию admin-сессия действует 12 часов без продления при reconnect; допустимый диапазон — от 60 секунд до 24 часов.
 - `/play` восстанавливает только player token, а `/admin` и `/admin/history` — только admin token. История не отображается на экранах запуска/ведения игры и доступна отдельной страницей после той же авторизации ведущего. Разделение форм улучшает UX, но не является границей безопасности: backend по-прежнему проверяет пароль, роль и токен для каждой привилегированной операции.
-- Прямое открытие и refresh `/play`, `/admin` и `/admin/history` работают в Vite development/preview. При `VITE_BASE_PATH=/chgka/` те же entrypoints находятся под `/chgka`; production frontend server/reverse proxy должен использовать SPA fallback внутри выбранного base path.
+- Прямое открытие и refresh `/play`, `/admin` и `/admin/history` работают в Vite development/preview. При `VITE_BASE_PATH=/chgka/` те же entrypoints находятся под `/chgka`; production frontend Nginx использует SPA fallback внутри этого base path.
 
 ## Диагностика CORS локально
 
@@ -136,4 +155,4 @@ curl -i -X OPTIONS http://localhost:8000/ \
   -H 'Access-Control-Request-Method: GET'
 ```
 
-Та же allowlist применяется к Socket.IO/WebSocket handshake. В development frontend подключается к `ws://localhost:8000`; за HTTPS reverse proxy production-соединение должно стать защищённым `wss://` на текущем origin.
+Та же allowlist применяется к Socket.IO/WebSocket handshake. В development frontend подключается к `ws://localhost:8000`; production использует защищённый `wss://example.com/chgka/socket.io/` на том же origin.

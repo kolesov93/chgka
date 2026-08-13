@@ -1,20 +1,24 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-13
-- Latest completed task: `docs/tasks/0027-configurable-base-path.md`
+- Latest completed task: `docs/tasks/0028-docker-production-deployment.md`
 - Active task: none.
-- Branch: `web`
-- Status: task 0027 is accepted and merged locally; `web` awaits the user's push and merged-branch GitHub CI. Actual VPS/Nginx deployment remains a separate next step.
+- Branch: `codex/docker-production-deployment`
+- Status: production release `3c09e41d3df3` is live at `https://example.com/chgka/` with the sample pack; automated checks and the authenticated laptop/phone smoke pass. The accepted task is ready to merge into `web`.
 
 ## Repository checkpoint
+
+- Task 0028 planning commit is `4c66426`, production stack commit is `f14d24a`, and the VPS-discovered edge-network fix is `3c09e41`.
+- Docker Engine/Compose are installed on the VPS. The production containers are healthy behind host Nginx; only `127.0.0.1:18080` is published and backend has no host port.
+- Public HTTPS routes, WSS `101`, exact CORS, wrong-origin rejection, static assets, SPA entrypoints, container hardening, sample-pack validation, SQLite persistence/backup, daily cron backup and unchanged legacy-route status codes are verified.
+- The deployment currently uses the repository sample pack. Replace it only through the documented validator/deploy flow. The next repository step is merging task 0028 into `web`, pushing `web` and confirming merged-branch CI.
 
 - Task 0027 starts from synchronized `web` commit `a085633` on `codex/configurable-base-path`; planning commit is `cef8262`, implementation commit is `25583a7`.
 - Task 0027 closure commit is `8c5e169`; merge commit into `web` is `434ba1f`.
 - Vite base is now the single frontend deployment prefix. Root development behavior is unchanged, while a `VITE_BASE_PATH=/chgka/` production build uses prefixed player/admin/history, static assets, media/intro URLs and Socket.IO transport path.
-- Vite preview provides a local prefix-stripping HTTP/WebSocket proxy to the unchanged backend, and development Compose allows its exact `http://localhost:4173` origin. Actual Nginx/TLS/VPS work is intentionally not part of this branch.
+- Vite preview provides a local prefix-stripping HTTP/WebSocket proxy to the unchanged backend, and development Compose allows its exact `http://localhost:4173` origin. Task 0027 intentionally left Nginx/TLS/VPS work to the now-active deployment task 0028.
 - Local verification passes: clean npm install/audit, all 17 frontend test-files, root and `/chgka/` builds, 260 warnings-as-errors backend tests, prefixed HTTP/static/proxy/Engine.IO checks and `git diff --check`. Native Compose validation remains blocked by the known local Snap `snap-confine` capability defect and is covered by merged-branch CI.
 - Focused seven-step root/`/chgka/` browser smoke passed on 2026-08-13.
-- Next continuation point: push `web`, confirm merged-branch CI, then audit the VPS and existing `example.com` Nginx configuration before deploying.
 
 - Before task 0027, `web` and `origin/web` were synchronized at `a085633`.
 - Task 0023 starts from `8dd4aa2` on `task/earned-minutes-credit`.
