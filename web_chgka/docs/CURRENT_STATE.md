@@ -1,10 +1,10 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-13
-- Latest completed task: `docs/tasks/0024-skip-intro.md`
-- Active task: `docs/tasks/0025-author-media-presentation.md`.
+- Latest completed task: `docs/tasks/0025-author-media-presentation.md`
+- Active task: none.
 - Branch: `task/author-media-presentation`
-- Status: task 0024 is published and green; task 0025 implementation is locally green and awaits the user's focused smoke.
+- Status: task 0025 is locally green and its focused smoke was accepted; close and merge it locally into `web`, then let the user push `web`.
 
 ## Repository checkpoint
 
@@ -39,9 +39,12 @@
 - Task 0025 starts from `3245804` on `task/author-media-presentation`. It reuses the managed-media panel/presentation for an independently validated author token, with private preselection, explicit host show, automatic hide on leaving reading, per-part blitz authors and static sector 13; exact scope and smoke are in `docs/tasks/0025-author-media-presentation.md`.
 - Task 0025 planning commit: `0026204` (`Plan author media presentation task`).
 - Task 0025 implementation commit: `e47b7ce` (`Implement author media presentation`).
+- Task 0025 implementation handoff commit: `1f83e86` (`Record author media implementation handoff`).
 - The implementation adds an admin-only pre-resolved author token, exact round/part/spin/UUID validation, reconnect-safe safe public metadata, pack/fallback/sector-13 rendering, private re-selection and transition-level auto-hide without changing ordinary media sequencing.
 - Local verification passes: 260 backend tests, all 14 frontend test files, the production build, `git diff --check`, and native Compose configuration validation. In-app browser verification passed for normal photo/city, explicit share, player reload, hide/re-show, inline-media switching, discussion/early-answer cleanup, blitz fallback and sector 13.
-- Next continuation point: user runs the exact smoke in `docs/tasks/0025-author-media-presentation.md`; after acceptance, close the task, merge locally into `web`, and let the user push `web`.
+- Browser acceptance: the exact six-step author-media smoke passed on 2026-08-13.
+- Roadmap item 25 records the next proposed task: remove browser-native dialogs, retaining the answer-media safety check as an in-app confirmation and the kicked-player explanation as an in-app notice.
+- Next continuation point: close task 0025, merge locally into `web`, then agree the exact UX and start item 25 on a separate branch.
 
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.
