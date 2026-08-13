@@ -1,0 +1,332 @@
+import { useCallback, useEffect, useState } from 'react';
+import { ENTRYPOINT_ADMIN_HISTORY, isAdminEntrypoint } from '../entrypoint';
+import { socket } from '../socket';
+import {
+  ADMIN_TOKEN_KEY,
+  PLAYER_TOKEN_KEY,
+  getAdminExpiryMs,
+  getExpiredAdminSession,
+  getKickedPlayerNotice,
+  getSessionRestorePayload,
+  saveAdminToken,
+} from '../session';
+import { responseMessage } from '../uiText';
+
+export function useGameSession(entrypoint) {
+  const [gameState, setGameState] = useState(null);
+  const [gameSettings, setGameSettings] = useState({ volume: 1.0, sound_control: null });
+  const [players, setPlayers] = useState([]);
+  const [myRole, setMyRole] = useState('player');
+  const [myName, setMyName] = useState('');
+  const [myGroupId, setMyGroupId] = useState(null);
+  const [packInfo, setPackInfo] = useState(null);
+  const [adminQuestion, setAdminQuestion] = useState(null);
+  const [isConnected, setIsConnected] = useState(socket.connected);
+  const [hasJoined, setHasJoined] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [sessionNotice, setSessionNotice] = useState('');
+  const [adminExpiresAtMs, setAdminExpiresAtMs] = useState(null);
+  const [currentGameMode, setCurrentGameMode] = useState(null);
+  const [gameModeLoading, setGameModeLoading] = useState(false);
+
+  const expireAdminSession = useCallback((data) => {
+    const expired = getExpiredAdminSession(data);
+    localStorage.removeItem(ADMIN_TOKEN_KEY);
+    setMyRole(expired.role);
+    setMyName(expired.name);
+    setHasJoined(expired.hasJoined);
+    setIsPending(expired.isPending);
+    setPackInfo(expired.packInfo);
+    setAdminQuestion(expired.adminQuestion);
+    setSessionNotice(expired.notice);
+    setAdminExpiresAtMs(null);
+    setCurrentGameMode(null);
+    setGameModeLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (adminExpiresAtMs === null) return undefined;
+
+    const delayMs = Math.max(0, adminExpiresAtMs - Date.now());
+    const timeoutId = setTimeout(() => expireAdminSession(), delayMs);
+    return () => clearTimeout(timeoutId);
+  }, [adminExpiresAtMs, expireAdminSession]);
+
+  const addNotification = useCallback((notification) => {
+    const id = Date.now();
+    setNotifications((current) => [...current, { id, ...notification }]);
+    setTimeout(() => {
+      setNotifications((current) => current.filter((item) => item.id !== id));
+    }, 5000);
+  }, []);
+
+  const dismissNotification = useCallback((id) => {
+    setNotifications((current) => current.filter((item) => item.id !== id));
+  }, []);
+
+  useEffect(() => {
+    if (!isAdminEntrypoint(entrypoint)) return undefined;
+    window.authenticateAdmin = (password) => {
+      socket.emit('authenticate_admin', { password });
+    };
+    return () => {
+      delete window.authenticateAdmin;
+    };
+  }, [entrypoint]);
+
+  useEffect(() => {
+    if (myRole !== 'admin' || entrypoint === ENTRYPOINT_ADMIN_HISTORY) {
+      setCurrentGameMode(null);
+      setGameModeLoading(false);
+      return undefined;
+    }
+
+    let active = true;
+    setGameModeLoading(true);
+    socket.emit('admin_get_current_game_mode', null, (response) => {
+      if (!active) return;
+      setGameModeLoading(false);
+      if (response?.ok) {
+        setCurrentGameMode(response.mode);
+        return;
+      }
+      addNotification({
+        type: 'warning',
+        message: responseMessage(response, 'Не удалось загрузить режим игры'),
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, [addNotification, entrypoint, myRole]);
+
+  const changeCurrentGameMode = useCallback((mode) => {
+    setGameModeLoading(true);
+    socket.emit('admin_set_current_game_mode', { mode }, (response) => {
+      setGameModeLoading(false);
+      if (response?.ok) {
+        setCurrentGameMode(response.mode);
+        return;
+      }
+      addNotification({
+        type: 'warning',
+        message: responseMessage(response, 'Не удалось изменить режим игры'),
+      });
+    });
+  }, [addNotification]);
+
+  useEffect(() => {
+    function onConnect() {
+      setIsConnected(true);
+
+      const restorePayload = getSessionRestorePayload(localStorage, entrypoint);
+      if (restorePayload) socket.emit('restore_session', restorePayload);
+    }
+
+    function onDisconnect() {
+      setIsConnected(false);
+      setMyRole('player');
+      setMyName('');
+      setCurrentGameMode(null);
+      setGameModeLoading(false);
+    }
+
+    function onStateUpdate(newState) {
+      if (!newState) {
+        setGameState(newState);
+        return;
+      }
+      const intro = newState.intro
+        ? { ...newState.intro, received_at_ms: Date.now() }
+        : null;
+      const blackbox = newState.blackbox
+        ? { ...newState.blackbox, received_at_ms: Date.now() }
+        : null;
+      const timer = newState.timer
+        ? { ...newState.timer, received_at_ms: Date.now() }
+        : null;
+      setGameState({ ...newState, intro, blackbox, timer });
+    }
+
+    function onRoleUpdate(data) {
+      if (data?.role) {
+        setMyRole(data.role);
+        if (data.role !== 'admin') {
+          setAdminExpiresAtMs(null);
+          setCurrentGameMode(null);
+          setGameModeLoading(false);
+        }
+      }
+    }
+
+    function onAdminGameModeUpdate(data) {
+      if (data?.mode === 'regular' || data?.mode === 'debug') {
+        setCurrentGameMode(data.mode);
+        setGameModeLoading(false);
+      }
+    }
+
+    function onSettingsUpdate(newSettings) {
+      if (newSettings) {
+        const soundControl = newSettings.sound_control
+          ? { ...newSettings.sound_control, received_at_ms: Date.now() }
+          : undefined;
+        setGameSettings((current) => ({
+          ...current,
+          ...newSettings,
+          ...(soundControl ? { sound_control: soundControl } : {}),
+        }));
+      }
+    }
+
+    function onPlayersUpdate(data) {
+      if (data?.players) setPlayers(data.players);
+    }
+
+    function onAuthSuccess(data) {
+      saveAdminToken(localStorage, data.token);
+      setAdminExpiresAtMs(getAdminExpiryMs(data));
+      setSessionNotice('');
+    }
+
+    function onAuthFailed(data) {
+      console.error('[Auth] Failed:', data.message || 'Неверный пароль');
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+      setAdminExpiresAtMs(null);
+    }
+
+    function onAuthRestored(data) {
+      console.log('[Auth] Session restored successfully');
+      setAdminExpiresAtMs(getAdminExpiryMs(data));
+      setSessionNotice('');
+    }
+
+    function onAuthExpired(data) {
+      expireAdminSession(data);
+    }
+
+    function onJoinSuccess(data) {
+      if (data.token) localStorage.setItem(PLAYER_TOKEN_KEY, data.token);
+      if (data.name) setMyName(data.name);
+      if (data.group_id) setMyGroupId(data.group_id);
+      setIsPending(false);
+      setHasJoined(true);
+      setSessionNotice('');
+    }
+
+    function onJoinPending(data) {
+      if (data.token) localStorage.setItem(PLAYER_TOKEN_KEY, data.token);
+      if (data.name) setMyName(data.name);
+      if (data.group_id) setMyGroupId(data.group_id);
+      setIsPending(true);
+      setHasJoined(true);
+      setSessionNotice('');
+    }
+
+    function onKicked(data) {
+      localStorage.removeItem(PLAYER_TOKEN_KEY);
+      setGameState(null);
+      setMyRole('player');
+      setMyName('');
+      setMyGroupId(null);
+      setHasJoined(false);
+      setIsPending(false);
+      setSessionNotice(getKickedPlayerNotice(data));
+
+      socket.disconnect();
+      socket.connect();
+    }
+
+    function onPackInfo(data) {
+      if (data?.pack) setPackInfo(data.pack);
+    }
+
+    function onAdminQuestion(data) {
+      setAdminQuestion(data || null);
+    }
+
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    socket.on('state_update', onStateUpdate);
+    socket.on('role_update', onRoleUpdate);
+    socket.on('settings_update', onSettingsUpdate);
+    socket.on('players_update', onPlayersUpdate);
+    socket.on('auth_success', onAuthSuccess);
+    socket.on('auth_failed', onAuthFailed);
+    socket.on('auth_restored', onAuthRestored);
+    socket.on('auth_expired', onAuthExpired);
+    socket.on('join_success', onJoinSuccess);
+    socket.on('join_pending', onJoinPending);
+    socket.on('kicked', onKicked);
+    socket.on('admin_notification', addNotification);
+    socket.on('pack_info', onPackInfo);
+    socket.on('admin_question', onAdminQuestion);
+    socket.on('admin_game_mode_update', onAdminGameModeUpdate);
+
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+      socket.off('state_update', onStateUpdate);
+      socket.off('role_update', onRoleUpdate);
+      socket.off('settings_update', onSettingsUpdate);
+      socket.off('players_update', onPlayersUpdate);
+      socket.off('auth_success', onAuthSuccess);
+      socket.off('auth_failed', onAuthFailed);
+      socket.off('auth_restored', onAuthRestored);
+      socket.off('auth_expired', onAuthExpired);
+      socket.off('join_success', onJoinSuccess);
+      socket.off('join_pending', onJoinPending);
+      socket.off('kicked', onKicked);
+      socket.off('admin_notification', addNotification);
+      socket.off('pack_info', onPackInfo);
+      socket.off('admin_question', onAdminQuestion);
+      socket.off('admin_game_mode_update', onAdminGameModeUpdate);
+    };
+  }, [addNotification, entrypoint, expireAdminSession]);
+
+  const logout = useCallback(() => {
+    socket.emit('leave_game');
+    localStorage.removeItem(ADMIN_TOKEN_KEY);
+    localStorage.removeItem(PLAYER_TOKEN_KEY);
+    socket.disconnect();
+
+    setGameState(null);
+    setMyRole('player');
+    setMyName('');
+    setMyGroupId(null);
+    setHasJoined(false);
+    setPlayers([]);
+    setIsConnected(false);
+    setPackInfo(null);
+    setAdminQuestion(null);
+    setSessionNotice('');
+    setAdminExpiresAtMs(null);
+    setCurrentGameMode(null);
+    setGameModeLoading(false);
+
+    socket.connect();
+  }, []);
+
+  return {
+    gameState,
+    gameSettings,
+    players,
+    myRole,
+    myName,
+    myGroupId,
+    packInfo,
+    adminQuestion,
+    currentGameMode,
+    gameModeLoading,
+    isConnected,
+    hasJoined,
+    isPending,
+    sessionNotice,
+    notifications,
+    addNotification,
+    dismissNotification,
+    changeCurrentGameMode,
+    logout,
+  };
+}

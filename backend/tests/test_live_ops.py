@@ -1,0 +1,447 @@
+import pytest
+
+from live_ops import (
+    live_ops_cancel_spin,
+    live_ops_force_phase,
+    live_ops_open_round,
+    live_ops_reset_to_intro,
+    live_ops_set_score,
+    live_ops_set_sector_used,
+    live_ops_set_team_resources,
+    live_ops_set_timer,
+)
+from state import (
+    PHASE_DISCUSSION,
+    PHASE_INTRO,
+    PHASE_POST_ROUND,
+    PHASE_PRE_ROUND,
+    PHASE_QUESTION_READING,
+    PHASE_TEAM_ANSWER,
+    create_initial_app_state,
+)
+from transitions import (
+    TransitionError,
+    transition_complete_spin,
+    transition_start_spin,
+)
+
+
+def _shared_image():
+    return {
+        "type": "image",
+        "media_id": "abc",
+        "media_ref": "image-ref",
+        "section": "question",
+        "name": "image.jpg",
+        "playback_state": "stopped",
+        "position_ms": 0,
+        "started_at_ms": None,
+    }
+
+
+def _state(*, phase=PHASE_PRE_ROUND, question_types=None):
+    return create_initial_app_state(
+        phase=phase,
+        question_types=question_types or ["normal"] * 13,
+    )
+
+
+def test_set_score_uses_exact_validated_values_without_changing_phase():
+    state = _state(phase=PHASE_POST_ROUND)
+    state["game"]["score"] = {"znatoki": 2, "tv": 3}
+
+    effects = live_ops_set_score(state, znatoki=6, tv=1)
+
+    assert state["game"]["score"] == {"znatoki": 6, "tv": 1}
+    assert state["game"]["phase"] == PHASE_POST_ROUND
+    assert effects.logs == ("Восстановление: счёт 2:3 → 6:1",)
+
+    with pytest.raises(TransitionError) as error:
+        live_ops_set_score(state, znatoki=True, tv=0)
+    assert error.value.code == "invalid_score"
+    assert state["game"]["score"] == {"znatoki": 6, "tv": 1}
+
+
+def test_toggle_sector_played_and_available_including_active_sector():
+    state = _state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "normal", "sector": 4}
+    state["game"]["used_questions"] = [2, 4]
+
+    removed = live_ops_set_sector_used(state, sector=4, used=False)
+    added = live_ops_set_sector_used(state, sector=3, used=True)
+
+    assert state["game"]["used_questions"] == [2, 3]
+    assert "сыгран → доступен" in removed.logs[0]
+    assert "доступен → сыгран" in added.logs[0]
+
+
+def test_open_normal_round_cancels_spin_and_normalizes_runtime_state():
+    state = _state(phase=PHASE_PRE_ROUND)
+    state["wheel"].update(
+        {
+            "is_spinning": True,
+            "spin_id": 7,
+            "target_angle": 120.0,
+            "playing_sector": 8,
+            "spin_duration": 5.0,
+        }
+    )
+    state["timer"]["discussion_deadline_ms"] = 123
+    state["presentation"]["shared_media"] = _shared_image()
+
+    effects = live_ops_open_round(state, sector=5)
+
+    assert state["game"]["phase"] == PHASE_QUESTION_READING
+    assert state["game"]["round"] == {"kind": "normal", "sector": 5}
+    assert state["game"]["used_questions"] == [5]
+    assert state["wheel"]["current_sector"] == 5
+    assert state["wheel"]["playing_sector"] == 5
+    assert state["wheel"]["is_spinning"] is False
+    assert state["wheel"]["spin_id"] == 8
+    assert state["timer"]["discussion_deadline_ms"] is None
+    assert state["presentation"]["shared_media"] is None
+    assert effects.clear_media_tokens is True
+    assert effects.refresh_admin_question is True
+    assert effects.stop_sounds is True
+
+
+def test_open_blitz_round_requires_valid_part_and_does_not_partially_mutate():
+    question_types = ["normal"] * 13
+    question_types[3] = "blitz"
+    state = _state(question_types=question_types)
+
+    with pytest.raises(TransitionError) as error:
+        live_ops_open_round(state, sector=4)
+    assert error.value.code == "invalid_part"
+    assert state["game"]["round"] is None
+    assert state["game"]["used_questions"] == []
+
+    effects = live_ops_open_round(state, sector=4, part_index=1)
+
+    assert state["game"]["round"] == {
+        "kind": "blitz",
+        "sector": 4,
+        "part_index": 1,
+    }
+    assert "часть 2/3" in effects.logs[0]
+
+
+def test_force_question_phase_requires_round_before_mutating_spin():
+    state = _state()
+    state["wheel"]["is_spinning"] = True
+    state["wheel"]["spin_id"] = 9
+
+    with pytest.raises(TransitionError) as error:
+        live_ops_force_phase(
+            state,
+            phase=PHASE_QUESTION_READING,
+            now_ms=1_000,
+            normal_discussion_seconds=60,
+            blitz_discussion_seconds=20,
+        )
+
+    assert error.value.code == "no_round"
+    assert state["wheel"]["is_spinning"] is True
+    assert state["wheel"]["spin_id"] == 9
+
+
+def test_force_phases_normalize_timer_media_and_round_context():
+    state = _state(phase=PHASE_POST_ROUND)
+    state["game"]["round"] = {
+        "kind": "normal",
+        "sector": 6,
+        "advance_next_part": True,
+    }
+    state["presentation"]["shared_media"] = _shared_image()
+
+    reading = live_ops_force_phase(
+        state,
+        phase=PHASE_QUESTION_READING,
+        now_ms=10_000,
+        normal_discussion_seconds=60,
+        blitz_discussion_seconds=20,
+    )
+    assert state["game"]["phase"] == PHASE_QUESTION_READING
+    assert "advance_next_part" not in state["game"]["round"]
+    assert state["presentation"]["shared_media"] is None
+    assert reading.clear_media_tokens is True
+    assert reading.refresh_admin_question is True
+
+    live_ops_force_phase(
+        state,
+        phase=PHASE_DISCUSSION,
+        now_ms=10_000,
+        normal_discussion_seconds=60,
+        blitz_discussion_seconds=20,
+    )
+    assert state["timer"]["discussion_deadline_ms"] == 70_000
+
+    live_ops_force_phase(
+        state,
+        phase=PHASE_TEAM_ANSWER,
+        now_ms=20_000,
+        normal_discussion_seconds=60,
+        blitz_discussion_seconds=20,
+    )
+    assert state["timer"]["discussion_deadline_ms"] is None
+
+    live_ops_force_phase(
+        state,
+        phase=PHASE_POST_ROUND,
+        now_ms=20_000,
+        normal_discussion_seconds=60,
+        blitz_discussion_seconds=20,
+    )
+    assert state["game"]["phase"] == PHASE_POST_ROUND
+
+    pre_round = live_ops_force_phase(
+        state,
+        phase=PHASE_PRE_ROUND,
+        now_ms=20_000,
+        normal_discussion_seconds=60,
+        blitz_discussion_seconds=20,
+    )
+    assert state["game"]["round"] is None
+    assert state["game"]["phase"] == PHASE_PRE_ROUND
+    assert pre_round.clear_admin_question is True
+
+
+def test_force_discussion_uses_blitz_duration():
+    state = _state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {
+        "kind": "superblitz",
+        "sector": 7,
+        "part_index": 2,
+        "respondent": {
+            "participant_id": "participant-1",
+            "group_id": "group-1",
+            "name": "Иван",
+        },
+    }
+
+    live_ops_force_phase(
+        state,
+        phase=PHASE_DISCUSSION,
+        now_ms=1_000,
+        normal_discussion_seconds=60,
+        blitz_discussion_seconds=20,
+    )
+
+    assert state["timer"]["discussion_deadline_ms"] == 21_000
+
+
+def test_force_discussion_cannot_add_timer_to_credit_repayment():
+    state = _state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {
+        "kind": "normal",
+        "sector": 6,
+        "credit_repayment": True,
+    }
+    state["wheel"]["spin_id"] = 9
+
+    with pytest.raises(TransitionError) as error:
+        live_ops_force_phase(
+            state,
+            phase=PHASE_DISCUSSION,
+            now_ms=1_000,
+            normal_discussion_seconds=60,
+            blitz_discussion_seconds=20,
+        )
+
+    assert error.value.code == "credit_repayment_no_discussion"
+    assert state["game"]["phase"] == PHASE_QUESTION_READING
+    assert state["timer"]["discussion_deadline_ms"] is None
+    assert state["wheel"]["spin_id"] == 9
+
+
+def test_force_superblitz_past_reading_requires_selected_participant():
+    state = _state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "superblitz", "sector": 7, "part_index": 0}
+
+    with pytest.raises(TransitionError) as error:
+        live_ops_force_phase(
+            state,
+            phase=PHASE_DISCUSSION,
+            now_ms=1_000,
+            normal_discussion_seconds=60,
+            blitz_discussion_seconds=20,
+        )
+
+    assert error.value.code == "respondent_required"
+    assert state["game"]["phase"] == PHASE_QUESTION_READING
+
+
+def test_force_phase_clears_pending_credit_repayment_request():
+    state = _state(phase=PHASE_POST_ROUND)
+    state["game"]["round"] = {"kind": "normal", "sector": 6}
+    state["game"]["team"]["credit"].update(
+        {
+            "used": True,
+            "debt": True,
+            "repayment_request": {
+                "type": "repayment",
+                "participant_id": "participant-1",
+                "group_id": "group-1",
+                "name": "Иван",
+                "requested_phase": PHASE_POST_ROUND,
+                "requested_at_ms": 1_000,
+            },
+        }
+    )
+
+    live_ops_force_phase(
+        state,
+        phase=PHASE_PRE_ROUND,
+        now_ms=2_000,
+        normal_discussion_seconds=60,
+        blitz_discussion_seconds=20,
+    )
+
+    assert "repayment_request" not in state["game"]["team"]["credit"]
+    assert state["game"]["team"]["credit"]["debt"] is True
+
+
+def test_reset_to_intro_clears_progress_and_restarts_timeline():
+    state = _state(phase=PHASE_POST_ROUND)
+    state["game"]["score"] = {"znatoki": 4, "tv": 3}
+    state["game"]["used_questions"] = [1, 2, 8]
+    state["game"]["round"] = {"kind": "normal", "sector": 8}
+    state["wheel"].update(
+        {
+            "current_sector": 8,
+            "target_angle": 45.0,
+            "playing_sector": 8,
+            "spin_duration": 5.0,
+            "is_spinning": True,
+            "spin_id": 7,
+        }
+    )
+    state["timer"]["discussion_deadline_ms"] = 99_000
+    state["presentation"]["shared_media"] = _shared_image()
+
+    effects = live_ops_reset_to_intro(state)
+
+    assert state["game"] == {
+        "phase": PHASE_INTRO,
+        "score": {"znatoki": 0, "tv": 0},
+        "used_questions": [],
+        "round": None,
+        "team": {
+            "captain": None,
+            "earned_minutes": 0,
+            "credit": {
+                "used": False,
+                "debt": False,
+                "repayment_scheduled": False,
+                "forced": False,
+            },
+        },
+    }
+    assert state["wheel"]["spin_id"] == 8
+    assert state["wheel"]["is_spinning"] is False
+    assert state["timer"]["discussion_deadline_ms"] is None
+    assert state["presentation"] == {
+        "intro": {
+            "slide_index": 0,
+            "started_at_ms": None,
+            "duration_ms": 87_757,
+        },
+        "shared_media": None,
+        "blackbox": None,
+        "blackbox_generation": 1,
+    }
+    assert effects.sounds == ()
+    assert effects.stop_sounds is True
+    assert effects.clear_media_tokens is True
+    assert effects.clear_admin_question is True
+
+
+def test_cancel_spin_invalidates_sleeping_completion_and_preserves_progress():
+    state = _state()
+    state["game"]["score"] = {"znatoki": 2, "tv": 1}
+    state["game"]["used_questions"] = [1, 3]
+    state["wheel"]["current_sector"] = 3
+    started = transition_start_spin(
+        state,
+        raw_angle=20.0,
+        raw_sector=4,
+        duration=5.0,
+    )
+
+    effects = live_ops_cancel_spin(state)
+
+    assert state["game"]["score"] == {"znatoki": 2, "tv": 1}
+    assert state["game"]["used_questions"] == [1, 3]
+    assert state["wheel"]["current_sector"] == 3
+    assert state["game"]["phase"] == PHASE_PRE_ROUND
+    assert effects.stop_sounds is True
+    with pytest.raises(TransitionError) as error:
+        transition_complete_spin(state, spin_id=started.spin_id)
+    assert error.value.code == "stale_spin"
+
+
+def test_timer_recovery_supports_custom_value_stop_and_validation():
+    state = _state(phase=PHASE_DISCUSSION)
+    state["game"]["round"] = {"kind": "normal", "sector": 2}
+    state["timer"]["discussion_deadline_ms"] = 15_000
+    state["timer"]["segment"] = "earned"
+    state["timer"]["started_at_ms"] = 5_000
+    original_generation = state["timer"]["generation"]
+
+    set_effects = live_ops_set_timer(state, seconds=60, now_ms=10_000)
+    assert state["timer"]["discussion_deadline_ms"] == 70_000
+    assert state["timer"]["segment"] == "earned"
+    assert state["timer"]["started_at_ms"] == 5_000
+    assert state["timer"]["generation"] == original_generation + 1
+    assert set_effects.logs == ("Восстановление: таймер 5 с → 60 с",)
+
+    stop_effects = live_ops_set_timer(state, seconds=None, now_ms=20_000)
+    assert state["timer"]["discussion_deadline_ms"] is None
+    assert state["timer"]["segment"] == "earned"
+    assert state["timer"]["started_at_ms"] == 5_000
+    assert stop_effects.logs == ("Восстановление: таймер 50 с → выключен",)
+
+    with pytest.raises(TransitionError) as error:
+        live_ops_set_timer(state, seconds=601, now_ms=20_000)
+    assert error.value.code == "invalid_timer"
+
+    state["game"]["phase"] = PHASE_TEAM_ANSWER
+    with pytest.raises(TransitionError) as error:
+        live_ops_set_timer(state, seconds=10, now_ms=20_000)
+    assert error.value.code == "bad_phase"
+
+
+def test_team_resource_recovery_validates_and_normalizes_credit_state():
+    state = _state(phase=PHASE_PRE_ROUND)
+    state["game"]["score"] = {"znatoki": 5, "tv": 5}
+
+    effects = live_ops_set_team_resources(
+        state,
+        earned_minutes=3,
+        credit_state="debt",
+    )
+
+    assert state["game"]["team"]["earned_minutes"] == 3
+    assert state["game"]["team"]["credit"] == {
+        "used": True,
+        "debt": True,
+        "repayment_scheduled": True,
+        "forced": True,
+    }
+    assert effects.events[0].event_type == "live_team_resources_changed"
+
+    with pytest.raises(TransitionError) as error:
+        live_ops_set_team_resources(
+            state,
+            earned_minutes=-1,
+            credit_state="available",
+        )
+    assert error.value.code == "invalid_earned_minutes"
+
+    with pytest.raises(TransitionError) as error:
+        live_ops_set_team_resources(
+            state,
+            earned_minutes=2,
+            credit_state="broken",
+        )
+    assert error.value.code == "invalid_credit_state"
