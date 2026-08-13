@@ -6,6 +6,7 @@ import { groupDisplayName, participantCount, participantGroups } from '../partic
 export function WaitingRoom({
   socket,
   players = [],
+  captain,
   currentGameMode,
   gameModeLoading,
   onGameModeChange,
@@ -48,7 +49,15 @@ export function WaitingRoom({
 
         {/* Список игроков */}
         <div className="mb-8">
-          <ParticipantRoster groups={groups} onKick={handleKickGroup} />
+          <ParticipantRoster
+            groups={groups}
+            captain={captain}
+            onSelectCaptain={(participant) => socket.emit(
+              'admin_select_captain',
+              { participant_id: participant.id },
+            )}
+            onKick={handleKickGroup}
+          />
         </div>
 
         {/* Кнопка "Начать" */}

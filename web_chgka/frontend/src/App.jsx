@@ -12,6 +12,8 @@ import { NotificationsPanel } from './components/NotificationsPanel';
 import { SharedMediaRenderer } from './components/SharedMediaRenderer';
 import { UserHeader } from './components/UserHeader';
 import { RespondentBanner } from './components/RespondentBanner';
+import { CaptainControls } from './components/CaptainControls';
+import { TeamResources } from './components/TeamResources';
 import { useDiscussionTimer } from './hooks/useDiscussionTimer';
 import { useGameSession } from './hooks/useGameSession';
 import { useGameSound } from './hooks/useGameSound';
@@ -28,6 +30,7 @@ function GameApp({ entrypoint }) {
     players,
     myRole,
     myName,
+    myGroupId,
     packInfo,
     adminQuestion,
     currentGameMode,
@@ -67,7 +70,7 @@ function GameApp({ entrypoint }) {
   const { discussionRemaining, markTenSecondsNotified } = useDiscussionTimer({
     isAdmin,
     isDiscussion,
-    deadlineMs: gameState?.discussion_deadline_ms,
+    timer: gameState?.timer,
     addNotification,
     playSound,
   });
@@ -109,6 +112,7 @@ function GameApp({ entrypoint }) {
           <WaitingRoom
             socket={socket}
             players={players}
+            captain={gameState?.team?.captain}
             currentGameMode={currentGameMode}
             gameModeLoading={gameModeLoading}
             onGameModeChange={changeCurrentGameMode}
@@ -150,6 +154,17 @@ function GameApp({ entrypoint }) {
         </div>
 
         {!isIntro && <ScoreBoard score={gameState?.score} />}
+
+        {!isIntro && <TeamResources team={gameState?.team} />}
+
+        {!isAdmin && !isIntro && !isGameOver && (
+          <CaptainControls
+            gameState={gameState}
+            myGroupId={myGroupId}
+            isConnected={isConnected}
+            addNotification={addNotification}
+          />
+        )}
 
         {!isIntro && !isGameOver && (
           <RespondentBanner

@@ -17,6 +17,7 @@ export function useGameSession(entrypoint) {
   const [players, setPlayers] = useState([]);
   const [myRole, setMyRole] = useState('player');
   const [myName, setMyName] = useState('');
+  const [myGroupId, setMyGroupId] = useState(null);
   const [packInfo, setPackInfo] = useState(null);
   const [adminQuestion, setAdminQuestion] = useState(null);
   const [isConnected, setIsConnected] = useState(socket.connected);
@@ -141,7 +142,10 @@ export function useGameSession(entrypoint) {
       const blackbox = newState.blackbox
         ? { ...newState.blackbox, received_at_ms: Date.now() }
         : null;
-      setGameState({ ...newState, intro, blackbox });
+      const timer = newState.timer
+        ? { ...newState.timer, received_at_ms: Date.now() }
+        : null;
+      setGameState({ ...newState, intro, blackbox, timer });
     }
 
     function onRoleUpdate(data) {
@@ -204,6 +208,7 @@ export function useGameSession(entrypoint) {
     function onJoinSuccess(data) {
       if (data.token) localStorage.setItem(PLAYER_TOKEN_KEY, data.token);
       if (data.name) setMyName(data.name);
+      if (data.group_id) setMyGroupId(data.group_id);
       setIsPending(false);
       setHasJoined(true);
       setSessionNotice('');
@@ -212,6 +217,7 @@ export function useGameSession(entrypoint) {
     function onJoinPending(data) {
       if (data.token) localStorage.setItem(PLAYER_TOKEN_KEY, data.token);
       if (data.name) setMyName(data.name);
+      if (data.group_id) setMyGroupId(data.group_id);
       setIsPending(true);
       setHasJoined(true);
       setSessionNotice('');
@@ -222,6 +228,7 @@ export function useGameSession(entrypoint) {
       setGameState(null);
       setMyRole('player');
       setMyName('');
+      setMyGroupId(null);
       setHasJoined(false);
       setIsPending(false);
 
@@ -288,6 +295,7 @@ export function useGameSession(entrypoint) {
     setGameState(null);
     setMyRole('player');
     setMyName('');
+    setMyGroupId(null);
     setHasJoined(false);
     setPlayers([]);
     setIsConnected(false);
@@ -307,6 +315,7 @@ export function useGameSession(entrypoint) {
     players,
     myRole,
     myName,
+    myGroupId,
     packInfo,
     adminQuestion,
     currentGameMode,

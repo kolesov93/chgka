@@ -759,6 +759,117 @@ def test_select_respondent_broadcasts_and_enriches_question_history(monkeypatch)
     }
 
 
+def test_captain_action_is_bound_to_current_group_socket_and_journal_context(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    pack = parse_question_pack(SAMPLE_PACK)
+    state = create_initial_app_state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {"kind": "normal", "sector": 1}
+    state["game"]["team"]["captain"] = _respondent()
+    main.transition_start_discussion(
+        state,
+        started_at_ms=10_000,
+        deadline_ms=70_000,
+    )
+    group = {
+        "sid": "captain-browser",
+        "name": "Иван, Мария",
+        "role": "player",
+        "token": "player-token",
+        "group_id": "group-1",
+        "participants": [
+            {"id": "participant-1", "name": "Иван"},
+            {"id": "participant-2", "name": "Мария"},
+        ],
+        "online": True,
+        "pending": False,
+    }
+    fake_sio.sessions.update(
+        {
+            "captain-browser": {"role": "player", "player_group_id": "group-1"},
+            "stale-browser": {"role": "player", "player_group_id": "group-1"},
+            "other-browser": {"role": "player", "player_group_id": "group-2"},
+        }
+    )
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "loaded_pack", pack)
+    monkeypatch.setattr(main, "players_list", [group])
+    monkeypatch.setattr(main, "_now_ms", lambda: 12_000)
+
+    async def run():
+        stale = await main.captain_early_answer(
+            "stale-browser",
+            {"timer_generation": state["timer"]["generation"]},
+        )
+        other = await main.captain_early_answer(
+            "other-browser",
+            {"timer_generation": state["timer"]["generation"]},
+        )
+        accepted = await main.captain_early_answer(
+            "captain-browser",
+            {"timer_generation": state["timer"]["generation"]},
+        )
+        return stale, other, accepted
+
+    stale, other, accepted = asyncio.run(run())
+
+    assert stale["error"] == "not_captain"
+    assert other["error"] == "not_captain"
+    assert accepted == {"ok": True}
+    assert state["game"]["phase"] == PHASE_TEAM_ANSWER
+    early_event = next(
+        event
+        for event in main.game_journal.get_session(
+            main.game_journal.list_sessions()[0]["id"]
+        )["events"]
+        if event["event_type"] == "early_answer_declared"
+    )
+    assert early_event["payload"]["question_id"] == pack.get_by_sector(1).id
+    assert early_event["payload"]["actor_group_id"] == "group-1"
+
+
+def test_host_selects_captain_and_kick_clears_public_role(monkeypatch):
+    fake_sio = FakeSio(yield_on_emit=False)
+    state = create_initial_app_state(phase=PHASE_PRE_ROUND)
+    group = {
+        "sid": "group-browser",
+        "name": "Иван",
+        "role": "player",
+        "token": "player-token",
+        "group_id": "group-1",
+        "participants": [{"id": "participant-1", "name": "Иван"}],
+        "online": True,
+        "pending": False,
+    }
+    monkeypatch.setattr(main, "sio", fake_sio)
+    monkeypatch.setattr(main, "require_admin", _allow_admin)
+    monkeypatch.setattr(main, "app_state", state)
+    monkeypatch.setattr(main, "players_list", [group])
+
+    async def run():
+        selected = await main.admin_select_captain(
+            "admin",
+            {"participant_id": "participant-1"},
+        )
+        assert selected == {"ok": True}
+        assert state["game"]["team"]["captain"]["name"] == "Иван"
+        cleared = await main.admin_clear_captain("admin")
+        assert cleared == {"ok": True}
+        assert state["game"]["team"]["captain"] is None
+        selected = await main.admin_select_captain(
+            "admin",
+            {"participant_id": "participant-1"},
+        )
+        assert selected == {"ok": True}
+        await main.admin_kick("admin", {"group_id": "group-1"})
+
+    asyncio.run(run())
+
+    assert state["game"]["team"]["captain"] is None
+    assert any("Капитан больше не выбран" in entry for entry in state["logs"])
+    assert any(event == "state_update" for event, _data, _kwargs in fake_sio.events)
+
+
 def test_admin_login_replaces_previous_token_and_session(monkeypatch):
     now = [100.0]
     tokens = iter(("old-admin-token", "new-admin-token"))

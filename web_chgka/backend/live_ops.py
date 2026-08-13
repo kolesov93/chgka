@@ -30,6 +30,7 @@ from ui_text import phase_label, played_label, question_kind_label, timer_label
 
 MAX_SCORE = 6
 MAX_TIMER_SECONDS = 600
+MAX_SAFE_INTEGER = 9_007_199_254_740_991
 FORCEABLE_PHASES: tuple[GamePhase, ...] = (
     PHASE_PRE_ROUND,
     PHASE_QUESTION_READING,
@@ -62,6 +63,14 @@ def _invalidate_spin(state: AppState) -> bool:
     wheel["spin_duration"] = 0
     wheel["is_spinning"] = False
     return was_spinning
+
+
+def _clear_timer_state(state: AppState) -> None:
+    timer = state["timer"]
+    timer["discussion_deadline_ms"] = None
+    timer["segment"] = None
+    timer["started_at_ms"] = None
+    timer["generation"] = timer.get("generation", 0) + 1
 
 
 def _require_round(state: AppState) -> dict:
@@ -117,14 +126,75 @@ def live_ops_set_score(
     old_score = dict(state["game"]["score"])
     new_score = {"znatoki": new_znatoki, "tv": new_tv}
     state["game"]["score"] = new_score
+    events = [
+        game_event(
+            "live_score_changed",
+            "Восстановление: счёт "
+            f"{old_score['znatoki']}:{old_score['tv']} → {new_znatoki}:{new_tv}",
+            previous_score=old_score,
+            score=new_score,
+        ),
+    ]
+    credit = state["game"]["team"]["credit"]
+    if (
+        credit["debt"]
+        and not credit["repayment_scheduled"]
+        and new_score == {"znatoki": 5, "tv": 5}
+    ):
+        credit["repayment_scheduled"] = True
+        credit["forced"] = True
+        events.append(
+            game_event(
+                "credit_repayment_scheduled",
+                "Восстановление: при счёте 5:5 возврат кредита назначен автоматически",
+                actor_role="system",
+                forced=True,
+                score=dict(new_score),
+                live_ops=True,
+            )
+        )
+    return TransitionEffects(events=tuple(events))
+
+
+def live_ops_set_team_resources(
+    state: AppState,
+    *,
+    earned_minutes: object,
+    credit_state: object,
+) -> TransitionEffects:
+    earned = _require_int(
+        earned_minutes,
+        minimum=0,
+        maximum=MAX_SAFE_INTEGER,
+        code="invalid_earned_minutes",
+        label="Банк дополнительных минут",
+    )
+    if credit_state not in ("available", "used", "debt", "scheduled"):
+        raise TransitionError("invalid_credit_state", "Некорректное состояние кредита")
+
+    previous_earned = state["game"]["team"]["earned_minutes"]
+    previous_credit = dict(state["game"]["team"]["credit"])
+    normalized_credit = {
+        "available": {"used": False, "debt": False, "repayment_scheduled": False, "forced": False},
+        "used": {"used": True, "debt": False, "repayment_scheduled": False, "forced": False},
+        "debt": {"used": True, "debt": True, "repayment_scheduled": False, "forced": False},
+        "scheduled": {"used": True, "debt": True, "repayment_scheduled": True, "forced": False},
+    }[credit_state]
+    if credit_state == "debt" and state["game"]["score"] == {"znatoki": 5, "tv": 5}:
+        normalized_credit["repayment_scheduled"] = True
+        normalized_credit["forced"] = True
+
+    state["game"]["team"]["earned_minutes"] = earned
+    state["game"]["team"]["credit"] = normalized_credit
     return TransitionEffects(
         events=(
             game_event(
-                "live_score_changed",
-                "Восстановление: счёт "
-                f"{old_score['znatoki']}:{old_score['tv']} → {new_znatoki}:{new_tv}",
-                previous_score=old_score,
-                score=new_score,
+                "live_team_resources_changed",
+                "Восстановление: игровые минуты скорректированы",
+                previous_earned_minutes=previous_earned,
+                earned_minutes=earned,
+                previous_credit=previous_credit,
+                credit=dict(normalized_credit),
             ),
         ),
     )
@@ -204,6 +274,11 @@ def live_ops_open_round(
             "kind": kind,
             "sector": sector_id,
             "part_index": normalized_part,
+            **(
+                {"credit_repayment": True}
+                if state["game"]["team"]["credit"]["repayment_scheduled"]
+                else {}
+            ),
         }
         part_label = f", часть {normalized_part + 1}/{BLITZ_PARTS}"
     else:
@@ -212,7 +287,15 @@ def live_ops_open_round(
                 "unexpected_part",
                 "Номер части допустим только для блица/суперблица",
             )
-        new_round = {"kind": "normal", "sector": sector_id}
+        new_round = {
+            "kind": "normal",
+            "sector": sector_id,
+            **(
+                {"credit_repayment": True}
+                if state["game"]["team"]["credit"]["repayment_scheduled"]
+                else {}
+            ),
+        }
         part_label = ""
 
     _invalidate_spin(state)
@@ -220,7 +303,7 @@ def live_ops_open_round(
     state["wheel"]["playing_sector"] = sector_id
     state["game"]["round"] = new_round
     state["game"]["phase"] = PHASE_QUESTION_READING
-    state["timer"]["discussion_deadline_ms"] = None
+    _clear_timer_state(state)
     state["presentation"]["shared_media"] = None
     clear_blackbox_presentation(state)
     if sector_id not in state["game"]["used_questions"]:
@@ -269,12 +352,21 @@ def live_ops_force_phase(
             "respondent_required",
             "Сначала выберите участника суперблица",
         )
+    if (
+        round_ctx
+        and round_ctx.get("credit_repayment")
+        and new_phase == PHASE_DISCUSSION
+    ):
+        raise TransitionError(
+            "credit_repayment_no_discussion",
+            "Возврат кредита идёт без обсуждения",
+        )
     was_spinning = _invalidate_spin(state)
     had_blackbox = clear_blackbox_presentation(state)
 
     if new_phase == PHASE_PRE_ROUND:
         state["game"]["round"] = None
-        state["timer"]["discussion_deadline_ms"] = None
+        _clear_timer_state(state)
         state["presentation"]["shared_media"] = None
         state["game"]["phase"] = new_phase
         return TransitionEffects(
@@ -318,9 +410,13 @@ def live_ops_force_phase(
             if kind in ("blitz", "superblitz")
             else normal_discussion_seconds
         )
-        state["timer"]["discussion_deadline_ms"] = now_ms + seconds * 1000
+        timer = state["timer"]
+        timer["segment"] = "base"
+        timer["started_at_ms"] = now_ms
+        timer["discussion_deadline_ms"] = now_ms + seconds * 1000
+        timer["generation"] = timer.get("generation", 0) + 1
     else:
-        state["timer"]["discussion_deadline_ms"] = None
+        _clear_timer_state(state)
 
     return TransitionEffects(
         events=(
@@ -377,7 +473,7 @@ def live_ops_cancel_spin(state: AppState) -> TransitionEffects:
     _invalidate_spin(state)
     state["game"]["phase"] = PHASE_PRE_ROUND
     state["game"]["round"] = None
-    state["timer"]["discussion_deadline_ms"] = None
+    _clear_timer_state(state)
     state["presentation"]["shared_media"] = None
     clear_blackbox_presentation(state)
     return TransitionEffects(
@@ -430,7 +526,12 @@ def live_ops_set_timer(
             label="Таймер",
         )
         deadline_ms = now_ms + new_seconds * 1000
-    state["timer"]["discussion_deadline_ms"] = deadline_ms
+    timer = state["timer"]
+    if deadline_ms is not None and timer.get("segment") is None:
+        timer["segment"] = "base"
+        timer["started_at_ms"] = now_ms
+    timer["discussion_deadline_ms"] = deadline_ms
+    timer["generation"] = timer.get("generation", 0) + 1
     return TransitionEffects(
         events=(
             game_event(

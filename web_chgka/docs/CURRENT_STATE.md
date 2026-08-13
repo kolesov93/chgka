@@ -4,7 +4,7 @@
 - Latest completed task: `docs/tasks/0022-participant-groups-respondents.md`
 - Active task: `docs/tasks/0023-earned-minutes-credit.md`
 - Branch: `task/earned-minutes-credit`
-- Status: task 0023 is fully specified; implementation has not started.
+- Status: task 0023 is implemented locally and awaits focused browser smoke plus CI.
 
 ## Repository checkpoint
 
@@ -13,7 +13,9 @@
 - Accepted product choices: captain-driven strategic actions with host fallbacks; captain early-answer window of 5 seconds versus the full base minute for the host; sequential spending of multiple earned minutes; exact `X:5` single-use credit; voluntary future repayment forced at `5:5`; television-style blitz/superblitz restrictions.
 - The captain is one physical participant selected by the host. A shared player login necessarily shares captain controls with the whole participant group on that browser.
 - Detailed state transitions, timer segmentation, race/reconnect/Live Ops handling, typed journal events, automated coverage and the 12-step acceptance smoke are recorded in `docs/tasks/0023-earned-minutes-credit.md`.
-- Next continuation point: implement task 0023 from the synchronous backend state/transitions outward, then run the full automated suites and reproduce the exact smoke checklist in the handoff.
+- The implementation adds public captain/team/credit state, generation-guarded base/earned/credit timer segments, host/captain Socket.IO actions, normal and blitz/superblitz repayment rules, roster/player/Live Ops controls, reconnect-aware countdowns, and question-context journal events.
+- Local verification passes: 228 backend tests with warnings treated as errors, all 13 frontend tests, the production build, sample-pack validation, and native Compose configuration validation.
+- Next continuation point: pass the exact 12-step smoke in the task file, publish the task branch for CI if desired, then close and merge task 0023 into `web`.
 
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.

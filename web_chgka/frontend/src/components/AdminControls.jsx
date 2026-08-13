@@ -11,6 +11,12 @@ import {
   participantGroups,
 } from '../participants';
 import { responseMessage } from '../uiText';
+import {
+  canScheduleRepayment,
+  canTakeCreditMinute,
+  canUseEarnedMinute,
+  timerSegmentLabel,
+} from '../gameMinutes';
 
 export function AdminControls({
   gameState,
@@ -47,6 +53,18 @@ export function AdminControls({
   const respondentOptions = approvedParticipantOptions(players);
   const respondent = round?.respondent || null;
   const isSuperblitz = roundKind === 'superblitz';
+  const team = gameState?.team || {};
+  const captain = team.captain || null;
+  const timer = gameState?.timer || null;
+  const hostEarlyAnswerAvailable = isDiscussion
+    && roundKind === 'normal'
+    && !round?.credit_repayment
+    && timer?.segment === 'base'
+    && typeof discussionRemaining === 'number'
+    && discussionRemaining > 0;
+  const earnedMinuteAvailable = canUseEarnedMinute(gameState);
+  const creditMinuteAvailable = canTakeCreditMinute(gameState);
+  const repaymentCanBeScheduled = canScheduleRepayment(gameState);
 
   const spinForced = (sectorId) => {
     if (confirm(`Крутим на сектор ${sectorId}?`)) {
@@ -95,6 +113,43 @@ export function AdminControls({
         }
       },
     );
+  };
+
+  const emitHostAction = (event, payload = {}, fallbackMessage = 'Действие отклонено') => {
+    socket.emit(event, payload, (response) => {
+      if (!response?.ok) {
+        addNotification({
+          type: 'warning',
+          message: responseMessage(response, fallbackMessage),
+        });
+      }
+    });
+  };
+
+  const selectCaptain = (participant) => {
+    emitHostAction(
+      'admin_select_captain',
+      { participant_id: participant.id },
+      'Не удалось выбрать капитана',
+    );
+  };
+
+  const timerPayload = { timer_generation: timer?.generation };
+
+  const takeCredit = () => {
+    if (confirm('Взять единственную минуту в кредит в этой игре?')) {
+      emitHostAction('admin_take_credit_minute', timerPayload, 'Не удалось взять кредит');
+    }
+  };
+
+  const scheduleRepayment = () => {
+    if (confirm('Следующий раунд пройдёт без обсуждения. Вернуть минуту в кредит?')) {
+      emitHostAction(
+        'admin_schedule_credit_repayment',
+        {},
+        'Не удалось назначить возврат кредита',
+      );
+    }
   };
 
   const respondentSelector = (
@@ -205,15 +260,27 @@ export function AdminControls({
               <>
                 {isSuperblitz && (!respondent || partIndex === 0) && respondentSelector}
                 <button
-                  onClick={() => socket.emit('admin_start_discussion')}
+                  onClick={() => round?.credit_repayment
+                    ? emitHostAction(
+                      'admin_repayment_answer',
+                      {},
+                      'Не удалось принять ответ без обсуждения',
+                    )
+                    : socket.emit('admin_start_discussion')}
                   disabled={blackboxActive || (isSuperblitz && !respondent)}
-                  className="w-full bg-blue-700 hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40 text-white py-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-xs"
+                  className={`w-full disabled:cursor-not-allowed disabled:opacity-40 text-white py-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-xs ${
+                    round?.credit_repayment
+                      ? 'bg-rose-800 hover:bg-rose-700'
+                      : 'bg-blue-700 hover:bg-blue-600'
+                  }`}
                 >
                   {blackboxActive
                     ? 'Сначала завершите чёрный ящик'
                     : isSuperblitz && !respondent
                       ? 'Сначала выберите участника'
-                      : 'Начать обсуждение'}
+                      : round?.credit_repayment
+                        ? 'Принять ответ без обсуждения'
+                        : 'Начать обсуждение'}
                 </button>
               </>
             )}
@@ -221,7 +288,7 @@ export function AdminControls({
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between px-2 py-2 rounded bg-slate-950/40 border border-slate-800">
                   <span className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">
-                    Обсуждение
+                    {timerSegmentLabel(timer?.segment)}
                   </span>
                   <span
                     className={`text-lg font-black tabular-nums ${
@@ -233,6 +300,45 @@ export function AdminControls({
                     {typeof discussionRemaining === 'number' ? discussionRemaining : '—'}
                   </span>
                 </div>
+                {hostEarlyAnswerAvailable && (
+                  <button
+                    type="button"
+                    onClick={() => emitHostAction(
+                      'admin_early_answer',
+                      timerPayload,
+                      'Не удалось принять досрочный ответ',
+                    )}
+                    className="w-full rounded bg-purple-800 py-2 text-[10px] font-black uppercase tracking-wider text-white hover:bg-purple-700"
+                  >
+                    Досрочный ответ
+                  </button>
+                )}
+                {(earnedMinuteAvailable || creditMinuteAvailable) && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {earnedMinuteAvailable && (
+                      <button
+                        type="button"
+                        onClick={() => emitHostAction(
+                          'admin_spend_earned_minute',
+                          timerPayload,
+                          'Не удалось запустить дополнительную минуту',
+                        )}
+                        className="rounded bg-sky-800 px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-sky-700"
+                      >
+                        Доп. минута · {team.earned_minutes}
+                      </button>
+                    )}
+                    {creditMinuteAvailable && (
+                      <button
+                        type="button"
+                        onClick={takeCredit}
+                        className="rounded bg-rose-800 px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-rose-700"
+                      >
+                        Минута в кредит
+                      </button>
+                    )}
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <button
                     onClick={signalTenSeconds}
@@ -282,24 +388,46 @@ export function AdminControls({
               </div>
             )}
             {isPostRound && (
-              <button
-                onClick={() => socket.emit('admin_end_round')}
-                className={`w-full text-white py-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-xs ${
-                  hasWinner
-                    ? 'bg-yellow-700 hover:bg-yellow-600'
-                    : 'bg-emerald-700 hover:bg-emerald-600'
-                }`}
-              >
-                {hasWinner
-                  ? 'Завершить игру'
-                  : blitzHasNextPart
-                    ? 'Следующая часть'
-                    : 'Завершить раунд'}
-              </button>
+              <div className="flex flex-col gap-2">
+                {repaymentCanBeScheduled && (
+                  <button
+                    type="button"
+                    onClick={scheduleRepayment}
+                    className="w-full rounded bg-rose-800 py-2 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-rose-700"
+                  >
+                    Вернуть кредит в следующем раунде
+                  </button>
+                )}
+                <button
+                  onClick={() => socket.emit('admin_end_round')}
+                  className={`w-full text-white py-3 rounded shadow active:scale-95 transition-all font-bold uppercase tracking-wider text-xs ${
+                    hasWinner
+                      ? 'bg-yellow-700 hover:bg-yellow-600'
+                      : 'bg-emerald-700 hover:bg-emerald-600'
+                  }`}
+                >
+                  {hasWinner
+                    ? 'Завершить игру'
+                    : blitzHasNextPart
+                      ? 'Следующая часть'
+                      : 'Завершить раунд'}
+                </button>
+              </div>
             )}
             {isPreRound && (
-              <div className="text-xs text-slate-500 font-bold uppercase tracking-widest">
-                Фаза: ожидание вращения
+              <div className="flex flex-col gap-2">
+                {repaymentCanBeScheduled && (
+                  <button
+                    type="button"
+                    onClick={scheduleRepayment}
+                    className="w-full rounded bg-rose-800 py-2 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-rose-700"
+                  >
+                    Вернуть кредит в следующем раунде
+                  </button>
+                )}
+                <div className="text-xs text-slate-500 font-bold uppercase tracking-widest">
+                  Фаза: ожидание вращения
+                </div>
               </div>
             )}
             {isGameOver && (
@@ -357,7 +485,9 @@ export function AdminControls({
           <div className="space-y-1 max-h-40 overflow-y-auto">
             <ParticipantRoster
               groups={groups}
+              captain={captain}
               compact
+              onSelectCaptain={selectCaptain}
               onApprove={(group) => socket.emit('admin_approve', { group_id: group.group_id })}
               onKick={kickGroup}
             />

@@ -7,6 +7,7 @@ import {
 } from '../liveOps';
 import { socket } from '../socket';
 import { phaseLabel, questionKindLabel, responseMessage } from '../uiText';
+import { creditRecoveryValue } from '../gameMinutes';
 
 const buttonClass = 'rounded px-2 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
 
@@ -17,6 +18,8 @@ export function LiveOpsPanel({ gameState, addNotification }) {
   const [sector, setSector] = useState(String(gameState?.round?.sector ?? gameState?.current_sector ?? 1));
   const [partNumber, setPartNumber] = useState('1');
   const [customSeconds, setCustomSeconds] = useState('60');
+  const [earnedMinutes, setEarnedMinutes] = useState(String(gameState?.team?.earned_minutes ?? 0));
+  const [creditState, setCreditState] = useState(creditRecoveryValue(gameState?.team?.credit));
 
   const score = gameState?.score || { znatoki: 0, tv: 0 };
   const usedQuestions = gameState?.used_questions || [];
@@ -36,6 +39,16 @@ export function LiveOpsPanel({ gameState, addNotification }) {
     setSector(String(round?.sector ?? gameState?.current_sector ?? 1));
     setPartNumber(String((round?.part_index ?? 0) + 1));
   }, [gameState?.current_sector, round?.part_index, round?.sector]);
+
+  useEffect(() => {
+    setEarnedMinutes(String(gameState?.team?.earned_minutes ?? 0));
+    setCreditState(creditRecoveryValue(gameState?.team?.credit));
+  }, [
+    gameState?.team?.earned_minutes,
+    gameState?.team?.credit?.used,
+    gameState?.team?.credit?.debt,
+    gameState?.team?.credit?.repayment_scheduled,
+  ]);
 
   const warn = (message) => {
     addNotification?.({ type: 'warning', message });
@@ -117,6 +130,19 @@ export function LiveOpsPanel({ gameState, addNotification }) {
     setTimer(seconds);
   };
 
+  const applyTeamResources = () => {
+    const earned = parseBoundedInteger(earnedMinutes, 0, Number.MAX_SAFE_INTEGER);
+    if (earned === null) {
+      warn('Банк минут должен быть неотрицательным целым числом');
+      return;
+    }
+    if (!confirm('Скорректировать банк дополнительных минут и состояние кредита?')) return;
+    emitRecovery('admin_set_team_resources', {
+      earned_minutes: earned,
+      credit_state: creditState,
+    });
+  };
+
   return (
     <div className="rounded-lg border border-red-900/70 bg-red-950/20">
       <button
@@ -159,6 +185,70 @@ export function LiveOpsPanel({ gameState, addNotification }) {
               <button type="button" onClick={applyScore} className={`${buttonClass} bg-red-800 hover:bg-red-700 text-white`}>
                 Применить
               </button>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[10px] uppercase font-bold text-slate-500 mb-2">
+              Игровые минуты
+            </div>
+            <div className="grid grid-cols-[1fr_2fr_auto] items-end gap-2">
+              <label className="text-[10px] text-slate-400">
+                Банк
+                <input
+                  type="number"
+                  min="0"
+                  value={earnedMinutes}
+                  onChange={(event) => setEarnedMinutes(event.target.value)}
+                  className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-white"
+                />
+              </label>
+              <label className="text-[10px] text-slate-400">
+                Кредит
+                <select
+                  value={creditState}
+                  onChange={(event) => setCreditState(event.target.value)}
+                  className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-white"
+                >
+                  <option value="available">Доступен</option>
+                  <option value="used">Использован, без долга</option>
+                  <option value="debt">Нужно вернуть</option>
+                  <option value="scheduled">Возврат назначен</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={applyTeamResources}
+                className={`${buttonClass} bg-red-800 text-white hover:bg-red-700`}
+              >
+                Применить
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[10px] uppercase font-bold text-slate-500 mb-2">
+              Капитан
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 rounded border border-slate-800 bg-slate-950/60 px-2 py-2 text-xs text-slate-300">
+                {gameState?.team?.captain?.name || 'Не выбран'}
+              </div>
+              <button
+                type="button"
+                disabled={!gameState?.team?.captain}
+                onClick={() => {
+                  if (confirm('Снять текущего капитана?')) {
+                    emitRecovery('admin_clear_captain');
+                  }
+                }}
+                className={`${buttonClass} bg-red-800 text-white hover:bg-red-700`}
+              >
+                Снять
+              </button>
+            </div>
+            <div className="mt-1 text-[10px] text-slate-600">
+              Выбрать или сменить капитана можно в списке участников выше.
             </div>
           </div>
 

@@ -28,14 +28,15 @@ FastAPI + python-socketio (backend/main.py)
 - `frontend/src/App.jsx` owns only top-level phase routing and the main page layout.
 - `frontend/src/entrypoint.js` resolves the exact `/play`, `/admin`, and `/admin/history` entrypoints before React renders and owns their document titles/login subtitles. `/`, trailing-slash aliases, and unknown paths are canonicalized without adding a routing dependency.
 - `frontend/src/socket.js` owns the single Socket.IO client plus backend/media URL construction.
-- `frontend/src/hooks/useGameSession.js` owns session restore, shared server state, players, pack/admin data, notifications, logout, and non-audio socket listeners.
+- `frontend/src/hooks/useGameSession.js` owns session restore, shared server state, the current player-group identity, players, pack/admin data, notifications, logout, and non-audio socket listeners. It stamps server timer snapshots with their local receipt time; captain permissions still come only from the backend.
 - `frontend/src/hooks/useDiscussionTimer.js` owns the admin countdown and one-shot local ten-second notification; `useSocketSoundEvents.js` bridges sound events to `useGameSound.js`.
 - `frontend/src/hooks/useSoundFade.js` derives one reconnect-aware emergency fade multiplier from the server sound-control snapshot. Shared media, effects, and the wheel consume that multiplier; the wheel also retains its intrinsic end-of-spin fade.
-- `frontend/src/components/` contains the shared intro screen with host-only speech/navigation, the admin question/media panel with private inline image thumbnails and black-box controls, synchronized black-box audio/static player screen, the shared respondent banner, grouped participant roster, the shared final screen, normal admin controls with the always-visible game-mode and director-sound blocks, the standalone admin-only `/admin/history` screen with its own teal page/login background, the separate danger-styled Live Ops recovery panel, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
+- `frontend/src/components/` contains the shared intro screen with host-only speech/navigation, the admin question/media panel with private inline image thumbnails and black-box controls, synchronized black-box audio/static player screen, the shared respondent and team-resource banners, captain strategy controls, grouped participant roster, the shared final screen, normal admin controls with the always-visible game-mode and director-sound blocks, the standalone admin-only `/admin/history` screen with its own teal page/login background, the separate danger-styled Live Ops recovery panel, shared-media renderer, header/notifications, table, login, waiting room, score, and log views.
 - `frontend/src/participants.js` owns pure participant-group counts and the approved physical-participant options used by the host selector.
 - `frontend/src/intro.js` owns the static `00`/`13` boundary, fallback author asset, host next-step labels, and reconnect-aware music countdown math. Author photos for slides 1–12 come from the backend origin.
 - `frontend/src/inlineMedia.js` safely turns resolved image placeholders into host-only thumbnail markup. Non-image and unknown placeholders remain unchanged.
 - `frontend/src/blackbox.js` owns the static image/music sources and converts the public black-box timeline into the existing synchronized playback shape.
+- `frontend/src/gameMinutes.js` owns reconnect-aware timer projection and pure visibility rules for early answer, earned minutes, credit and repayment controls. These rules are only presentation hints; every action is revalidated synchronously by the backend.
 - Development connects Socket.IO and media requests directly to `http://localhost:8000`. A production build uses the current origin (`/`).
 
 The frontend receives the shared game snapshot through `state_update`. Admin-only data uses separate events such as `players_update`, `pack_info`, and `admin_question`.
@@ -51,8 +52,8 @@ UI components may emit existing user actions through the shared socket, but they
 - `backend/auth.py` owns the single active opaque admin token and its fixed in-memory expiry/revocation lifecycle; every privileged Socket.IO action validates the role plus current token.
 - `backend/safe_html.py` owns the `nh3` allowlist used after Markdown conversion for question sections and intro speech.
 - `backend/state.py` defines the typed internal `AppState` and serializes it to the flat public payload expected by the frontend.
-- `backend/transitions.py` owns synchronous intro, black-box presentation, respondent timing, phase, spin, scoring, blitz, round-end, and reset rules. It mutates `AppState` before network awaits and returns typed events plus transport effects such as sounds, media-token cleanup, and admin-question refresh.
-- `backend/live_ops.py` owns exceptional admin recovery rules: exact score/sector edits, direct round opening, normalized phase forcing, stuck-spin cancellation, and timer repair. It uses the same transport effects without weakening normal transition guards.
+- `backend/transitions.py` owns synchronous intro, black-box presentation, captain selection, early-answer/game-minute/credit strategy, respondent timing, phase, spin, scoring, blitz, round-end, and reset rules. It mutates `AppState` before network awaits and returns typed events plus transport effects such as sounds, media-token cleanup, and admin-question refresh.
+- `backend/live_ops.py` owns exceptional admin recovery rules: exact score/sector/team-resource edits, direct round opening, normalized phase forcing, stuck-spin cancellation, and timer repair. It uses the same transport effects without weakening normal transition guards; in particular it cannot add discussion to a credit-repayment round.
 - `backend/sound_control.py` owns the pure generation-based `normal`/`fading`/`stopped` lifecycle and synchronized fade progress math.
 - `backend/questions.py` parses and validates filesystem question packs, mandatory unique UUIDs, required author/optional city/direct author-photo/strict black-box metadata, section-aware opaque question-media references, and Markdown sections. `backend/assign_question_ids.py` performs the one-time migration of an otherwise valid old pack.
 - `backend/game_journal.py` owns the SQLite schema, game-session lifecycle, regular/debug classification, ordered structured events, and question-history queries. `respondent_selected` stores physical/group IDs plus the name snapshot and is joined to the exact opened question/part in session detail. It does not restore `AppState`.
@@ -65,9 +66,9 @@ The backend is authoritative. Clients request actions; they do not calculate sco
 
 Internal state is split by responsibility:
 
-- `game`: phase, score, used questions, current round;
+- `game`: phase, score, used questions, current round, and public team resources (captain, earned-minute bank, credit lifecycle);
 - `wheel`: sector and spin animation state;
-- `timer`: discussion deadline;
+- `timer`: discussion deadline, original segment start, `base|earned|credit` type, and monotonic generation;
 - `presentation`: intro progress/timeline, shared media, and the synchronized black-box timeline/generation;
 - `pack`: question types plus public intro-author metadata needed by the UI;
 - `logs`: the latest 50 display entries for the live snapshot; the complete log is kept separately in SQLite.
@@ -91,6 +92,12 @@ Blitz and superblitz use the later game phases plus `round.part_index` and the t
 
 The in-memory roster stores one record per browser group, not per person. Its player-token, SID, online/pending status, admission and kick lifecycle are group-level; nested participants have separate opaque IDs and fixed display names. `players_update` remains admin-only and contains the group boundary, allowing the UI to render one row per person with alternating group backgrounds. Duplicate display names are valid because all actions use IDs. A selected respondent may come from an approved offline group but never from a pending group.
 
+The host selects one physical participant as captain; the public state stores an immutable participant/group/name snapshot. A captain action is accepted only from the active admitted Socket.IO session of that snapshot's group, so reconnect replaces the usable socket and kick clears the role. Everyone sees the captain and team resources, while only that browser group receives active strategy controls. Multiple people sharing one player login necessarily share those controls.
+
+The backend timer is a reconnect-aware sequence of `base -> earned ... -> credit` segments. Its generation rejects stale browser commands after another timer action or Live Ops repair. A captain may declare an early answer only in `[base.started_at, +5s)` on a normal question; the host fallback lasts to the base deadline. A correct early answer awards one banked minute inside scoring. Earned minutes are spent one at a time after an elapsed base/earned segment; blitz variants lock spending to one part. The single credit is available only at `X:5`, creates debt only after winning the whole round, and cannot be followed by an earned segment.
+
+Credit repayment is scheduled before spin, automatically at `5:5`, and attached to the next opened round. It has no discussion timer or minute actions: the host takes each answer directly from `QUESTION_READING`. Normal repayment clears debt when its answer is presented; blitz/superblitz clear it after the third answer, or terminate it when an earlier wrong answer ends the game. Reset creates a fresh captain/bank/credit lifecycle, while reconnect receives all active state through `state_update`.
+
 The sixth point still enters `POST_ROUND`, preserving the host's answer/commentary review. The following end-round action enters `GAME_OVER` instead of `PRE_ROUND`, clears round/media/timer/wheel context, stops older effects, and then broadcasts the one-shot `final` sound. `GAME_OVER` is stable in the public snapshot, so reconnecting clients recover the final score/winner screen without replaying the sound. Normal game actions remain guarded by their expected phases; reset starts a new `PRE_ROUND` game with the same pack and connected players.
 
 ## Live Ops recovery
@@ -103,6 +110,7 @@ The admin has a separate collapsed recovery panel; it is not part of the normal 
 - `admin_reset_to_intro` performs an explicit full progress reset, invalidates active runtime context, stops audio, and restores intro slide `00` with music waiting for the host command;
 - `admin_cancel_spin` increments `spin_id`, so a sleeping spin handler cannot overwrite recovered state;
 - `admin_set_timer` sets or stops the deadline only in `DISCUSSION`.
+- `admin_set_team_resources` normalizes the earned-minute bank and credit lifecycle; the host can also clear the captain from recovery and select a replacement in the normal participant roster.
 
 After admin authorization, every operation validates its complete input before mutation, mutates synchronously before any network emit await, logs the recovery, and then broadcasts authoritative state. Hide media reuses its existing event and remains in this panel. Recovery does not play normal phase/scoring sounds; reset-to-intro stops existing audio and leaves the explicit music start to the host. Recovery does not introduce arbitrary state editing, snapshots, or undo.
 
@@ -165,7 +173,7 @@ All other mutable runtime data remains process-local. A backend restart still lo
 
 Admin authentication is also process-local. The backend accepts one active opaque token with a fixed, non-sliding TTL (12 hours by default); a new password login, explicit logout, expiry, or backend restart revokes the old session. The browser stores it in `localStorage` for reconnect, but the backend validates the token again for every privileged event. Player reconnect tokens keep their previous untimed in-memory lifecycle and never grant admin rights.
 
-Socket.IO handlers are asynchronous and can overlap. UI button disabling is not a concurrency boundary. Core game and recovery handlers therefore call synchronous transitions before their first network await. Repeated scoring is rejected by the changed phase, intro navigation validates the expected slide index, and spin completion is accepted only for the current `spin_id`; reset and recovery cancellation both advance that generation.
+Socket.IO handlers are asynchronous and can overlap. UI button disabling is not a concurrency boundary. Core game and recovery handlers therefore call synchronous transitions before their first network await. Repeated scoring is rejected by the changed phase, strategic timer actions validate the current timer generation before an atomic phase/bank mutation, intro navigation validates the expected slide index, and spin completion is accepted only for the current `spin_id`; reset and recovery cancellation both advance that generation.
 
 ## Deployment status
 

@@ -48,6 +48,16 @@ def test_create_initial_app_state_defaults():
     assert state["game"]["score"] == {"znatoki": 0, "tv": 0}
     assert state["game"]["used_questions"] == []
     assert state["game"]["round"] is None
+    assert state["game"]["team"] == {
+        "captain": None,
+        "earned_minutes": 0,
+        "credit": {
+            "used": False,
+            "debt": False,
+            "repayment_scheduled": False,
+            "forced": False,
+        },
+    }
     assert state["wheel"]["current_sector"] == 1
     assert state["wheel"]["target_angle"] is None
     assert state["wheel"]["playing_sector"] is None
@@ -55,6 +65,9 @@ def test_create_initial_app_state_defaults():
     assert state["wheel"]["is_spinning"] is False
     assert state["wheel"]["spin_id"] == 0
     assert state["timer"]["discussion_deadline_ms"] is None
+    assert state["timer"]["segment"] is None
+    assert state["timer"]["started_at_ms"] is None
+    assert state["timer"]["generation"] == 0
     assert state["presentation"]["intro"] is None
     assert state["presentation"]["shared_media"] is None
     assert state["presentation"]["blackbox"] is None
@@ -122,6 +135,9 @@ def test_reset_app_state_clears_runtime_fields_and_preserves_pack_metadata():
     assert state["wheel"]["is_spinning"] is False
     assert state["wheel"]["spin_id"] == 8
     assert state["timer"]["discussion_deadline_ms"] is None
+    assert state["timer"]["segment"] is None
+    assert state["timer"]["started_at_ms"] is None
+    assert state["timer"]["generation"] == 1
     assert state["presentation"]["intro"] is None
     assert state["presentation"]["shared_media"] is None
     assert state["presentation"]["blackbox"] is None
@@ -167,6 +183,23 @@ def test_public_game_state_flattens_app_state_for_current_frontend():
         "logs": ["hello"],
         "question_types": ["normal"],
         "discussion_deadline_ms": 12345,
+        "timer": {
+            "discussion_deadline_ms": 12345,
+            "segment": None,
+            "started_at_ms": None,
+            "generation": 0,
+            "server_now_ms": 999_000,
+        },
+        "team": {
+            "captain": None,
+            "earned_minutes": 0,
+            "credit": {
+                "used": False,
+                "debt": False,
+                "repayment_scheduled": False,
+                "forced": False,
+            },
+        },
         "round": {
             "kind": "normal",
             "sector": 3,

@@ -7,6 +7,7 @@ from live_ops import (
     live_ops_reset_to_intro,
     live_ops_set_score,
     live_ops_set_sector_used,
+    live_ops_set_team_resources,
     live_ops_set_timer,
 )
 from state import (
@@ -229,6 +230,30 @@ def test_force_discussion_uses_blitz_duration():
     assert state["timer"]["discussion_deadline_ms"] == 21_000
 
 
+def test_force_discussion_cannot_add_timer_to_credit_repayment():
+    state = _state(phase=PHASE_QUESTION_READING)
+    state["game"]["round"] = {
+        "kind": "normal",
+        "sector": 6,
+        "credit_repayment": True,
+    }
+    state["wheel"]["spin_id"] = 9
+
+    with pytest.raises(TransitionError) as error:
+        live_ops_force_phase(
+            state,
+            phase=PHASE_DISCUSSION,
+            now_ms=1_000,
+            normal_discussion_seconds=60,
+            blitz_discussion_seconds=20,
+        )
+
+    assert error.value.code == "credit_repayment_no_discussion"
+    assert state["game"]["phase"] == PHASE_QUESTION_READING
+    assert state["timer"]["discussion_deadline_ms"] is None
+    assert state["wheel"]["spin_id"] == 9
+
+
 def test_force_superblitz_past_reading_requires_selected_participant():
     state = _state(phase=PHASE_QUESTION_READING)
     state["game"]["round"] = {"kind": "superblitz", "sector": 7, "part_index": 0}
@@ -271,6 +296,16 @@ def test_reset_to_intro_clears_progress_and_restarts_timeline():
         "score": {"znatoki": 0, "tv": 0},
         "used_questions": [],
         "round": None,
+        "team": {
+            "captain": None,
+            "earned_minutes": 0,
+            "credit": {
+                "used": False,
+                "debt": False,
+                "repayment_scheduled": False,
+                "forced": False,
+            },
+        },
     }
     assert state["wheel"]["spin_id"] == 8
     assert state["wheel"]["is_spinning"] is False
@@ -319,13 +354,21 @@ def test_timer_recovery_supports_custom_value_stop_and_validation():
     state = _state(phase=PHASE_DISCUSSION)
     state["game"]["round"] = {"kind": "normal", "sector": 2}
     state["timer"]["discussion_deadline_ms"] = 15_000
+    state["timer"]["segment"] = "earned"
+    state["timer"]["started_at_ms"] = 5_000
+    original_generation = state["timer"]["generation"]
 
     set_effects = live_ops_set_timer(state, seconds=60, now_ms=10_000)
     assert state["timer"]["discussion_deadline_ms"] == 70_000
+    assert state["timer"]["segment"] == "earned"
+    assert state["timer"]["started_at_ms"] == 5_000
+    assert state["timer"]["generation"] == original_generation + 1
     assert set_effects.logs == ("Восстановление: таймер 5 с → 60 с",)
 
     stop_effects = live_ops_set_timer(state, seconds=None, now_ms=20_000)
     assert state["timer"]["discussion_deadline_ms"] is None
+    assert state["timer"]["segment"] == "earned"
+    assert state["timer"]["started_at_ms"] == 5_000
     assert stop_effects.logs == ("Восстановление: таймер 50 с → выключен",)
 
     with pytest.raises(TransitionError) as error:
@@ -336,3 +379,39 @@ def test_timer_recovery_supports_custom_value_stop_and_validation():
     with pytest.raises(TransitionError) as error:
         live_ops_set_timer(state, seconds=10, now_ms=20_000)
     assert error.value.code == "bad_phase"
+
+
+def test_team_resource_recovery_validates_and_normalizes_credit_state():
+    state = _state(phase=PHASE_PRE_ROUND)
+    state["game"]["score"] = {"znatoki": 5, "tv": 5}
+
+    effects = live_ops_set_team_resources(
+        state,
+        earned_minutes=3,
+        credit_state="debt",
+    )
+
+    assert state["game"]["team"]["earned_minutes"] == 3
+    assert state["game"]["team"]["credit"] == {
+        "used": True,
+        "debt": True,
+        "repayment_scheduled": True,
+        "forced": True,
+    }
+    assert effects.events[0].event_type == "live_team_resources_changed"
+
+    with pytest.raises(TransitionError) as error:
+        live_ops_set_team_resources(
+            state,
+            earned_minutes=-1,
+            credit_state="available",
+        )
+    assert error.value.code == "invalid_earned_minutes"
+
+    with pytest.raises(TransitionError) as error:
+        live_ops_set_team_resources(
+            state,
+            earned_minutes=2,
+            credit_state="broken",
+        )
+    assert error.value.code == "invalid_credit_state"
