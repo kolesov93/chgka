@@ -1,10 +1,10 @@
 # CHGKA Web Current State
 
 - Snapshot date: 2026-08-13
-- Latest completed task: `docs/tasks/0023-earned-minutes-credit.md`
-- Active task: `docs/tasks/0024-skip-intro.md`.
+- Latest completed task: `docs/tasks/0024-skip-intro.md`
+- Active task: none; next requested mini-task is host-driven game completion at any score.
 - Branch: `task/skip-intro`
-- Status: task 0024 is implemented and locally verified; it awaits the exact five-step manual smoke plus CI.
+- Status: task 0024 is implemented, locally verified and browser-accepted; it is ready for closure and local merge into `web`.
 
 ## Repository checkpoint
 
@@ -30,7 +30,8 @@
 - The implementation adds `admin_skip_intro`, a synchronous expected-slide transition, `intro_skipped` journal event, immediate synchronized sound stop, and a reserved secondary `Перейти к игре` slot on slides `00`–`12`; the duplicate action is hidden on slide `13`.
 - Local in-app browser verification confirms the button layout, cancel path and synchronized accepted transition for both host and player from slide `00`.
 - Local verification passes: `npm ci`, 251 backend tests with warnings treated as errors, all 13 frontend tests, the production build, sample-pack validation, native Compose configuration validation and `git diff --check`.
-- Next continuation point: pass the exact five-step smoke from the task file, publish the task branch for CI if desired, then close and merge task 0024 into `web`.
+- Browser acceptance: the exact five-step skip-intro smoke passed on 2026-08-13.
+- Next continuation point: close and merge task 0024 into `web`, then create a separate task for host-driven completion at any score.
 
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.
