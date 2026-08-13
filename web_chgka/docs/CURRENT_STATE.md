@@ -3,8 +3,8 @@
 - Snapshot date: 2026-08-13
 - Latest completed task: `docs/tasks/0026-remove-browser-dialogs.md`
 - Active task: none.
-- Branch: `task/remove-browser-dialogs`
-- Status: task 0026 is locally green and its focused smoke was accepted; close and merge it locally into `web`, then let the user push `web`.
+- Branch: `web`
+- Status: task 0026 is accepted and merged locally; `web` awaits the user's push and GitHub CI.
 
 ## Repository checkpoint
 
@@ -49,10 +49,13 @@
 - Task 0026 starts from local `web` commit `f2e9659` on `task/remove-browser-dialogs`. It removes every runtime browser-native dialog, keeps answer-media disclosure behind an in-app confirmation, and routes the kicked-player explanation through the existing login notice.
 - Task 0026 planning commit: `ef3f07b` (`Plan browser dialog removal task`).
 - Task 0026 implementation commit: `9b92cd2` (`Remove browser-native dialogs`).
+- Task 0026 implementation handoff commit: `b3e3fc9` (`Record browser dialog implementation handoff`).
+- Task 0026 closure commit: `5f61506` (`Close browser dialog removal task`).
+- Task 0026 merge commit: `bc9ebe8` (`Merge browser dialog removal task`).
 - The implementation removes all 20 native-dialog call sites without changing Socket.IO contracts, adds a token-bound inline answer-media guard, routes kicked-player copy through `sessionNotice`, and adds a structural regression test against browser-native dialogs.
 - Local verification passes: all 15 frontend test files, production build, `git diff --check`, runtime source audit, and focused in-app browser checks for direct actions, answer-media cancel/stale/accept flows, kicked notice and player logout.
 - Browser acceptance: the exact six-step native-dialog smoke passed on 2026-08-13.
-- Next continuation point: close task 0026, merge locally into `web`, and let the user push `web`.
+- Next continuation point: push `web`, confirm GitHub CI, then choose the next roadmap task.
 
 - Task 0022 starts from local `web` commit `0438766`.
 - One player login will own a stable 1–N participant group; admission, reconnect and kick are group-level, while respondent attribution uses physical participant IDs.
