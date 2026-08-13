@@ -3,12 +3,12 @@
 - Snapshot date: 2026-08-13
 - Latest completed task: `docs/tasks/0030-fix-sqlite-resource-warnings.md`
 - Active task: none.
-- Branch: `task/fix-sqlite-resource-warnings`
-- Status: task 0030 is complete and ready to merge into `main`. All 265 backend tests pass under Python 3.14 with warnings treated as errors; no browser smoke is required.
+- Branch: `main`
+- Status: task 0030 is merged into local `main` at `fe1d592` and awaits the user's push and GitHub CI. All 265 backend tests pass with warnings treated as errors; no browser smoke is required.
 
 ## Repository checkpoint
 
-- Task 0030 fixes the red main-branch backend CI caused by Python 3.14 reporting unclosed SQLite backup connections. Production and test-helper connections now close explicitly, and a regression test verifies all three connections opened by `create_backup()` are closed before return. Local verification passes all 265 tests with warnings as errors. A one-off Python 3.14 reproduction also passed before the environment boundary was clarified; all future development and tests stay local or in CI, while the VPS is reserved for releases and deployments. Production remains stopped.
+- Task 0030 planning commit is `183f2d3`, implementation commit is `1872cc0`, closure commit is `19383a3`, and merge commit into `main` is `fe1d592`. It fixes the red main-branch backend CI caused by Python 3.14 reporting unclosed SQLite backup connections. Production and test-helper connections now close explicitly, and a regression test verifies all three connections opened by `create_backup()` are closed before return. Local verification passes all 265 tests with warnings as errors. A one-off Python 3.14 reproduction also passed before the environment boundary was clarified; all future development and tests stay local or in CI, while the VPS is reserved for releases and deployments. Production remains stopped.
 
 - Task 0029 implementation commit is `ff4305c`, closure commit is `69fddde`, merge into `web` is `341fb48`, and replacement merge into `main` is `7b3366c`. The repository root now contains the web application; CI, documentation and release archives use root paths. The legacy Pyglet/VLC tree remains reachable through annotated tag `legacy-pyglet-final` at `970ebc9`.
 - Untracked legacy data was moved without deletion to `/home/kolesov93/Programming/chgka2-legacy-local-files-20260813/`. A checksum-verified copy of the Docker-owned local SQLite is stored there as `web-runtime-data`; its original remains under the active workspace mount until the user removes it with `sudo` after this task.
