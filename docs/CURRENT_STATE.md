@@ -3,12 +3,12 @@
 - Snapshot date: 2026-08-14
 - Latest completed task: `docs/tasks/0032-update-deploy-main-branch.md`
 - Active task: none.
-- Branch: `task/update-deploy-main-branch`
-- Status: task 0032 updates the deployment runbook from the removed `web` branch to the current `main` release branch and is ready to merge. No runtime behavior changed and no manual smoke is required.
+- Branch: `main`
+- Status: task 0032 is merged into local `main` at `e549922` and awaits push. The deployment runbook now uses the current `main` release branch; no runtime behavior changed and no manual smoke is required.
 
 ## Repository checkpoint
 
-- Task 0032 corrects the new-release runbook to require a committed `main` revision with green GitHub CI and to run `git switch main` before pulling and archiving. The stale branch-specific wording is gone; this is documentation-only and requires no browser smoke.
+- Task 0032 implementation commit is `803d1d8` and merge commit is `e549922`. It corrects the new-release runbook to require a committed `main` revision with green GitHub CI and to run `git switch main` before pulling and archiving. The stale branch-specific wording is gone; this is documentation-only and requires no browser smoke.
 
 - Task 0031 rewritten planning commit is `ed07bb2`, documentation follow-up is `6670e3d`, and closure commit is `e5e6d5c`. A guarded force-with-lease replaced GitHub `main` from `ee67137` with verified redacted tip `def103e`; a read-only remote check confirmed that tip and the unchanged tag. The task replaces the private deployment hostname with the reserved `example.com` placeholder throughout the rewritten lineage and makes current documentation explicit that the real origin is external configuration. All affected documentation SHA references resolve to the rewritten commits. The legacy tag remains at tag object `ce8130a` and peeled commit `970ebc9`. Verification: exhaustive history/message scan, 265 backend tests with warnings as errors, 72 frontend tests, root and `/chgka/` builds, zero npm vulnerabilities, and Compose validation all pass locally. GitHub exposes no pull-request refs, but its API still resolves the unreachable pre-redaction commit objects by known SHA; deleting Actions runs was intentionally not attempted because it is destructive and cannot guarantee cache removal. Manual browser smoke is not required.
 
