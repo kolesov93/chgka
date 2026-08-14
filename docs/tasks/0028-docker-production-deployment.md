@@ -60,9 +60,9 @@ Branch: `codex/docker-production-deployment`.
 
 ## Реализация и автоматическая проверка
 
-- Planning commit: `4c66426`; production stack commit: `f14d24a`; edge-network fix после VPS smoke: `3c09e41`.
+- Planning commit: `bfb1260`; production stack commit: `89ec499`; edge-network fix после VPS smoke: `6662be5`.
 - На VPS из официального apt repository установлены Docker Engine `29.7.2`, Compose `5.4.0` и Buildx. Docker/containerd активны и включены в автозапуск; пользователь `kolesov93` входит в группу `docker`.
-- Production release `3c09e41d3df3` установлен в `~/apps/chgka/releases/`, symlink `current` указывает на него. Закрытый mode-`0600` env-файл создан пользователем без передачи пароля агенту.
+- Production release directory retains its pre-redaction name `3c09e41d3df3` in `~/apps/chgka/releases/`; this is external filesystem state, not a current Git commit identifier. The `current` symlink points to it. Закрытый mode-`0600` env-файл создан пользователем без передачи пароля агенту.
 - Оба immutable image собраны на VPS. Backend и frontend работают непривилегированными UID, с read-only root filesystem, dropped capabilities и `no-new-privileges`; оба health check зелёные.
 - Host слушает только frontend на `127.0.0.1:18080`; backend имеет только container port `8000`. Отдельная `edge`-сеть исправляет loopback publication, закрытая `app`-сеть остаётся единственной сетью backend.
 - Sample pack прошёл container validator: 13 вопросов, 19 authored entries, 6 blitz/superblitz parts и 9 media files.

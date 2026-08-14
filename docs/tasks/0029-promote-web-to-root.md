@@ -43,7 +43,7 @@ Branch: `task/promote-web-to-root`.
 - GitHub Actions YAML корректен. Development и production Compose проходят настоящий `docker compose config --quiet` на установленном VPS Compose.
 - Новый tracked tree и создаваемый `git archive` содержат корневое web-приложение без `web_chgka/`, desktop entrypoints и legacy resource directories.
 - Тег `legacy-pyglet-final` аннотирован и указывает на исходный `main` commit `970ebc9`.
-- Implementation commit — `ff4305c`, closure — `69fddde`, merge в `web` — `341fb48`, replacement merge в `main` — `7b3366c`.
+- Implementation commit — `c16c467`, closure — `fa753ef`, merge в `web` — `a301552`, replacement merge в `main` — `f08f4ea`.
 - Production release не обновлялся и по решению пользователя остаётся остановленным.
 
 ## Out of scope

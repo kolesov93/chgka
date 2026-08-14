@@ -1,8 +1,13 @@
-# Production deployment: `example.com/chgka`
+# Production deployment under `/chgka/`
 
 This runbook is intentionally specific to the audited VPS. It keeps host Nginx
 as the only public listener and runs one private CHGKA Compose project behind
 `127.0.0.1:18080`.
+
+The real production hostname is intentionally absent from the repository.
+`example.com` below is the reserved documentation placeholder; use the external
+production env and the existing private Nginx configuration as the sources of
+the actual origin.
 
 ## Host layout
 

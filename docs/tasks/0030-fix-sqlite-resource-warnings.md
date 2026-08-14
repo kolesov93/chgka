@@ -7,7 +7,7 @@ SQLite connection used by the database-backup utility and its tests.
 
 ## Cause
 
-Main-branch CI at `84f1c67` completed 263 tests and then failed while collecting
+Main-branch CI at `c1e37cb` completed 263 tests and then failed while collecting
 nine unraisable `ResourceWarning: unclosed database` warnings. The named game
 minutes test is only where garbage collection surfaced the warnings. The nine
 connections come from three backup test paths, each opening three connections.

@@ -8,19 +8,19 @@
 
 ## Repository checkpoint
 
-- Task 0030 planning commit is `183f2d3`, implementation commit is `1872cc0`, closure commit is `19383a3`, and merge commit into `main` is `fe1d592`. It fixes the red main-branch backend CI caused by Python 3.14 reporting unclosed SQLite backup connections. Production and test-helper connections now close explicitly, and a regression test verifies all three connections opened by `create_backup()` are closed before return. Local verification passes all 265 tests with warnings as errors. A one-off Python 3.14 reproduction also passed before the environment boundary was clarified; all future development and tests stay local or in CI, while the VPS is reserved for releases and deployments. Production remains stopped.
+- Task 0030 planning commit is `eba6089`, implementation commit is `28cb33c`, closure commit is `8bad914`, and merge commit into `main` is `59ef4e4`. It fixes the red main-branch backend CI caused by Python 3.14 reporting unclosed SQLite backup connections. Production and test-helper connections now close explicitly, and a regression test verifies all three connections opened by `create_backup()` are closed before return. Local verification passes all 265 tests with warnings as errors. A one-off Python 3.14 reproduction also passed before the environment boundary was clarified; all future development and tests stay local or in CI, while the VPS is reserved for releases and deployments. Production remains stopped.
 
-- Task 0029 implementation commit is `ff4305c`, closure commit is `69fddde`, merge into `web` is `341fb48`, and replacement merge into `main` is `7b3366c`. The repository root now contains the web application; CI, documentation and release archives use root paths. The legacy Pyglet/VLC tree remains reachable through annotated tag `legacy-pyglet-final` at `970ebc9`.
+- Task 0029 implementation commit is `c16c467`, closure commit is `fa753ef`, merge into `web` is `a301552`, and replacement merge into `main` is `f08f4ea`. The repository root now contains the web application; CI, documentation and release archives use root paths. The legacy Pyglet/VLC tree remains reachable through annotated tag `legacy-pyglet-final` at `970ebc9`.
 - Untracked legacy data was moved without deletion to `/home/kolesov93/Programming/chgka2-legacy-local-files-20260813/`. A checksum-verified copy of the Docker-owned local SQLite is stored there as `web-runtime-data`; its original remains under the active workspace mount until the user removes it with `sudo` after this task.
 - Task 0029 verification passes: 264 backend tests with warnings-as-errors, sample-pack validation, 72 frontend tests, root and `/chgka/` builds, npm audit with zero vulnerabilities, YAML parsing, real development/production Compose validation on the VPS, tracked-tree assertions and release-archive assertions. `nanoid` was compatibly updated from `3.3.17` to `3.3.18` in the lockfile after a new advisory appeared.
 
-- Task 0028 planning commit is `4c66426`, production stack commit is `f14d24a`, VPS-discovered edge-network fix is `3c09e41`, closure commit is `c4ba3d9`, and merge commit into `web` is `cf204df`.
-- Docker Engine/Compose are installed on the VPS. Release `3c09e41d3df3` remains installed, but the user intentionally stopped and removed the CHGKA containers; do not start them merely to verify repository-only work. When running, only `127.0.0.1:18080` is published and backend has no host port.
+- Task 0028 planning commit is `bfb1260`, production stack commit is `89ec499`, VPS-discovered edge-network fix is `6662be5`, closure commit is `8ba582a`, and merge commit into `web` is `5afacdd`.
+- Docker Engine/Compose are installed on the VPS. The stopped release directory retains its pre-redaction name `3c09e41d3df3`; this is external filesystem state, not a current Git commit identifier. The user intentionally stopped and removed the CHGKA containers; do not start them merely to verify repository-only work. When running, only `127.0.0.1:18080` is published and backend has no host port.
 - Public HTTPS routes, WSS `101`, exact CORS, wrong-origin rejection, static assets, SPA entrypoints, container hardening, sample-pack validation, SQLite persistence/backup, daily cron backup and unchanged legacy-route status codes are verified.
 - The installed deployment uses the repository sample pack. Replace it only through the documented validator/deploy flow. Task 0029 changes repository layout only and must not start or redeploy the intentionally stopped production release.
 
-- Task 0027 starts from synchronized `web` commit `a085633` on `codex/configurable-base-path`; planning commit is `cef8262`, implementation commit is `25583a7`.
-- Task 0027 closure commit is `8c5e169`; merge commit into `web` is `434ba1f`.
+- Task 0027 starts from synchronized `web` commit `a085633` on `codex/configurable-base-path`; planning commit is `30e6aad`, implementation commit is `cc45211`.
+- Task 0027 closure commit is `3cbec46`; merge commit into `web` is `2a516b2`.
 - Vite base is now the single frontend deployment prefix. Root development behavior is unchanged, while a `VITE_BASE_PATH=/chgka/` production build uses prefixed player/admin/history, static assets, media/intro URLs and Socket.IO transport path.
 - Vite preview provides a local prefix-stripping HTTP/WebSocket proxy to the unchanged backend, and development Compose allows its exact `http://localhost:4173` origin. Task 0027 intentionally left Nginx/TLS/VPS work to the now-active deployment task 0028.
 - Local verification passes: clean npm install/audit, all 17 frontend test-files, root and `/chgka/` builds, 260 warnings-as-errors backend tests, prefixed HTTP/static/proxy/Engine.IO checks and `git diff --check`. Native Compose validation remains blocked by the known local Snap `snap-confine` capability defect and is covered by merged-branch CI.
@@ -463,7 +463,7 @@ Additional known gaps:
 - all runtime state is lost on backend restart;
 - admin/player/media tokens and game state remain process-local and support only one backend worker;
 - player reconnect tokens still have no TTL/rotation;
-- production deployment exists at `https://example.com/chgka/`; current runtime state still is not restart-persistent and deployment remains manual;
+- production deployment exists at a private HTTPS origin under `/chgka/`; current runtime state still is not restart-persistent and deployment remains manual;
 - frontend development uses `localhost:8000`, so it does not yet support browsers running on other machines;
 - video sharing/playback, media queue/next, duration extraction, and automatic ended state remain unimplemented;
 - frontend coverage is limited to pure playback/live-ops/sound-fade/inline-media/game-over/intro/session helpers; there are no automated browser/component tests, full Socket.IO session integration tests, or lint/typecheck.

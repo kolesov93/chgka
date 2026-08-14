@@ -40,7 +40,8 @@ development-only. Публичный deployment использует отдел�
 
 ## Публичный production
 
-Текущий deployment доступен по адресам:
+Фактический production hostname намеренно не публикуется в
+репозитории. В примерах используется зарезервированный `example.com`:
 
 - игроки: `https://example.com/chgka/play`
 - ведущий: `https://example.com/chgka/admin`
@@ -112,7 +113,7 @@ npm run build
 
 ### Локальная проверка сборки под URL-префиксом
 
-Обычная development-сборка работает от `/`. Чтобы локально проверить публикацию на
+Обычная development-сборка работает от `/`. Чтобы локально проверить схему публикации вида
 `https://example.com/chgka/`, при уже запущенном backend из `frontend/` выполнить:
 
 ```bash

@@ -27,10 +27,10 @@ Branch: `codex/configurable-base-path`.
 
 ## Реализация и локальная проверка
 
-- Planning commit: `cef8262` (`Plan configurable base path task`).
-- Implementation commit: `25583a7` (`Support configurable frontend base path`).
-- Closure commit: `8c5e169` (`Close configurable base path task`).
-- Merge commit: `434ba1f` (`Merge configurable base path task`).
+- Planning commit: `30e6aad` (`Plan configurable base path task`).
+- Implementation commit: `cc45211` (`Support configurable frontend base path`).
+- Closure commit: `3cbec46` (`Close configurable base path task`).
+- Merge commit: `2a516b2` (`Merge configurable base path task`).
 - Добавлены чистые `appPaths.js` и `backendUrls.js`: Vite base определяет entrypoints, статические ресурсы, media/intro URL и Socket.IO transport path; development по-прежнему обращается напрямую к `http://localhost:8000` без префикса.
 - Все прежние абсолютные image/sound URL, включая динамическую картинку счёта, переведены на общий helper. Structural test запрещает возвращать такие абсолютные пути в runtime source.
 - Vite preview снимает внешний base path только с `/socket.io`, `/media` и `/intro`, а CI теперь собирает frontend как для `/`, так и для `/chgka/`.

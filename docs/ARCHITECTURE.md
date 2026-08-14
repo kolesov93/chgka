@@ -4,7 +4,7 @@
 
 This repository contains the target web application at its root. The removed Pyglet/VLC application is legacy, is not part of the maintained runtime, and remains available from the annotated Git tag `legacy-pyglet-final`.
 
-The application is published to the public internet at `https://example.com/chgka/`. The repository keeps separate development and production topologies: split localhost Vite/backend servers for development, and a hardened two-container Compose stack behind the existing host Nginx for production.
+The application is published to the public internet under `/chgka/`; its real hostname is intentionally kept outside the repository, and examples use the reserved `example.com` domain. The repository keeps separate development and production topologies: split localhost Vite/backend servers for development, and a hardened two-container Compose stack behind the existing host Nginx for production.
 
 ## Runtime map
 
@@ -192,6 +192,6 @@ Socket.IO handlers are asynchronous and can overlap. UI button disabling is not 
 
 `docker-compose.production.yml` builds immutable backend and frontend images. The frontend is a multi-stage Node build served by an unprivileged Nginx process; the backend is one unprivileged Uvicorn process without reload or additional workers. Both containers use read-only roots, dropped Linux capabilities, `no-new-privileges`, health checks, restart policies and bounded `local` logging. Backend and frontend share the internal `app` network; only frontend also joins `edge` and publishes `127.0.0.1:18080`. Backend port `8000` is never published on the host.
 
-The existing host Nginx remains the only listener on public `80/443` and terminates Certbot-managed TLS. Its exact `/chgka/` locations proxy to loopback frontend; container Nginx performs SPA fallback and strips the prefix only for Socket.IO, media and intro forwarding to unchanged backend routes. The host Socket.IO location applies per-IP handshake and connection limits. Exact `https://example.com` origin validation still protects both FastAPI CORS and Socket.IO; pathname separation is not an authorization boundary.
+The existing host Nginx remains the only listener on public `80/443` and terminates Certbot-managed TLS. Its exact `/chgka/` locations proxy to loopback frontend; container Nginx performs SPA fallback and strips the prefix only for Socket.IO, media and intro forwarding to unchanged backend routes. The host Socket.IO location applies per-IP handshake and connection limits. Exact validation of the externally configured HTTPS origin still protects both FastAPI CORS and Socket.IO; pathname separation is not an authorization boundary.
 
 The VPS stores immutable releases under `~/apps/chgka/releases`, points `current` at one release, and keeps the mode-`0600` env, read-only question pack, SQLite and backups outside release directories. SQLite online backup runs daily through the user crontab, verifies each copy with `PRAGMA quick_check`, and retains 30 days. Release transfer uses `git archive` over SSH rather than a GitHub private key on the VPS. Deployment/update/rollback are manual and documented in `deployment/README.md`; registry-based images, zero-downtime multi-worker operation and GitHub CD are not implemented.
