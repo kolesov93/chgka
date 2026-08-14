@@ -3,12 +3,12 @@
 - Snapshot date: 2026-08-14
 - Latest completed task: `docs/tasks/0031-redact-public-hostname.md`
 - Active task: none.
-- Branch: `task/redact-public-hostname`
-- Status: task 0031 is locally complete. The rewritten branch contains no private hostname in its current tree, any of its 247 commit snapshots, or commit messages; it is ready to replace public `main` with a guarded force-with-lease. The legacy tag is unchanged and the VPS was not accessed.
+- Branch: `main`
+- Status: task 0031 now forms local `main`. The rewritten branch contains no private hostname in its current tree, any of its 247 historical snapshots, or commit messages; public `origin/main` still awaits a guarded force-with-lease replacement. The legacy tag is unchanged and the VPS was not accessed.
 
 ## Repository checkpoint
 
-- Task 0031 replaces the private deployment hostname with the reserved `example.com` placeholder throughout the rewritten lineage and makes current documentation explicit that the real origin is external configuration. All affected documentation SHA references resolve to the rewritten commits. The legacy tag remains at tag object `ce8130a` and peeled commit `970ebc9`. Verification: exhaustive history/message scan, 265 backend tests with warnings as errors, 72 frontend tests, root and `/chgka/` builds, zero npm vulnerabilities, and Compose validation all pass locally. Manual browser smoke is not required.
+- Task 0031 rewritten planning commit is `ed07bb2`, documentation follow-up is `6670e3d`, and closure commit is `e5e6d5c`. It replaces the private deployment hostname with the reserved `example.com` placeholder throughout the rewritten lineage and makes current documentation explicit that the real origin is external configuration. All affected documentation SHA references resolve to the rewritten commits. The legacy tag remains at tag object `ce8130a` and peeled commit `970ebc9`. Verification: exhaustive history/message scan, 265 backend tests with warnings as errors, 72 frontend tests, root and `/chgka/` builds, zero npm vulnerabilities, and Compose validation all pass locally. Manual browser smoke is not required.
 
 - Task 0030 planning commit is `eba6089`, implementation commit is `28cb33c`, closure commit is `8bad914`, and merge commit into `main` is `59ef4e4`. It fixes the red main-branch backend CI caused by Python 3.14 reporting unclosed SQLite backup connections. Production and test-helper connections now close explicitly, and a regression test verifies all three connections opened by `create_backup()` are closed before return. Local verification passes all 265 tests with warnings as errors. A one-off Python 3.14 reproduction also passed before the environment boundary was clarified; all future development and tests stay local or in CI, while the VPS is reserved for releases and deployments. Production remains stopped.
 
