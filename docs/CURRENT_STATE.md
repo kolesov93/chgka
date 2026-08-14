@@ -2,9 +2,9 @@
 
 - Snapshot date: 2026-08-13
 - Latest completed task: `docs/tasks/0030-fix-sqlite-resource-warnings.md`
-- Active task: none.
-- Branch: `main`
-- Status: task 0030 is merged into local `main` at `fe1d592` and awaits the user's push and GitHub CI. All 265 backend tests pass with warnings treated as errors; no browser smoke is required.
+- Active task: `docs/tasks/0031-redact-public-hostname.md`.
+- Branch: `task/redact-public-hostname`
+- Status: task 0031 is removing the private production hostname from the current public files and from the reachable `main` history. The legacy tag predates the hostname and stays unchanged; the VPS is out of scope.
 
 ## Repository checkpoint
 
