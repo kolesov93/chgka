@@ -49,3 +49,10 @@ The rewritten public `main` must be updated with `--force-with-lease` pinned to
 the previously observed remote tip. The legacy tag must not be force-updated.
 Offline rollback data and local rewrite backup refs remain until the remote result
 is verified, then can be removed.
+
+The guarded replacement and cleanup completed successfully. GitHub exposes no
+`refs/pull/*`, but its API still resolves the unreachable pre-redaction commits
+when their old SHA is supplied directly. This is outside branch history and is
+normal GitHub object retention after a rewrite. A literal server-side purge
+requires GitHub Support; old Actions runs were not deleted because that is a
+separate destructive operation and does not guarantee object-cache removal.
