@@ -5,13 +5,14 @@
 Remove the private production hostname from all files and commits reachable from
 the public `main` branch while keeping deployment examples useful.
 
-## Context
+## Context and result
 
-The repository currently exposes the real hostname in README, architecture,
-deployment examples, Compose defaults, and task history. The first occurrence is
-in the configurable-base-path work; 24 commits from that point through the current
-tip are affected. The legacy Pyglet tag predates the hostname and does not contain
-it.
+The repository exposed the real hostname in README, architecture, deployment
+examples, Compose defaults, and task history. Its first occurrence was in the
+configurable-base-path work; that commit and the 23 following pre-task commits
+received new SHA values. The complete 247-commit branch was replayed one-to-one,
+preserving topology and metadata. The legacy Pyglet tag predates the hostname and
+was not changed.
 
 ## Decisions
 
@@ -27,12 +28,24 @@ it.
 - Do not access or modify the VPS. This task changes only the repository and its
   public Git history.
 
-## Verification plan
+## Verification
 
-- Search the current tree and every commit reachable from rewritten `main` for
-  the private hostname.
-- Confirm `example.com` appears in the intended current files.
-- Confirm the legacy tag object and peeled commit remain unchanged.
-- Run backend tests, frontend tests/builds, and Compose validation because the
-  current deployment examples and Compose default change.
+- The current tree, every snapshot in the 247-commit rewritten lineage, and all
+  commit messages contain no private hostname.
+- `example.com` appears only as an explicitly documented reserved placeholder.
+- All seven-character commit references in `docs/` resolve after updating the
+  affected SHA values. The installed release directory's old name remains
+  documented as external filesystem state, not as a current Git identifier.
+- Legacy tag object `ce8130a` and peeled commit `970ebc9` are unchanged.
+- Backend: 265 tests pass with warnings as errors.
+- Frontend: clean install/audit reports zero vulnerabilities; all 72 tests and
+  both root and `/chgka/` production builds pass.
+- `docker compose config --quiet` passes locally without starting containers.
 - Manual browser smoke is not required; runtime product behavior is unchanged.
+
+## Publication boundary
+
+The rewritten public `main` must be updated with `--force-with-lease` pinned to
+the previously observed remote tip. The legacy tag must not be force-updated.
+Offline rollback data and local rewrite backup refs remain until the remote result
+is verified, then can be removed.
