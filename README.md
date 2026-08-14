@@ -38,10 +38,7 @@ development-only. Публичный deployment использует отдел�
 `docker-compose.production.yml`, `Dockerfile.production` и инструкции из
 [`deployment/README.md`](deployment/README.md).
 
-## Публичный production
-
-Фактический production hostname намеренно не публикуется в
-репозитории. В примерах используется зарезервированный `example.com`:
+## production
 
 - игроки: `https://example.com/chgka/play`
 - ведущий: `https://example.com/chgka/admin`
