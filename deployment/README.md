@@ -213,11 +213,11 @@ appear as a host listener.
 
 ## Deploy a new application version
 
-Deploy only a committed `web` revision whose GitHub CI is green. From the Git
+Deploy only a committed `main` revision whose GitHub CI is green. From the Git
 repository root on the development laptop:
 
 ```bash
-git switch web
+git switch main
 git status --short
 git pull --ff-only
 release=$(git rev-parse --short=12 HEAD)
